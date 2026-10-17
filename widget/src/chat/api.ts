@@ -57,7 +57,13 @@ export async function pedirJson<T>(url: string, init: RequestInit = {}): Promise
   } catch {
     throw new ErroCliente('Sem conexão com o copiloto. Confira a internet e tente de novo.', 0, 'rede');
   }
-  const corpo = await lerCorpo(resp).catch(() => undefined);
+  let corpo: unknown;
+  try {
+    corpo = await lerCorpo(resp);
+  } catch {
+    // Corpo cortado no meio (rede caiu ou a página saiu): é falta de conexão, não uma resposta vazia.
+    throw new ErroCliente('Sem conexão com o copiloto. Confira a internet e tente de novo.', 0, 'rede');
+  }
   if (!resp.ok) {
     const e = (corpo && typeof corpo === 'object' ? corpo : {}) as Partial<ErroApi>;
     const padrao =

@@ -1125,9 +1125,8 @@ export class Motor {
     acoes.push({ rotulo: 'Falar com uma pessoa', acao: 'humano', estilo: 'fantasma' });
     this.postar(e.conversaId, {
       autor: 'copiloto',
-      texto:
-        `Não consegui ${infinitivo(def.api?.rotuloExecucao)}. O ${this.sistema()} recusou porque ${motivo}. Nada novo foi gravado.\n\n` +
-        (podeAtualizar ? 'Como prefere seguir? Se escolher atualizar, mostro o que muda e peço sua confirmação antes.' : 'Como prefere seguir?'),
+      // A pergunta "Como prefere seguir?" fica no cartão de conflito, embaixo das opções (W6).
+      texto: `Não consegui ${infinitivo(def.api?.rotuloExecucao)}. O ${this.sistema()} recusou porque **${motivo}**. Nada novo foi gravado.`,
       blocos: [
         {
           tipo: 'conflito',
@@ -1391,8 +1390,8 @@ export class Motor {
         titulo: 'Não consegui concluir pela tela',
         detalhe: `A tela do ${this.sistema()} mudou e não tive certeza de onde clicar. Nada foi gravado. Chamei uma pessoa do suporte.`,
         diagnostico: {
-          titulo: `A tela mudou e nada foi gravado`,
-          detalhe: `${passo ? `No passo ${passo.n} (“${passo.titulo}”) ` : ''}${res.mensagem}.${cand}`,
+          titulo: 'A tela mudou e nada foi gravado.',
+          detalhe: diagnosticoTelaMudou(passo, res.mensagem, res.candidato?.texto, cand),
           tom: 'erro',
         },
         acoes: [{ rotulo: 'Tentar de novo', acao: 'tentar', estilo: 'secundario' }],
@@ -1495,9 +1494,10 @@ export class Motor {
     const campos = camposExibidos(def, e.dados).filter((c) => !titulo.includes(c.valor));
     for (const [k, v] of Object.entries(r.gerados ?? {})) campos.push({ rotulo: rotuloGerado(k), valor: v });
     const via = r.caminho === 'api' ? 'via API' : 'pela tela';
+    // O código da execução vai à parte (execucaoId); quem mostra o recibo o põe depois do resumo.
     const resumo = r.simulado
-      ? `Modo de teste: validado ${via} em ${fmt.duracao(duracao)}, nada foi gravado · ${e.id}`
-      : `Feito ${via} em ${fmt.duracao(duracao)} · ${e.id}`;
+      ? `Modo de teste: validado ${via} em ${fmt.duracao(duracao)}, nada foi gravado`
+      : `Feito ${via} em ${fmt.duracao(duracao)}`;
 
     const resultado: ResultadoExecucao = {
       titulo,
@@ -1564,4 +1564,13 @@ export function caminhoArquivo(dirDados: string, execucaoId: string, nome: strin
   const seguro = path.basename(nome);
   const arquivo = path.join(dirDados, 'arquivos', path.basename(execucaoId), seguro);
   return fs.existsSync(arquivo) ? arquivo : null;
+}
+
+/** "No passo 6 (“Clicar em Agendar visita”), a tela mudou e não achei o botão… Atualize o fluxo gravado…" */
+function diagnosticoTelaMudou(passo: { n: number; titulo: string } | undefined, mensagem: string, candidato: string | undefined, cand: string): string {
+  const msg = mensagem.trim().replace(/[.\s]+$/, '');
+  const corpo = passo ? `No passo ${passo.n} (“${passo.titulo}”), ${msg.charAt(0).toLowerCase()}${msg.slice(1)}` : msg;
+  // A mensagem do navegador às vezes já cita o candidato; aí não repete.
+  const extra = candidato && !msg.includes(candidato) ? cand : '';
+  return `${corpo}.${extra} Atualize o fluxo gravado para que as próximas execuções rodem sem ajuda.`;
 }

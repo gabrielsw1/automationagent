@@ -119,7 +119,7 @@ describe('widget de ponta a ponta', () => {
 
     const recibo = ultimoBloco(amb, conversaId, 'recibo');
     expect(recibo.titulo).toBe('Cliente Pólen Café criado (#4821)');
-    expect(recibo.resumo).toMatch(/Feito via API em .* · EX-\d+/);
+    expect(recibo.resumo).toMatch(/^Feito via API em \d+ s$/);
     expect(recibo.desfazerAte).toBeTruthy();
     expect(recibo.link?.url).toContain('/clientes/4821');
     expect(amb.adaptador.clientes.map((c) => c.razao_social)).toContain('Pólen Café');

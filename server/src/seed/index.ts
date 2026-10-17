@@ -3,6 +3,8 @@
 // base de conhecimento. Tudo marcado como exemplo; os números batem com o design do painel.
 // Roda sozinho no primeiro início (banco vazio) e com `npm run seed` (recria o banco).
 import crypto from 'node:crypto';
+import fs from 'node:fs';
+import path from 'node:path';
 import { fmt, type TarefaDefinicao, type CampoExibido, type MensagemWidget } from '@copiloto/shared';
 import { hashSenha } from '../auth/senha.ts';
 import type { Banco } from '../db/banco.ts';
@@ -408,6 +410,50 @@ const FALHA_TELA_MUDOU: NonNullable<ExecSeed['falha']> = {
   erro: 'elemento_nao_encontrado',
 };
 
+/**
+ * Prints de verdade da tela de agendamento mudada (tirados de uma execução real no Horizonte com a
+ * demonstração "tela nova" ligada, já com os dados sensíveis borrados). Vão para o detalhe das falhas fixas.
+ */
+const PRINTS_AGENDA = [
+  { arquivo: 'agenda-aberta.png', passo: 'Abrir a tela de nova visita', legenda: 'dados mascarados', destaque: null },
+  {
+    arquivo: 'agenda-preenchida.png',
+    passo: 'Selecionar técnico',
+    legenda: 'campos preenchidos',
+    destaque: { x: 402, y: 378, w: 291, h: 36 },
+  },
+  {
+    arquivo: 'agenda-candidato.png',
+    passo: FALHA_TELA_MUDOU.etapa,
+    legenda: 'botão parecido destacado pelo agente',
+    destaque: { x: 179, y: 578, w: 199, h: 36 },
+  },
+];
+
+/** Copia os prints da agenda para DATA_DIR/prints e devolve o id do print de cada passo. */
+function semearPrints(ctx: Contexto, e: ExecSeed, quando: number): Map<string, string> {
+  const pasta = path.join(ctx.config.dirDados, 'prints');
+  fs.mkdirSync(pasta, { recursive: true });
+  const ids = new Map<string, string>();
+  PRINTS_AGENDA.forEach((p, i) => {
+    const id = `prt_${e.id}_${i + 1}`;
+    fs.copyFileSync(new URL(`./prints/${p.arquivo}`, import.meta.url), path.join(pasta, `${id}.png`));
+    ctx.banco.inserir('prints', {
+      id,
+      execucao_id: e.id,
+      fluxo_id: null,
+      arquivo: `prints/${id}.png`,
+      legenda: p.legenda,
+      destaque: p.destaque,
+      mascarado: 1,
+      criado_em: iso(quando),
+      apagar_em: null,
+    });
+    ids.set(p.passo, id);
+  });
+  return ids;
+}
+
 /** As execuções mais recentes, iguais às do design (C5, C6, W1, W7). Minutos antes de "agora". */
 function execucoesFixas(agora: number): ExecSeed[] {
   const p = PESSOAS;
@@ -762,7 +808,8 @@ function semearExecucoes(ctx: Contexto, tarefas: Map<string, TarefaCriada>, agor
       transferida_em: e.transferidaPara && fim ? iso(fim) : null,
       exemplo: 1,
     });
-    semearEventos(banco, e, t, sistema, { confirmadoEm, inicioExec, fim, resultado });
+    const prints = e.falha === FALHA_TELA_MUDOU && e.candidato ? semearPrints(ctx, e, inicioExec) : undefined;
+    semearEventos(banco, e, t, sistema, { confirmadoEm, inicioExec, fim, resultado }, prints);
     if (e.slug === 'alterar_plano' && (e.status === 'aguardando_aprovacao' || ((e.quem.id === '101' || e.quem.id === '103') && rodou))) {
       const aprovador = PESSOAS.rafael;
       banco.inserir('aprovacoes', {
@@ -819,9 +866,13 @@ function semearEventos(
   t: TarefaCriada,
   sistema: string,
   m: { confirmadoEm: number; inicioExec: number; fim: number | null; resultado: Record<string, unknown> | null },
+  prints?: Map<string, string>,
 ) {
   let n = 0;
-  const ev = (ts: number, x: { tipo: string; titulo: string; detalhe?: string; estado: string; dados?: unknown; candidato?: unknown; fim?: number }) =>
+  const ev = (
+    ts: number,
+    x: { tipo: string; titulo: string; detalhe?: string; estado: string; dados?: unknown; candidato?: unknown; fim?: number },
+  ) =>
     banco.inserir('execucao_eventos', {
       id: `${e.id}-${++n}`,
       execucao_id: e.id,
@@ -831,7 +882,8 @@ function semearEventos(
       detalhe: x.detalhe ?? null,
       estado: x.estado,
       dados: x.dados ?? null,
-      print_id: null,
+      // Prints nos passos e na recuperação visual (o botão candidato destacado), como no design (C6).
+      print_id: (x.tipo === 'recuperacao' ? prints?.get(e.falha!.etapa) : x.tipo === 'passo' ? prints?.get(x.titulo) : undefined) ?? null,
       candidato: x.candidato ?? null,
       fim: x.fim ? iso(x.fim) : null,
     });
@@ -1108,7 +1160,7 @@ function semearAuditoria(banco: Banco, agora: number, tarefas: Map<string, Taref
     { dias: 2, ator: 'Rafael Lima', acao: 'convidou', alvo: 'leticia.prado@seusistema.com.br', detalhe: 'Perfil Suporte' },
     { dias: 25, ator: 'Júlia Martins', acao: 'convidou', alvo: 'bruno.costa@seusistema.com.br', detalhe: 'Perfil Leitor' },
     { dias: 19, ator: 'Júlia Martins', acao: 'publicou o fluxo', alvo: 'Agendar visita técnica', detalhe: 'Versão 2' },
-    { dias: 1, ator: 'Júlia Martins', acao: 'publicou o fluxo', alvo: 'Segunda via de boleto', detalhe: 'Versão 1' },
+    { dias: 61, ator: 'Júlia Martins', acao: 'publicou o fluxo', alvo: 'Segunda via de boleto', detalhe: 'Versão 1' },
   );
   for (const r of registros) {
     banco.inserir('auditoria', {

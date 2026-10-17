@@ -46,6 +46,13 @@ describe('seed', () => {
     expect(detalhe.diagnostico.titulo).toBe('A tela de agendamento mudou e nada foi gravado.');
     expect(detalhe.linha.transferidaPara).toBe('Camila Souza');
     expect(detalhe.conversa.length).toBeGreaterThanOrEqual(4);
+    // Prints reais da tela mudada: o último destaca o botão candidato.
+    const comPrint = detalhe.linhaTempo.filter((e: { print?: unknown }) => e.print);
+    expect(comPrint).toHaveLength(3);
+    expect(comPrint[2]).toMatchObject({ tipo: 'recuperacao', print: { legenda: 'Print 3 de 3 · botão parecido destacado pelo agente', destaque: { x: 179 } } });
+    const img = await amb.app.inject({ method: 'GET', url: comPrint[2].print.url, headers: { cookie } });
+    expect(img.statusCode).toBe(200);
+    expect(img.headers['content-type']).toBe('image/png');
 
     expect(amb.ctx.banco.proximo('execucao', 1)).toBe(20432);
   });

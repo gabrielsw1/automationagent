@@ -272,11 +272,11 @@ export function fluxosExemplo(): Record<ChaveFluxoExemplo, Omit<Fluxo, 'id' | 't
       nome: 'Segunda via de boleto',
       versao: 1,
       passos: boleto,
-      gravadoEm: diasAtras(1),
+      gravadoEm: diasAtras(61),
       duracaoGravacaoMs: 72_000,
       urlInicial: '/financeiro/segunda-via',
-      ultimoTeste: { em: diasAtras(1, 15), ok: true },
-      salvoEm: diasAtras(1, 15),
+      ultimoTeste: { em: diasAtras(61, 15), ok: true },
+      salvoEm: diasAtras(61, 15),
     },
   };
 }

@@ -172,7 +172,7 @@ export function opcaoMencionada(campo: Campo, texto: string): string | null {
 const PARADA_NOME = new Set([
   'cnpj', 'cpf', 'e-mail', 'email', 'prazo', 'plano', 'para', 'pra', 'com', 'no', 'na', 'em', 'dia', 'amanha', 'amanhã',
   'hoje', 'as', 'às', 'que', 'e', 'o', 'a', 'os', 'as', 'um', 'uma', 'por', 'pelo', 'pela', 'sobre', 'responsavel',
-  'responsável', 'agora', 'urgente', 'boleto', 'visita', 'relatorio', 'relatório',
+  'responsável', 'agora', 'urgente', 'boleto', 'visita', 'relatorio', 'relatório', 'novo', 'nova', 'aqui',
 ]);
 const CONECTORES = new Set(['de', 'da', 'do', 'dos', 'das', 'e', '&']);
 const NAO_NOMES = new Set([...MESES, ...DIAS_SEMANA, 'segunda-feira', 'terca-feira', 'quarta-feira', 'quinta-feira', 'sexta-feira']);
@@ -196,6 +196,10 @@ export function nomeMencionado(texto: string, excluir: string[] = []): string | 
     } else if (tk === 'razao' && normalizar(tokens[i + 1] ?? '') === 'social') {
       inicio = i + 2;
       prioridade = 3;
+    } else if (/^(cadastr|cri|inclu|registr)/.test(tk)) {
+      // "cadastra a ACME, CNPJ ...": o nome vem logo depois do verbo (com artigo ou sem).
+      inicio = ['a', 'o'].includes(normalizar(tokens[i + 1] ?? '')) ? i + 2 : i + 1;
+      prioridade = 2;
     } else if (['da', 'do', 'na', 'no', 'pra', 'para', 'cliente:'].includes(tk)) {
       inicio = i + 1;
       prioridade = 1;
