@@ -30,3 +30,25 @@ jobs:
         run: npm test
       - name: Build
         run: npm run build
+
+  docker:
+    name: docker compose up
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Monta a imagem
+        run: docker compose build
+      - name: Sobe e espera o copiloto e o Horizonte responderem
+        run: |
+          docker compose up -d
+          for i in $(seq 1 90); do
+            if curl -fsS http://localhost:3000/api/saude && curl -fsS -o /dev/null http://localhost:4000/entrar && curl -fsS -o /dev/null http://localhost:3000/; then
+              echo; echo "Tudo no ar."; exit 0
+            fi
+            sleep 2
+          done
+          docker compose logs
+          exit 1
+      - name: Desliga
+        if: always()
+        run: docker compose down -v
