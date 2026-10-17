@@ -138,3 +138,18 @@ textarea.textarea { font-family: inherit; }
    fiquem presos dentro da área que rola e não alarguem a página no celular. */
 .table-wrap, .ct-rolagem { position: relative; }
 .ct-rolagem { overflow-x: auto; }
+
+/* Menu da conta: empresa aberta e "Trocar de empresa" */
+.ca-menu-empresa { display: flex; flex-direction: column; gap: 2px; padding: var(--s-2) var(--s-3) var(--s-3); border-bottom: 1px solid var(--line); margin-bottom: var(--s-1); overflow-wrap: anywhere; }
+.ca-menu-grupo { display: flex; flex-direction: column; gap: 2px; padding-bottom: var(--s-1); border-bottom: 1px solid var(--line); margin-bottom: var(--s-1); }
+.ca-menu-rotulo { padding: var(--s-1) var(--s-3) 0; }
+.ca-selo-demo { height: 20px; padding: 0 8px; }
+
+/* Seletor de empresa no topo do menu lateral (e na gaveta do celular) */
+.ca-seletor-empresa { margin-bottom: 8px; }
+.ca-seletor-empresa > .ca-menu { display: flex; width: 100%; }
+.ca-seletor-botao { width: 100%; justify-content: space-between; min-width: 0; }
+.ca-seletor-nome { gap: var(--s-2); min-width: 0; }
+.ca-seletor-texto { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ca-seletor-botao .avatar-sm { flex: none; }
+.ca-gaveta-nav .ca-seletor-empresa { padding: 0 var(--s-2); }

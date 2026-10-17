@@ -1,20 +1,15 @@
-// Entrar no console. Quando ninguém da equipe tem acesso ainda, a mesma tela cria o primeiro admin.
+// Entrar no console. Quando ainda não há nenhum acesso neste copiloto, leva direto ao cadastro da
+// primeira empresa; com o cadastro aberto, um link leva a "Criar a conta da sua empresa".
 import { useEffect, useState, type FormEvent } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
-import type { Eu } from '@copiloto/shared';
+import { Link, Navigate, useNavigate, useSearchParams } from 'react-router-dom';
+import type { Eu, PrimeiroAcesso } from '@copiloto/shared';
 import { api, ErroApiCliente } from '../../api/cliente.ts';
 import { Botao } from '../../componentes/Botao.tsx';
 import { Carregando, EstadoErro } from '../../componentes/estados.tsx';
 import { Aviso, Campo } from '../../componentes/formulario.tsx';
 import { Icone } from '../../componentes/icones.tsx';
+import { emailValido } from '../cadastro/regras.ts';
 import TelaDeEntrada from './TelaDeEntrada.tsx';
-
-interface PrimeiroAcesso {
-  precisaCriarAdmin: boolean;
-  demo: boolean;
-}
-
-const emailValido = (s: string) => /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(s.trim());
 
 /** ?voltar=<caminho do console>: só caminhos daqui, nunca outro site. */
 export function destinoDepoisDeEntrar(voltar: string | null): string {
@@ -23,7 +18,7 @@ export function destinoDepoisDeEntrar(voltar: string | null): string {
   return v;
 }
 
-function FormEntrar({ demo }: { demo: boolean }) {
+function FormEntrar({ demo, cadastroAberto }: { demo: boolean; cadastroAberto: boolean }) {
   const navegar = useNavigate();
   const [busca] = useSearchParams();
   const [email, setEmail] = useState('');
@@ -31,6 +26,8 @@ function FormEntrar({ demo }: { demo: boolean }) {
   const [verSenha, setVerSenha] = useState(false);
   const [enviando, setEnviando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
+  // Conta certa, mas fora de todas as equipes (403 sem_empresa).
+  const [semEmpresa, setSemEmpresa] = useState(false);
   const [tocado, setTocado] = useState(false);
 
   const erroEmail = tocado && email && !emailValido(email) ? 'Digite um e-mail completo, por exemplo nome@empresa.com.br' : null;
@@ -44,11 +41,14 @@ function FormEntrar({ demo }: { demo: boolean }) {
     }
     setEnviando(true);
     setErro(null);
+    setSemEmpresa(false);
     try {
       await api.post<Eu>('/auth/entrar', { email: email.trim(), senha });
       navegar(destinoDepoisDeEntrar(busca.get('voltar')), { replace: true });
     } catch (ex) {
-      setErro((ex as ErroApiCliente).message);
+      const e = ex as ErroApiCliente;
+      if (e.erro === 'sem_empresa') setSemEmpresa(true);
+      else setErro(e.message);
     } finally {
       setEnviando(false);
     }
@@ -63,6 +63,17 @@ function FormEntrar({ demo }: { demo: boolean }) {
       {erro ? (
         <Aviso tipo="erro" papel="alert">
           {erro}
+        </Aviso>
+      ) : null}
+      {semEmpresa ? (
+        <Aviso tipo="aviso" papel="alert" titulo="Seu acesso não está em nenhuma equipe agora">
+          {cadastroAberto ? (
+            <>
+              Peça um convite novo a um Admin da sua empresa ou <Link to="/criar-conta">crie a conta de uma empresa nova</Link>.
+            </>
+          ) : (
+            'Peça um convite novo a um Admin da sua empresa.'
+          )}
         </Aviso>
       ) : null}
       <Campo rotulo="E-mail" erro={erroEmail}>
@@ -101,98 +112,12 @@ function FormEntrar({ demo }: { demo: boolean }) {
           </p>
         </div>
       ) : null}
-      <p className="tiny muted">Esqueceu a senha? Peça a um Admin para reenviar o seu convite em Equipe e limites.</p>
-    </form>
-  );
-}
-
-function FormPrimeiroAdmin() {
-  const navegar = useNavigate();
-  const [nome, setNome] = useState('');
-  const [email, setEmail] = useState('');
-  const [senha, setSenha] = useState('');
-  const [enviando, setEnviando] = useState(false);
-  const [erro, setErro] = useState<string | null>(null);
-  const [tocados, setTocados] = useState<Record<string, boolean>>({});
-
-  const erros = {
-    nome: nome.trim().length < 2 ? 'Diga seu nome, como a equipe conhece você.' : null,
-    email: !emailValido(email) ? 'Digite um e-mail completo, por exemplo nome@empresa.com.br' : null,
-    senha: senha.length < 8 ? 'Use pelo menos 8 caracteres.' : null,
-  };
-  const mostrar = (k: keyof typeof erros) => (tocados[k] ? erros[k] : null);
-
-  const enviar = async (e: FormEvent) => {
-    e.preventDefault();
-    setTocados({ nome: true, email: true, senha: true });
-    if (erros.nome || erros.email || erros.senha) return;
-    setEnviando(true);
-    setErro(null);
-    try {
-      await api.post<Eu>('/auth/primeiro-admin', { nome: nome.trim(), email: email.trim(), senha });
-      navegar('/guia', { replace: true });
-    } catch (ex) {
-      setErro((ex as ErroApiCliente).message);
-    } finally {
-      setEnviando(false);
-    }
-  };
-
-  return (
-    <form className="stack" onSubmit={enviar} noValidate>
-      <div className="stack-sm">
-        <span className="eyebrow">Primeiro acesso</span>
-        <h1 className="h2">Crie o seu acesso de Admin</h1>
-        <p className="muted">
-          Ninguém entrou no console ainda. Você será o primeiro Admin e depois pode convidar o resto da equipe.
+      {cadastroAberto ? (
+        <p className="small muted">
+          Sua empresa ainda não usa o copiloto? <Link to="/criar-conta">Criar a conta da sua empresa</Link>
         </p>
-      </div>
-      {erro ? (
-        <Aviso tipo="erro" papel="alert">
-          {erro}
-        </Aviso>
       ) : null}
-      <Campo rotulo="Seu nome" obrigatorio erro={mostrar('nome')}>
-        {(p) => (
-          <input
-            {...p}
-            autoComplete="name"
-            value={nome}
-            onChange={(e) => setNome(e.target.value)}
-            onBlur={() => setTocados((t) => ({ ...t, nome: true }))}
-            placeholder="Ex.: Rafael Lima"
-            autoFocus
-          />
-        )}
-      </Campo>
-      <Campo rotulo="E-mail" obrigatorio erro={mostrar('email')}>
-        {(p) => (
-          <input
-            {...p}
-            type="email"
-            autoComplete="username"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            onBlur={() => setTocados((t) => ({ ...t, email: true }))}
-            placeholder="nome@empresa.com.br"
-          />
-        )}
-      </Campo>
-      <Campo rotulo="Senha" obrigatorio erro={mostrar('senha')} ajuda="Pelo menos 8 caracteres.">
-        {(p) => (
-          <input
-            {...p}
-            type="password"
-            autoComplete="new-password"
-            value={senha}
-            onChange={(e) => setSenha(e.target.value)}
-            onBlur={() => setTocados((t) => ({ ...t, senha: true }))}
-          />
-        )}
-      </Campo>
-      <Botao type="submit" variante="primario" tamanho="lg" bloco carregando={enviando}>
-        Criar acesso e entrar
-      </Botao>
+      <p className="tiny muted">Esqueceu a senha? Peça a um Admin para reenviar o seu convite em Equipe e limites.</p>
     </form>
   );
 }
@@ -221,9 +146,9 @@ export default function Entrar() {
       ) : !estado ? (
         <Carregando />
       ) : estado.precisaCriarAdmin ? (
-        <FormPrimeiroAdmin />
+        <Navigate to="/criar-conta" replace />
       ) : (
-        <FormEntrar demo={estado.demo} />
+        <FormEntrar demo={estado.demo} cadastroAberto={estado.cadastroAberto} />
       )}
     </TelaDeEntrada>
   );

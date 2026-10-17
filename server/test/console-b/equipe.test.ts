@@ -61,7 +61,7 @@ describe('equipe', () => {
     const token = linkConvite.split('/convite/')[1];
     const aberto = await amb.app.inject({ method: 'GET', url: `/api/console/auth/convite/${token}` });
     expect(aberto.statusCode).toBe(200);
-    expect(aberto.json()).toEqual({ email: 'leticia.prado@seusistema.com.br', perfil: 'suporte' });
+    expect(aberto.json()).toEqual({ email: 'leticia.prado@seusistema.com.br', perfil: 'suporte', empresa: 'Horizonte', contaExistente: false });
     expect(amb.ctx.auditoria.listar()[0]).toMatchObject({ ator: 'Rafael Lima', acao: 'convidou', alvo: 'leticia.prado@seusistema.com.br', detalhe: 'Perfil Suporte' });
 
     // Repetido: convite pendente ou pessoa já na equipe.

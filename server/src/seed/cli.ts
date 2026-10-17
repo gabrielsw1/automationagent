@@ -1,30 +1,24 @@
-// `npm run seed`: recria o banco local com os dados de exemplo (apaga o que houver em DATA_DIR).
-// Use `npm run seed -- --manter` para só completar um banco vazio, sem apagar nada.
-import fs from 'node:fs';
-import path from 'node:path';
+// `npm run seed`: recria os dados locais com a empresa de demonstração (apaga o que houver em
+// DATA_DIR, inclusive as empresas criadas pelo cadastro). Use `npm run seed -- --manter` para só
+// criar a demonstração quando ainda não há nenhuma empresa, sem apagar nada.
 import { lerConfig } from '../config.ts';
-import { criarContexto } from '../contexto.ts';
-import { bancoVazio, semear, SENHA_PADRAO } from './index.ts';
+import { Plataforma } from '../plataforma/index.ts';
+import { plataformaVazia, semearPlataforma, SENHA_PADRAO } from './index.ts';
 
 const config = lerConfig();
-const arquivo = path.join(config.dirDados, 'copiloto.db');
 const manter = process.argv.includes('--manter');
 
-if (!manter) {
-  for (const sufixo of ['', '-wal', '-shm']) fs.rmSync(arquivo + sufixo, { force: true });
-  for (const pasta of ['arquivos', 'anexos', 'prints']) fs.rmSync(path.join(config.dirDados, pasta), { recursive: true, force: true });
-}
+if (!manter) Plataforma.apagarDados(config.dirDados);
 
-const ctx = criarContexto(config);
-if (!bancoVazio(ctx.banco)) {
-  console.log(`O banco ${arquivo} já tem dados. Nada foi alterado (rode sem --manter para recriar).`);
+const plataforma = new Plataforma(config);
+if (!plataformaVazia(plataforma)) {
+  console.log(`Já existem empresas em ${config.dirDados}. Nada foi alterado (rode sem --manter para recriar).`);
 } else {
-  const r = semear(ctx);
+  const r = semearPlataforma(plataforma);
   console.log(
-    `Dados de exemplo gravados em ${arquivo}: ${r.equipe} pessoas na equipe, ${r.tarefas} tarefas, ` +
+    `Empresa de demonstração ${r.empresa.nome} criada em ${config.dirDados}: ${r.equipe} pessoas na equipe, ${r.tarefas} tarefas, ` +
       `${r.execucoes} execuções e ${r.fontes} fontes de conhecimento.`,
   );
   console.log(`Entre no console com rafael.lima@seusistema.com.br e a senha ${SENHA_PADRAO}.`);
 }
-await ctx.navegador.fechar();
-ctx.banco.fechar();
+await plataforma.fechar();

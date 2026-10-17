@@ -4,6 +4,7 @@ import type { FastifyPluginAsync } from 'fastify';
 import { z } from 'zod';
 import type { CasoDeTeste, ListaTarefas, RodadaTestes, TarefaDefinicao, TarefaDetalhe } from '@copiloto/shared';
 import { exigir, membro } from '../../auth/console.ts';
+import { ctxDe, type Contexto } from '../../contexto.ts';
 import { ErroLlm, RecusaDoModelo } from '../../llm/tipos.ts';
 import { testarChamada, type ResultadoChamada } from '../../tarefas/chamada.ts';
 import { lerDefinicao, pendenciasParaPublicar, resumirAlteracoes } from '../../tarefas/definicao.ts';
@@ -61,19 +62,18 @@ function definicaoDoCorpo(corpo: unknown): TarefaDefinicao {
 type ComParams = { Params: { id: string } };
 
 const rotas: FastifyPluginAsync = async (app) => {
-  const ctx = app.ctx;
-  const { catalogo, auditoria, banco } = ctx;
-
-  const tarefa = (id: string) => {
+  const tarefa = ({ catalogo }: Contexto, id: string) => {
     const t = catalogo.obter(id);
     if (!t) throw tarefaNaoEncontrada();
     return t;
   };
-  const nomeDa = (id: string) => (catalogo.rascunho(id) ?? catalogo.publicada(id))?.definicao.nome ?? id;
+  const nomeDa = ({ catalogo }: Contexto, id: string) => (catalogo.rascunho(id) ?? catalogo.publicada(id))?.definicao.nome ?? id;
 
-  app.get('/', { preHandler: exigir('ver') }, async (): Promise<ListaTarefas> => montarLista(ctx));
+  app.get('/', { preHandler: exigir('ver') }, async (request): Promise<ListaTarefas> => montarLista(ctxDe(request)));
 
   app.post('/', { preHandler: exigir('editar') }, async (request, reply): Promise<TarefaDetalhe> => {
+    const ctx = ctxDe(request);
+    const { catalogo, auditoria } = ctx;
     const m = membro(request);
     const definicao = definicaoDoCorpo(request.body);
     const t = catalogo.criar(definicao, m.nome);
@@ -83,6 +83,7 @@ const rotas: FastifyPluginAsync = async (app) => {
   });
 
   app.post('/descrever', { preHandler: exigir('editar') }, async (request): Promise<{ definicao: TarefaDefinicao }> => {
+    const ctx = ctxDe(request);
     const { descricao } = validar(Descrever, request.body);
     try {
       return { definicao: await descreverTarefa(ctx, descricao) };
@@ -96,6 +97,7 @@ const rotas: FastifyPluginAsync = async (app) => {
   });
 
   app.post('/sem-tarefa/ignorar', { preHandler: exigir('editar') }, async (request) => {
+    const { banco, auditoria } = ctxDe(request);
     const m = membro(request);
     const { tema } = validar(Ignorar, request.body);
     const r = banco.executar("UPDATE pedidos SET ignorado = 1 WHERE tipo = 'sem_tarefa' AND ignorado = 0 AND tema = ?", tema);
@@ -104,13 +106,16 @@ const rotas: FastifyPluginAsync = async (app) => {
   });
 
   app.get<ComParams>('/:id', { preHandler: exigir('ver') }, async (request): Promise<TarefaDetalhe> => {
-    tarefa(request.params.id);
+    const ctx = ctxDe(request);
+    tarefa(ctx, request.params.id);
     return montarDetalhe(ctx, request.params.id);
   });
 
   app.put<ComParams>('/:id/rascunho', { preHandler: exigir('editar') }, async (request): Promise<TarefaDetalhe> => {
+    const ctx = ctxDe(request);
+    const { catalogo, auditoria } = ctx;
     const m = membro(request);
-    const t = tarefa(request.params.id);
+    const t = tarefa(ctx, request.params.id);
     const definicao = definicaoDoCorpo(request.body);
     const novo = !catalogo.rascunho(t.id);
     const v = catalogo.salvarRascunho(t.id, definicao, m.nome);
@@ -119,8 +124,10 @@ const rotas: FastifyPluginAsync = async (app) => {
   });
 
   app.delete<ComParams>('/:id/rascunho', { preHandler: exigir('editar') }, async (request): Promise<TarefaDetalhe> => {
+    const ctx = ctxDe(request);
+    const { catalogo, auditoria } = ctx;
     const m = membro(request);
-    const t = tarefa(request.params.id);
+    const t = tarefa(ctx, request.params.id);
     const r = catalogo.rascunho(t.id);
     if (!r) throw new ErroHttp(409, 'sem_rascunho', 'Esta tarefa não tem rascunho para descartar.');
     if (!t.versaoPublicada) {
@@ -132,8 +139,10 @@ const rotas: FastifyPluginAsync = async (app) => {
   });
 
   app.post<ComParams>('/:id/publicar', { preHandler: exigir('editar') }, async (request): Promise<TarefaDetalhe> => {
+    const ctx = ctxDe(request);
+    const { catalogo, auditoria } = ctx;
     const m = membro(request);
-    const t = tarefa(request.params.id);
+    const t = tarefa(ctx, request.params.id);
     const { resumoMudancas } = validar(Publicar, request.body);
     const r = catalogo.rascunho(t.id);
     if (!r) throw new ErroHttp(409, 'sem_rascunho', 'Não há alterações para publicar. Edite a ficha e salve o rascunho primeiro.');
@@ -149,8 +158,10 @@ const rotas: FastifyPluginAsync = async (app) => {
   });
 
   app.post<ComParams>('/:id/status', { preHandler: exigir('editar') }, async (request): Promise<TarefaDetalhe> => {
+    const ctx = ctxDe(request);
+    const { catalogo, auditoria } = ctx;
     const m = membro(request);
-    const t = tarefa(request.params.id);
+    const t = tarefa(ctx, request.params.id);
     const { status } = validar(Status, request.body, 'Escolha o status: ativa, em teste ou inativa.');
     if (status !== 'inativa' && !t.versaoPublicada) {
       throw new ErroHttp(409, 'nunca_publicada', 'Publique a tarefa antes de ativá-la ou colocá-la em teste.');
@@ -158,14 +169,16 @@ const rotas: FastifyPluginAsync = async (app) => {
     if (status !== t.status) {
       catalogo.definirStatus(t.id, status, m.nome);
       const acao = { ativa: 'ativou a tarefa', teste: 'colocou em teste a tarefa', inativa: 'desativou a tarefa' }[status];
-      auditoria.registrar(m.nome, acao, nomeDa(t.id));
+      auditoria.registrar(m.nome, acao, nomeDa(ctx, t.id));
     }
     return montarDetalhe(ctx, t.id);
   });
 
   app.post<ComParams>('/:id/restaurar', { preHandler: exigir('editar') }, async (request): Promise<TarefaDetalhe> => {
+    const ctx = ctxDe(request);
+    const { catalogo, auditoria } = ctx;
     const m = membro(request);
-    const t = tarefa(request.params.id);
+    const t = tarefa(ctx, request.params.id);
     const { versao } = validar(Restaurar, request.body, 'Informe a versão a restaurar.');
     const v = catalogo.versao(t.id, versao);
     if (!v) throw new ErroHttp(404, 'nao_encontrado', `A versão ${versao} desta tarefa não existe.`);
@@ -176,17 +189,21 @@ const rotas: FastifyPluginAsync = async (app) => {
   });
 
   app.put<ComParams>('/:id/testes', { preHandler: exigir('editar') }, async (request): Promise<CasoDeTeste[]> => {
+    const ctx = ctxDe(request);
+    const { catalogo, auditoria } = ctx;
     const m = membro(request);
-    const t = tarefa(request.params.id);
+    const t = tarefa(ctx, request.params.id);
     const { casos } = validar(Casos, request.body, 'Confira os testes: cada um precisa de uma frase e do resultado esperado.');
     catalogo.salvarTestes(t.id, casos as CasoDeTeste[]);
-    auditoria.registrar(m.nome, 'alterou os testes da tarefa', nomeDa(t.id), `${casos.length} ${casos.length === 1 ? 'teste' : 'testes'}.`);
+    auditoria.registrar(m.nome, 'alterou os testes da tarefa', nomeDa(ctx, t.id), `${casos.length} ${casos.length === 1 ? 'teste' : 'testes'}.`);
     return catalogo.testes(t.id);
   });
 
   app.post<ComParams>('/:id/testes/rodar', { preHandler: exigir('editar') }, async (request): Promise<RodadaTestes> => {
+    const ctx = ctxDe(request);
+    const { catalogo, auditoria } = ctx;
     const m = membro(request);
-    const t = tarefa(request.params.id);
+    const t = tarefa(ctx, request.params.id);
     const { usarRascunho } = validar(RodarTestes, request.body);
     if (catalogo.testes(t.id).length === 0) {
       throw new ErroHttp(409, 'sem_testes', 'Adicione pelo menos um teste antes de rodar.');
@@ -215,15 +232,17 @@ const rotas: FastifyPluginAsync = async (app) => {
     auditoria.registrar(
       m.nome,
       'rodou os testes da tarefa',
-      nomeDa(t.id),
+      nomeDa(ctx, t.id),
       `${rodada.aprovados} de ${rodada.total} aprovados, com ${comRascunho ? 'o rascunho' : 'a versão publicada'} (versão ${rodada.versao}).`,
     );
     return rodada;
   });
 
   app.post<ComParams>('/:id/testar-chamada', { preHandler: exigir('editar') }, async (request): Promise<ResultadoChamada> => {
+    const ctx = ctxDe(request);
+    const { catalogo, auditoria } = ctx;
     const m = membro(request);
-    const t = tarefa(request.params.id);
+    const t = tarefa(ctx, request.params.id);
     const corpo = validar(TestarChamada, request.body);
     const rasc = catalogo.rascunho(t.id);
     let def: TarefaDefinicao | undefined;

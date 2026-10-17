@@ -7,6 +7,7 @@ import { exigir, membro } from '../../auth/console.ts';
 import { Conhecimento, ErroFonte } from '../../conhecimento/index.ts';
 import { LIMITE_ARQUIVO_MB } from '../../conhecimento/erros.ts';
 import { LIMITE_PAGINAS_MAX } from '../../conhecimento/ingestao.ts';
+import { ctxDe, type Contexto } from '../../contexto.ts';
 import { ErroLlm, RecusaDoModelo } from '../../llm/tipos.ts';
 import { ErroHttp, pedidoInvalido } from '../../util/erros.ts';
 
@@ -43,6 +44,13 @@ function erroDeFonte(e: unknown): never {
     throw new ErroHttp(status, e.codigo, `${e.message} ${e.comoResolver}`);
   }
   throw e;
+}
+
+/** A base de conhecimento da empresa, ligada aos eventos e à pasta de dados dela. */
+function baseDe(ctx: Contexto): Conhecimento {
+  const base = ctx.conhecimento;
+  if (!(base instanceof Conhecimento)) throw new Error('Base de conhecimento indisponível.');
+  return base;
 }
 
 function validar<T>(esquema: z.ZodType<T>, dados: unknown, mensagem: string): T {
@@ -84,33 +92,41 @@ async function lerEnvio(request: FastifyRequest): Promise<Envio> {
 }
 
 const rotas: FastifyPluginAsync = async (app) => {
-  const { auditoria, eventos, config } = app.ctx;
-  if (!(app.ctx.conhecimento instanceof Conhecimento)) throw new Error('Base de conhecimento indisponível.');
-  const base = app.ctx.conhecimento;
-  base.ligar({ eventos, dirDados: config.dirDados });
+  // Ao fechar: interrompe as leituras de fontes em andamento de todas as empresas e espera terminarem.
   app.addHook('onClose', async () => {
-    base.parar();
-    await base.aguardar();
+    const bases = app.plataforma.abertos().map((ctx) => ctx.conhecimento).filter((b) => b instanceof Conhecimento);
+    for (const base of bases) base.parar();
+    await Promise.all(bases.map((base) => base.aguardar()));
   });
 
-  const auditar = (request: FastifyRequest, acao: string, alvo: string, detalhe?: string) =>
+  const auditar = ({ auditoria }: Contexto, request: FastifyRequest, acao: string, alvo: string, detalhe?: string) =>
     auditoria.registrar(membro(request).nome, acao, alvo, detalhe);
 
   // ---------- Fontes
 
-  app.get('/fontes', { preHandler: exigir('ver') }, async (): Promise<FonteConhecimento[]> => base.listarFontes());
+  app.get('/fontes', { preHandler: exigir('ver') }, async (request): Promise<FonteConhecimento[]> => {
+    const ctx = ctxDe(request);
+    const base = baseDe(ctx);
+    return base.listarFontes();
+  });
 
   app.get('/fontes/:id', { preHandler: exigir('ver') }, async (request): Promise<FonteConhecimento> => {
+    const ctx = ctxDe(request);
+    const base = baseDe(ctx);
     const { id } = validar(Id, request.params, 'Fonte inválida.');
     return base.fonte(id);
   });
 
   app.get('/fontes/:id/trechos', { preHandler: exigir('ver') }, async (request) => {
+    const ctx = ctxDe(request);
+    const base = baseDe(ctx);
     const { id } = validar(Id, request.params, 'Fonte inválida.');
     return base.trechosDaFonte(id, 100);
   });
 
   app.post('/fontes/site', { preHandler: exigir('editar') }, async (request, reply): Promise<FonteConhecimento> => {
+    const ctx = ctxDe(request);
+    const base = baseDe(ctx);
     const p = validar(PedidoSite, request.body, 'Informe o endereço do site, começando com https://.');
     let fonte: FonteConhecimento;
     try {
@@ -118,11 +134,13 @@ const rotas: FastifyPluginAsync = async (app) => {
     } catch (e) {
       erroDeFonte(e);
     }
-    auditar(request, 'adicionou fonte de conhecimento', `Site ${fonte.origem}`, `até ${p.limitePaginas ?? 50} páginas`);
+    auditar(ctx, request, 'adicionou fonte de conhecimento', `Site ${fonte.origem}`, `até ${p.limitePaginas ?? 50} páginas`);
     return reply.status(201).send(fonte);
   });
 
   app.post('/fontes/arquivo', { preHandler: exigir('editar') }, async (request, reply): Promise<FonteConhecimento> => {
+    const ctx = ctxDe(request);
+    const base = baseDe(ctx);
     if (!request.isMultipart()) throw pedidoInvalido('Envie o arquivo pelo formulário (PDF, DOCX, TXT ou MD).');
     const envio = await lerEnvio(request);
     if (!envio.arquivo) throw pedidoInvalido('Escolha um arquivo PDF, DOCX, TXT ou MD para enviar.');
@@ -139,6 +157,7 @@ const rotas: FastifyPluginAsync = async (app) => {
       erroDeFonte(e);
     }
     auditar(
+      ctx,
       request,
       substituir ? 'trocou o arquivo da fonte' : 'adicionou fonte de conhecimento',
       `Arquivo “${fonte.nome}”`,
@@ -148,6 +167,8 @@ const rotas: FastifyPluginAsync = async (app) => {
   });
 
   app.post('/fontes/video', { preHandler: exigir('editar') }, async (request, reply): Promise<FonteConhecimento> => {
+    const ctx = ctxDe(request);
+    const base = baseDe(ctx);
     let p: z.infer<typeof PedidoVideo>;
     let arquivo: Envio['arquivo'];
     if (request.isMultipart()) {
@@ -166,65 +187,81 @@ const rotas: FastifyPluginAsync = async (app) => {
     } catch (e) {
       erroDeFonte(e);
     }
-    auditar(request, 'adicionou fonte de conhecimento', `Vídeo “${fonte.nome}”`, arquivo ? arquivo.nome : 'transcrição colada');
+    auditar(ctx, request, 'adicionou fonte de conhecimento', `Vídeo “${fonte.nome}”`, arquivo ? arquivo.nome : 'transcrição colada');
     return reply.status(201).send(fonte);
   });
 
   app.post('/fontes/respostas', { preHandler: exigir('editar') }, async (request, reply): Promise<FonteConhecimento> => {
+    const ctx = ctxDe(request);
+    const base = baseDe(ctx);
     const p = validar(PedidoResposta, request.body, 'Escreva a pergunta e a resposta (pelo menos algumas palavras em cada).');
     const fonte = base.adicionarResposta({ ...p, autor: membro(request).nome });
-    auditar(request, 'adicionou resposta pronta', `Pergunta “${p.pergunta}”`);
+    auditar(ctx, request, 'adicionou resposta pronta', `Pergunta “${p.pergunta}”`);
     return reply.status(201).send(fonte);
   });
 
   app.post('/fontes/:id/sincronizar', { preHandler: exigir('editar') }, async (request): Promise<FonteConhecimento> => {
+    const ctx = ctxDe(request);
+    const base = baseDe(ctx);
     const { id } = validar(Id, request.params, 'Fonte inválida.');
     const fonte = base.sincronizar(id);
-    auditar(request, 'sincronizou fonte de conhecimento', `“${fonte.nome}”`);
+    auditar(ctx, request, 'sincronizou fonte de conhecimento', `“${fonte.nome}”`);
     return fonte;
   });
 
   app.post('/fontes/:id/pausar', { preHandler: exigir('editar') }, async (request): Promise<FonteConhecimento> => {
+    const ctx = ctxDe(request);
+    const base = baseDe(ctx);
     const { id } = validar(Id, request.params, 'Fonte inválida.');
     const fonte = base.pausar(id);
-    auditar(request, 'pausou fonte de conhecimento', `“${fonte.nome}”`);
+    auditar(ctx, request, 'pausou fonte de conhecimento', `“${fonte.nome}”`);
     return fonte;
   });
 
   app.delete('/fontes/:id', { preHandler: exigir('editar') }, async (request) => {
+    const ctx = ctxDe(request);
+    const base = baseDe(ctx);
     const { id } = validar(Id, request.params, 'Fonte inválida.');
     const fonte = base.fonte(id);
     base.remover(id);
-    auditar(request, 'removeu fonte de conhecimento', `“${fonte.nome}”`, `${fonte.trechos} trechos apagados`);
+    auditar(ctx, request, 'removeu fonte de conhecimento', `“${fonte.nome}”`, `${fonte.trechos} trechos apagados`);
     return { ok: true };
   });
 
   // ---------- Perguntas sem resposta
 
-  app.get('/perguntas-sem-resposta', { preHandler: exigir('ver') }, async (): Promise<PerguntaSemResposta[]> =>
-    base.listarSemResposta(),
-  );
+  app.get('/perguntas-sem-resposta', { preHandler: exigir('ver') }, async (request): Promise<PerguntaSemResposta[]> => {
+    const ctx = ctxDe(request);
+    const base = baseDe(ctx);
+    return base.listarSemResposta();
+  });
 
   app.post('/perguntas-sem-resposta/:id/responder', { preHandler: exigir('editar') }, async (request) => {
+    const ctx = ctxDe(request);
+    const base = baseDe(ctx);
     const { id } = validar(Id, request.params, 'Pergunta inválida.');
     const p = validar(PedidoResponderPergunta, request.body, 'Escreva a resposta (pelo menos algumas palavras).');
     const original = base.perguntaAberta(id);
     const fonte = base.responderSemResposta(id, p.resposta, membro(request).nome, p.pergunta);
-    auditar(request, 'respondeu pergunta sem resposta', `Pergunta “${original.pergunta}”`, 'virou resposta pronta');
+    auditar(ctx, request, 'respondeu pergunta sem resposta', `Pergunta “${original.pergunta}”`, 'virou resposta pronta');
     return { ok: true, fonte };
   });
 
   app.post('/perguntas-sem-resposta/:id/ignorar', { preHandler: exigir('editar') }, async (request) => {
+    const ctx = ctxDe(request);
+    const base = baseDe(ctx);
     const { id } = validar(Id, request.params, 'Pergunta inválida.');
     const original = base.perguntaAberta(id);
     base.ignorarSemResposta(id);
-    auditar(request, 'ignorou pergunta sem resposta', `Pergunta “${original.pergunta}”`);
+    auditar(ctx, request, 'ignorou pergunta sem resposta', `Pergunta “${original.pergunta}”`);
     return { ok: true };
   });
 
   // ---------- Testar uma pergunta
 
   app.post('/testar', { preHandler: exigir('ver') }, async (request): Promise<RespostaTeste> => {
+    const ctx = ctxDe(request);
+    const base = baseDe(ctx);
     const { pergunta } = validar(PedidoTeste, request.body, 'Escreva uma pergunta para testar.');
     try {
       return await base.responder(pergunta);

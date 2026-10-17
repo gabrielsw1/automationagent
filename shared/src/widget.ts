@@ -57,9 +57,29 @@ export interface Sugestao {
 export interface WidgetInicioPedido {
   chave: string;
   usuario: string;
-  /** HMAC-SHA256(usuario, segredo do widget) em hex, calculado pelo sistema anfitrião. */
+  /**
+   * HMAC-SHA256 em hex, com o segredo do widget, calculado pelo sistema anfitrião. Assina só o ID,
+   * ou, quando o snippet traz nome, e-mail ou perfis, o texto de `textoAssinado` (as quatro partes).
+   */
   assinatura?: string;
+  /** Identidade da pessoa (empresas ligadas só pelas telas): data-nome, data-email e data-perfis. */
+  nome?: string;
+  email?: string;
+  perfis?: string[];
   pagina?: PaginaContexto;
+}
+
+/**
+ * Texto que o sistema anfitrião assina no snippet. Só o ID quando não há outros dados; com nome,
+ * e-mail ou perfis, as quatro partes separadas por quebra de linha, com os perfis separados por
+ * vírgula, na ordem do snippet. Ex.: "101\nAna Ribeiro\nana@empresa.com.br\nAtendimento,Comercial".
+ */
+export function textoAssinado(usuario: string, identidade?: { nome?: string; email?: string; perfis?: string[] }): string {
+  const nome = identidade?.nome ?? '';
+  const email = identidade?.email ?? '';
+  const perfis = identidade?.perfis ?? [];
+  if (!nome && !email && perfis.length === 0) return usuario;
+  return [usuario, nome, email, perfis.join(',')].join('\n');
 }
 
 export interface WidgetInicio {

@@ -3,6 +3,7 @@ import { lazy, Suspense, useCallback, useEffect, useState } from 'react';
 import { BrowserRouter, Navigate, Route, Routes, useNavigate } from 'react-router-dom';
 import type { ResumoConsole } from '@copiloto/shared';
 import { api, definirAoSessaoExpirar, ErroApiCliente } from './api/cliente.ts';
+import { esquecerUsuariosDoSistema } from './componentes/ChatDeTeste.tsx';
 import { Carregando, EstadoErro } from './componentes/estados.tsx';
 import { ProvedorSessao } from './componentes/sessao.tsx';
 import { ProvedorToast } from './componentes/Toast.tsx';
@@ -10,6 +11,7 @@ import Layout from './layout/Layout.tsx';
 
 const Entrar = lazy(() => import('./paginas/entrar/Entrar.tsx'));
 const Convite = lazy(() => import('./paginas/entrar/Convite.tsx'));
+const Cadastro = lazy(() => import('./paginas/cadastro/Cadastro.tsx'));
 const Guia = lazy(() => import('./paginas/guia/Guia.tsx'));
 const Painel = lazy(() => import('./paginas/painel/Painel.tsx'));
 const ListaTarefas = lazy(() => import('./paginas/tarefas/ListaTarefas.tsx'));
@@ -20,6 +22,8 @@ const DetalheExecucao = lazy(() => import('./paginas/execucoes/DetalheExecucao.t
 const Conhecimento = lazy(() => import('./paginas/conhecimento/Conhecimento.tsx'));
 const Canais = lazy(() => import('./paginas/canais/Canais.tsx'));
 const Equipe = lazy(() => import('./paginas/equipe/Equipe.tsx'));
+const Sistema = lazy(() => import('./paginas/sistema/Sistema.tsx'));
+const Plataforma = lazy(() => import('./paginas/plataforma/Plataforma.tsx'));
 
 function AreaLogada() {
   const navegar = useNavigate();
@@ -47,6 +51,9 @@ function AreaLogada() {
 
   useEffect(() => {
     definirAoSessaoExpirar(irParaEntrar);
+    // A área logada abre de novo depois de entrar, aceitar convite ou criar empresa: pode ser outra
+    // sessão ou outra empresa, então nada do cache anterior vale.
+    esquecerUsuariosDoSistema();
     void carregar();
   }, [carregar, irParaEntrar]);
 
@@ -80,7 +87,9 @@ function AreaLogada() {
             <Route path="/execucoes/:id" element={<DetalheExecucao />} />
             <Route path="/conhecimento" element={<Conhecimento />} />
             <Route path="/canais" element={<Canais />} />
+            <Route path="/sistema" element={<Sistema />} />
             <Route path="/equipe" element={<Equipe />} />
+            <Route path="/plataforma" element={<Plataforma />} />
             <Route path="*" element={<Navigate to="/painel" replace />} />
           </Routes>
         </Suspense>
@@ -97,6 +106,7 @@ export default function App() {
           <Routes>
             <Route path="/entrar" element={<Entrar />} />
             <Route path="/convite/:token" element={<Convite />} />
+            <Route path="/criar-conta/:etapa?" element={<Cadastro />} />
             <Route path="/*" element={<AreaLogada />} />
           </Routes>
         </Suspense>

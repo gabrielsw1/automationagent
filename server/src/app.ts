@@ -8,7 +8,7 @@ import multipart from '@fastify/multipart';
 import estatico from '@fastify/static';
 import type { ErroApi } from '@copiloto/shared';
 import { RAIZ_REPO } from './config.ts';
-import type { Contexto } from './contexto.ts';
+import type { Plataforma } from './plataforma/index.ts';
 import { ErroHttp } from './util/erros.ts';
 import { codigoRef } from './util/ids.ts';
 import rotasWidget from './rotas/widget.ts';
@@ -17,7 +17,8 @@ import rotasConsole from './rotas/console/index.ts';
 
 declare module 'fastify' {
   interface FastifyInstance {
-    ctx: Contexto;
+    /** Empresas, contas e sessões. O contexto de cada empresa fica em `request.ctx`. */
+    plataforma: Plataforma;
   }
 }
 
@@ -25,16 +26,16 @@ export interface OpcoesApp {
   logger?: boolean;
 }
 
-export async function criarApp(ctx: Contexto, opcoes: OpcoesApp = {}): Promise<FastifyInstance> {
+export async function criarApp(plataforma: Plataforma, opcoes: OpcoesApp = {}): Promise<FastifyInstance> {
   const app = Fastify({
     logger: opcoes.logger ? { level: 'info', transport: undefined } : false,
     bodyLimit: 10 * 1024 * 1024,
     trustProxy: true,
   });
-  app.decorate('ctx', ctx);
-  // Ao fechar: para vigias de "sistema voltou" e execuções em segundo plano.
+  app.decorate('plataforma', plataforma);
+  // Ao fechar: para vigias de "sistema voltou" e execuções em segundo plano de todas as empresas.
   app.addHook('onClose', async () => {
-    ctx.motor.parar();
+    for (const ctx of plataforma.abertos()) ctx.motor.parar();
   });
 
   // JSON vazio vira {} (ex.: POST /confirmar com content-type e sem corpo).
@@ -51,9 +52,10 @@ export async function criarApp(ctx: Contexto, opcoes: OpcoesApp = {}): Promise<F
 
   await app.register(cookie);
   await app.register(multipart, { limits: { fileSize: 25 * 1024 * 1024, files: 5 } });
-  // O widget roda dentro do sistema anfitrião (outra origem). Só domínios liberados no console.
+  // O widget roda dentro do sistema anfitrião (outra origem). Só domínios liberados no console de
+  // alguma empresa; a rota /iniciar confere de novo com os domínios da empresa da chave.
   await app.register(cors, {
-    origin: (origem, cb) => cb(null, origemPermitida(ctx, origem)),
+    origin: (origem, cb) => cb(null, origemPermitida(plataforma, origem)),
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
   });
 
@@ -81,9 +83,9 @@ export async function criarApp(ctx: Contexto, opcoes: OpcoesApp = {}): Promise<F
   // A extensão do navegador lê daqui o endereço do console ("Gravar esta aba").
   app.get('/api/saude', async () => ({
     ok: true,
-    modoSimulado: ctx.llm.simulado,
-    sistema: ctx.adaptador.nome,
-    urlConsole: ctx.config.urlConsole,
+    modoSimulado: plataforma.config.llmSimulado,
+    sistema: 'Copiloto',
+    urlConsole: plataforma.config.urlConsole,
   }));
 
   await app.register(rotasWidget, { prefix: '/api/widget' });
@@ -127,15 +129,15 @@ export async function criarApp(ctx: Contexto, opcoes: OpcoesApp = {}): Promise<F
   return app;
 }
 
-function origemPermitida(ctx: Contexto, origem: string | undefined): boolean {
+function origemPermitida(plataforma: Plataforma, origem: string | undefined): boolean {
   if (!origem) return true;
-  let host: string;
+  let url: URL;
   try {
-    host = new URL(origem).host;
+    url = new URL(origem);
   } catch {
     return false;
   }
+  const host = url.host;
   if (host.startsWith('localhost:') || host.startsWith('127.0.0.1:') || host === 'localhost') return true;
-  const { dominios } = ctx.configuracoes.ler('widget_publicado');
-  return dominios.some((d) => d === host || d === new URL(origem).hostname);
+  return plataforma.dominioLiberado(host, url.hostname);
 }

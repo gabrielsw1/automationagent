@@ -3,6 +3,7 @@
 import fs from 'node:fs';
 import type { FastifyPluginAsync } from 'fastify';
 import { exigir } from '../../auth/console.ts';
+import { ctxDe, type Contexto } from '../../contexto.ts';
 import { agoraIso } from '../../db/banco.ts';
 import { caminhoPrint, obterPrint, type LinhaPrint } from '../../navegador/prints.ts';
 import { ErroHttp } from '../../util/erros.ts';
@@ -22,9 +23,7 @@ function medidasPng(arquivo: string): { largura: number; altura: number } | null
 }
 
 const rotas: FastifyPluginAsync = async (app) => {
-  const { banco, config } = app.ctx;
-
-  const achar = (id: string): { print: LinhaPrint; arquivo: string } => {
+  const achar = ({ banco, config }: Contexto, id: string): { print: LinhaPrint; arquivo: string } => {
     const print = obterPrint(banco, id);
     if (!print) throw new ErroHttp(404, 'nao_encontrado', 'Print não encontrado.');
     if (print.apagarEm && print.apagarEm < agoraIso()) {
@@ -36,13 +35,13 @@ const rotas: FastifyPluginAsync = async (app) => {
   };
 
   app.get<{ Params: { id: string } }>('/:id', { preHandler: exigir('ver') }, async (request, reply) => {
-    const { arquivo } = achar(request.params.id);
+    const { arquivo } = achar(ctxDe(request), request.params.id);
     return reply.header('cache-control', 'private, max-age=86400').type('image/png').send(fs.createReadStream(arquivo));
   });
 
   /** Legenda, destaque (em pixels da imagem) e medidas, para desenhar o destaque por cima. */
   app.get<{ Params: { id: string } }>('/:id/info', { preHandler: exigir('ver') }, async (request) => {
-    const { print, arquivo } = achar(request.params.id);
+    const { print, arquivo } = achar(ctxDe(request), request.params.id);
     return {
       id: print.id,
       legenda: print.legenda,

@@ -1,20 +1,28 @@
-// Sessões do console: cookie httpOnly com token aleatório guardado na tabela sessoes.
+// Sessões do console: cookie httpOnly com token aleatório guardado no banco da plataforma. A sessão
+// diz quem é a conta e qual empresa está aberta; o perfil vem da equipe da empresa, conferida a
+// cada pedido (quem sai da equipe perde o acesso na hora).
 import type { FastifyReply, FastifyRequest, preHandlerHookHandler } from 'fastify';
 import { pode, type Eu, type PerfilEquipe, type Permissao } from '@copiloto/shared';
-import { agoraIso, type Banco } from '../db/banco.ts';
+import type { Contexto } from '../contexto.ts';
+import { agoraIso } from '../db/banco.ts';
+import type { Plataforma, SessaoPlataforma } from '../plataforma/index.ts';
 import { ErroHttp, semPermissao } from '../util/erros.ts';
-import { tokenAleatorio } from '../util/ids.ts';
 
 export const COOKIE_SESSAO = 'copiloto_sessao';
-const DIAS_SESSAO = 7;
 
-export interface MembroLogado extends Eu {
+export interface MembroLogado {
+  /** ID do membro na equipe da empresa aberta. */
+  id: string;
+  nome: string;
+  email: string;
   perfil: PerfilEquipe;
+  iniciais: string;
 }
 
 declare module 'fastify' {
   interface FastifyRequest {
     membro?: MembroLogado;
+    sessaoConsole?: SessaoPlataforma;
   }
 }
 
@@ -24,18 +32,6 @@ export function iniciais(nome: string): string {
   const p = partes[0][0] ?? '';
   const u = partes.length > 1 ? (partes[partes.length - 1][0] ?? '') : '';
   return (p + u).toUpperCase();
-}
-
-export function criarSessao(banco: Banco, membroId: string): { token: string; expira: Date } {
-  const token = tokenAleatorio(32);
-  const expira = new Date(Date.now() + DIAS_SESSAO * 86400_000);
-  banco.inserir('sessoes', { token, membro_id: membroId, criado_em: agoraIso(), expira_em: expira.toISOString() });
-  banco.executar('UPDATE equipe SET ultimo_acesso = ? WHERE id = ?', agoraIso(), membroId);
-  return { token, expira };
-}
-
-export function encerrarSessao(banco: Banco, token: string | undefined) {
-  if (token) banco.executar('DELETE FROM sessoes WHERE token = ?', token);
 }
 
 export function definirCookie(reply: FastifyReply, token: string, expira: Date, seguro: boolean) {
@@ -48,33 +44,53 @@ export function definirCookie(reply: FastifyReply, token: string, expira: Date, 
   });
 }
 
-/** Lê o membro da sessão (ou undefined). Atualiza o último acesso no máximo a cada 5 minutos. */
-export function membroDaSessao(banco: Banco, token: string | undefined): MembroLogado | undefined {
-  if (!token) return undefined;
-  const l = banco.um<{
-    id: string;
-    nome: string | null;
-    email: string;
-    perfil: PerfilEquipe;
-    expira_em: string;
-    ultimo_acesso: string | null;
-  }>(
-    `SELECT e.id, e.nome, e.email, e.perfil, s.expira_em, e.ultimo_acesso FROM sessoes s
-     JOIN equipe e ON e.id = s.membro_id WHERE s.token = ? AND e.status = 'ativo'`,
-    token,
+/** Membro ativo da equipe da empresa com este e-mail. Atualiza o último acesso no máximo a cada 5 minutos. */
+export function membroNaEmpresa(ctx: Contexto, email: string): MembroLogado | undefined {
+  const l = ctx.banco.um<{ id: string; nome: string | null; email: string; perfil: PerfilEquipe; ultimo_acesso: string | null }>(
+    "SELECT id, nome, email, perfil, ultimo_acesso FROM equipe WHERE lower(email) = ? AND status = 'ativo'",
+    email.trim().toLowerCase(),
   );
-  if (!l || l.expira_em < agoraIso()) return undefined;
+  if (!l) return undefined;
   if (!l.ultimo_acesso || Date.now() - Date.parse(l.ultimo_acesso) > 5 * 60_000) {
-    banco.executar('UPDATE equipe SET ultimo_acesso = ? WHERE id = ?', agoraIso(), l.id);
+    ctx.banco.executar('UPDATE equipe SET ultimo_acesso = ? WHERE id = ?', agoraIso(), l.id);
   }
   const nome = l.nome ?? l.email;
   return { id: l.id, nome, email: l.email, perfil: l.perfil, iniciais: iniciais(nome) };
 }
 
+/** Sessão, empresa e membro de um cookie, ou undefined (sessão vencida, empresa suspensa ou fora da equipe). */
+export function lerSessaoConsole(
+  plataforma: Plataforma,
+  token: string | undefined,
+): { sessao: SessaoPlataforma; ctx: Contexto; membro: MembroLogado } | undefined {
+  const sessao = plataforma.lerSessao(token);
+  if (!sessao) return undefined;
+  const empresa = plataforma.empresa(sessao.empresaId);
+  if (!empresa || empresa.status !== 'ativa') return undefined;
+  const ctx = plataforma.contexto(empresa.id);
+  const m = membroNaEmpresa(ctx, sessao.conta.email);
+  return m ? { sessao, ctx, membro: m } : undefined;
+}
+
+/** "Eu" do console: a pessoa, a empresa aberta e as outras empresas dela. */
+export function euDe(ctx: Contexto, m: MembroLogado): Eu {
+  const resumo = (e: { id: string; nome: string; demo: boolean }) => ({ id: e.id, nome: e.nome, demo: e.demo });
+  return {
+    id: m.id,
+    nome: m.nome,
+    email: m.email,
+    perfil: m.perfil,
+    iniciais: m.iniciais,
+    empresa: resumo(ctx.empresa),
+    empresas: ctx.plataforma.empresasDe(m.email).map(resumo),
+    adminPlataforma: ctx.plataforma.adminDaPlataforma(m.email),
+  };
+}
+
 /** preHandler: exige sessão válida (401) e, se pedido, uma permissão (403). */
 export function exigir(permissao: Permissao = 'ver'): preHandlerHookHandler {
   return async function (request: FastifyRequest) {
-    if (!request.membro) throw new ErroHttp(401, 'nao_autenticado', 'Sua sessão expirou. Entre de novo.');
+    if (!request.membro || !request.ctx) throw new ErroHttp(401, 'nao_autenticado', 'Sua sessão expirou. Entre de novo.');
     if (!pode(request.membro.perfil, permissao)) {
       throw semPermissao(
         permissao === 'administrar'

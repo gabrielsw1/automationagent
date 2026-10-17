@@ -70,5 +70,7 @@ export interface Navegador {
   /** Chromium instalado e utilizável? (aparece no guia e no painel) */
   disponivel(): Promise<{ ok: boolean; detalhe: string }>;
   executar(pedido: PedidoExecucaoNavegador): Promise<ResultadoNavegador>;
+  /** Entra no sistema como antes de um fluxo (conta de serviço ou sessão de `usuarioId`) e sai, para o admin conferir. */
+  testarAcesso?(usuarioId?: string): Promise<{ ok: boolean; detalhe: string }>;
   fechar(): Promise<void>;
 }

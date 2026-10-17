@@ -12,10 +12,11 @@ import {
   type Seguranca,
 } from '@copiloto/shared';
 import { exigir, membro } from '../../auth/console.ts';
-import type { Contexto } from '../../contexto.ts';
+import { ctxDe, type Contexto } from '../../contexto.ts';
 import { agoraIso } from '../../db/banco.ts';
 import { conflito, naoEncontrado, pedidoInvalido } from '../../util/erros.ts';
-import { novoId, tokenAleatorio } from '../../util/ids.ts';
+import { tokenDaEmpresa } from '../../plataforma/index.ts';
+import { novoId } from '../../util/ids.ts';
 
 const DIAS_CONVITE = 7;
 
@@ -106,24 +107,24 @@ export function lerSeguranca(ctx: Contexto): Seguranca {
 }
 
 const rotas: FastifyPluginAsync = async (app) => {
-  const ctx = app.ctx;
-  const { banco, auditoria, configuracoes, gastos, config } = ctx;
+  const { plataforma } = app;
 
-  const linha = (id: string): LinhaMembro => {
+  const linha = ({ banco }: Contexto, id: string): LinhaMembro => {
     const l = banco.um<LinhaMembro>('SELECT * FROM equipe WHERE id = ?', id);
     if (!l) throw naoEncontrado('Membro da equipe');
     return l;
   };
 
-  const adminsAtivos = () =>
+  const adminsAtivos = ({ banco }: Contexto) =>
     banco.um<{ n: number }>("SELECT COUNT(*) AS n FROM equipe WHERE perfil = 'admin' AND status = 'ativo'")!.n;
 
-  const linkConvite = (token: string) => `${config.urlConsole.replace(/\/+$/, '')}/convite/${token}`;
+  const linkConvite = (token: string) => `${plataforma.config.urlConsole.replace(/\/+$/, '')}/convite/${token}`;
 
-  const novoConvite = () => {
+  /** O token começa com o ID da empresa: quem abre o link cai na equipe certa. */
+  const novoConvite = (ctx: Contexto) => {
     const agora = new Date();
     return {
-      convite_token: tokenAleatorio(24),
+      convite_token: tokenDaEmpresa(ctx.empresa.id),
       convite_enviado_em: agora.toISOString(),
       convite_expira_em: new Date(agora.getTime() + DIAS_CONVITE * 86400_000).toISOString(),
     };
@@ -131,9 +132,9 @@ const rotas: FastifyPluginAsync = async (app) => {
 
   // ---------- Equipe ----------
 
-  app.get('/equipe', { preHandler: exigir('ver') }, async (): Promise<MembroEquipe[]> => {
-    return banco
-      .todos<LinhaMembro>(
+  app.get('/equipe', { preHandler: exigir('ver') }, async (request): Promise<MembroEquipe[]> => {
+    return ctxDe(request)
+      .banco.todos<LinhaMembro>(
         `SELECT * FROM equipe ORDER BY CASE status WHEN 'ativo' THEN 0 ELSE 1 END,
          CASE perfil WHEN 'admin' THEN 0 WHEN 'editor' THEN 1 WHEN 'suporte' THEN 2 ELSE 3 END, criado_em`,
       )
@@ -141,13 +142,15 @@ const rotas: FastifyPluginAsync = async (app) => {
   });
 
   app.post('/equipe/convites', { preHandler: exigir('administrar') }, async (request) => {
+    const ctx = ctxDe(request);
+    const { banco, auditoria } = ctx;
     const m = membro(request);
     const d = validar(Convite, request.body);
-    const existente = banco.um<LinhaMembro>('SELECT * FROM equipe WHERE email = ?', d.email);
+    const existente = banco.um<LinhaMembro>('SELECT * FROM equipe WHERE lower(email) = ?', d.email);
     if (existente?.status === 'ativo') throw conflito(`${quem(existente)} já está na equipe.`);
     if (existente) throw conflito('Já existe um convite pendente para este e-mail. Use “Reenviar” para gerar um link novo.');
     const id = novoId('mbr');
-    const convite = novoConvite();
+    const convite = novoConvite(ctx);
     banco.inserir('equipe', {
       id,
       nome: null,
@@ -158,62 +161,68 @@ const rotas: FastifyPluginAsync = async (app) => {
       criado_em: agoraIso(),
     });
     auditoria.registrar(m.nome, 'convidou', d.email, `Perfil ${ROTULO_PERFIL[d.perfil]}`);
-    return { membro: membroDe(linha(id)), linkConvite: linkConvite(convite.convite_token) };
+    return { membro: membroDe(linha(ctx, id)), linkConvite: linkConvite(convite.convite_token) };
   });
 
   app.post<{ Params: { id: string } }>('/equipe/:id/reenviar', { preHandler: exigir('administrar') }, async (request) => {
+    const ctx = ctxDe(request);
     const m = membro(request);
-    const l = linha(request.params.id);
+    const l = linha(ctx, request.params.id);
     if (l.status !== 'convidado') throw conflito(`${quem(l)} já aceitou o convite.`);
-    const convite = novoConvite();
-    banco.atualizar('equipe', l.id, convite);
-    auditoria.registrar(m.nome, 'reenviou o convite', l.email, `Novo link válido por ${DIAS_CONVITE} dias`);
-    return { membro: membroDe(linha(l.id)), linkConvite: linkConvite(convite.convite_token) };
+    const convite = novoConvite(ctx);
+    ctx.banco.atualizar('equipe', l.id, convite);
+    ctx.auditoria.registrar(m.nome, 'reenviou o convite', l.email, `Novo link válido por ${DIAS_CONVITE} dias`);
+    return { membro: membroDe(linha(ctx, l.id)), linkConvite: linkConvite(convite.convite_token) };
   });
 
   app.put<{ Params: { id: string } }>(
     '/equipe/:id/perfil',
     { preHandler: exigir('administrar') },
     async (request): Promise<MembroEquipe> => {
+      const ctx = ctxDe(request);
       const m = membro(request);
       const { perfil } = validar(TrocaPerfil, request.body);
-      const l = linha(request.params.id);
+      const l = linha(ctx, request.params.id);
       if (l.perfil === perfil) return membroDe(l);
-      if (l.perfil === 'admin' && l.status === 'ativo' && adminsAtivos() <= 1) {
+      if (l.perfil === 'admin' && l.status === 'ativo' && adminsAtivos(ctx) <= 1) {
         throw conflito('É o único admin: promova outra pessoa a Admin antes de mudar este perfil.');
       }
-      banco.atualizar('equipe', l.id, { perfil });
-      auditoria.registrar(
+      ctx.banco.atualizar('equipe', l.id, { perfil });
+      ctx.auditoria.registrar(
         m.nome,
         l.status === 'convidado' ? 'mudou o perfil do convite' : 'mudou o perfil',
         quem(l),
         `De ${ROTULO_PERFIL[l.perfil]} para ${ROTULO_PERFIL[perfil]}`,
       );
-      return membroDe(linha(l.id));
+      return membroDe(linha(ctx, l.id));
     },
   );
 
   app.delete<{ Params: { id: string } }>('/equipe/:id', { preHandler: exigir('administrar') }, async (request) => {
+    const ctx = ctxDe(request);
     const m = membro(request);
-    const l = linha(request.params.id);
+    const l = linha(ctx, request.params.id);
     if (l.status === 'ativo') {
       if (l.id === m.id) throw conflito('Você não pode remover a si mesmo. Peça a outro Admin.');
-      if (l.perfil === 'admin' && adminsAtivos() <= 1) {
+      if (l.perfil === 'admin' && adminsAtivos(ctx) <= 1) {
         throw conflito('É o único admin e não pode ser removido.');
       }
     }
-    banco.executar('DELETE FROM equipe WHERE id = ?', l.id);
-    if (l.status === 'convidado') auditoria.registrar(m.nome, 'cancelou o convite', l.email);
-    else auditoria.registrar(m.nome, 'removeu da equipe', quem(l), `Perfil ${ROTULO_PERFIL[l.perfil]}`);
+    ctx.banco.executar('DELETE FROM equipe WHERE id = ?', l.id);
+    // A conta continua valendo nas outras empresas; nesta, as sessões abertas caem na hora.
+    plataforma.desvincular(l.email, ctx.empresa.id);
+    if (l.status === 'convidado') ctx.auditoria.registrar(m.nome, 'cancelou o convite', l.email);
+    else ctx.auditoria.registrar(m.nome, 'removeu da equipe', quem(l), `Perfil ${ROTULO_PERFIL[l.perfil]}`);
     return { ok: true };
   });
 
   // ---------- Limites de gasto ----------
 
   // Como no design (Estados-Console): só Admin vê e muda os limites.
-  app.get('/limites', { preHandler: exigir('administrar') }, async (): Promise<Limites> => gastos.limites());
+  app.get('/limites', { preHandler: exigir('administrar') }, async (request): Promise<Limites> => ctxDe(request).gastos.limites());
 
   app.put('/limites', { preHandler: exigir('administrar') }, async (request): Promise<Limites> => {
+    const { configuracoes, auditoria, gastos } = ctxDe(request);
     const m = membro(request);
     const d = validar(EsquemaLimites, request.body);
     const novo = { ...d, mensal: Math.round(d.mensal * 100) / 100 };
@@ -241,9 +250,11 @@ const rotas: FastifyPluginAsync = async (app) => {
 
   // ---------- Segurança e dados ----------
 
-  app.get('/seguranca', { preHandler: exigir('ver') }, async (): Promise<Seguranca> => lerSeguranca(ctx));
+  app.get('/seguranca', { preHandler: exigir('ver') }, async (request): Promise<Seguranca> => lerSeguranca(ctxDe(request)));
 
   app.put('/seguranca', { preHandler: exigir('administrar') }, async (request): Promise<Seguranca> => {
+    const ctx = ctxDe(request);
+    const { configuracoes, auditoria } = ctx;
     const m = membro(request);
     const d = validar(EsquemaSeguranca, request.body);
     const antes = configuracoes.ler('seguranca');
@@ -268,7 +279,7 @@ const rotas: FastifyPluginAsync = async (app) => {
 
   app.get('/auditoria', { preHandler: exigir('administrar') }, async (request): Promise<RegistroAuditoria[]> => {
     const { antes } = validar(Antes, request.query);
-    return auditoria.listar(50, antes || undefined);
+    return ctxDe(request).auditoria.listar(50, antes || undefined);
   });
 };
 

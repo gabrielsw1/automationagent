@@ -44,7 +44,19 @@ export function lerFluxo(banco: Banco, id: string): LinhaFluxo | null {
 }
 
 export class Fluxos {
-  constructor(private readonly banco: Banco) {}
+  /**
+   * `empresaId`: os tokens de gravação começam com ele (`<empresa>.<aleatório>`), para a rota de
+   * gravação achar o banco certo sem sessão. Sem ele, o fluxo só serve para ler e mudar.
+   */
+  constructor(
+    private readonly banco: Banco,
+    private readonly empresaId?: string,
+  ) {}
+
+  private novoToken(): string {
+    if (!this.empresaId) throw new Error('Para gravar, crie Fluxos com o ID da empresa.');
+    return `${this.empresaId}.${tokenAleatorio(24)}`;
+  }
 
   listar(): LinhaFluxo[] {
     return this.banco.todos<Record<string, unknown>>('SELECT * FROM fluxos ORDER BY salvo_em DESC').map(deLinha);
@@ -74,7 +86,7 @@ export class Fluxos {
       passos: [],
       campos_sugeridos: [],
       eventos_gravados: [],
-      token_gravacao: tokenAleatorio(24),
+      token_gravacao: this.novoToken(),
       gravado_por: dados.por,
       gravado_em: null,
       duracao_gravacao_ms: null,
@@ -125,7 +137,7 @@ export class Fluxos {
       status: 'gravando',
       eventos_gravados: [],
       passos: [],
-      token_gravacao: tokenAleatorio(24),
+      token_gravacao: this.novoToken(),
       gravado_por: por,
       gravado_em: null,
       duracao_gravacao_ms: null,

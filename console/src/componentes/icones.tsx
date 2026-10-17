@@ -145,6 +145,14 @@ const P = {
   editar: <path d="M4 20h4l11-11-4-4L4 16zM13.5 6.5l4 4" />,
   subir: <path d="M6 15l6-6 6 6" />,
   pontos: <path d="M5 12h.01M12 12h.01M19 12h.01" />,
+  /** Item ainda não cumprido (regras da senha). */
+  circulo: <circle cx="12" cy="12" r="9" />,
+  empresa: (
+    <>
+      <rect x="4" y="3" width="16" height="18" rx="1.5" />
+      <path d="M9 7h1M14 7h1M9 11h1M14 11h1M9 15h1M14 15h1M10 21v-3h4v3" />
+    </>
+  ),
   erro: (
     <>
       <circle cx="12" cy="12" r="9" />

@@ -8,7 +8,7 @@ import { chromium, errors, type Browser, type BrowserContext, type Locator, type
 import { casarOpcao, interpretarHora, somenteDigitos, type PassoFluxo } from '@copiloto/shared';
 import type { Config } from '../config.ts';
 import type { Banco } from '../db/banco.ts';
-import type { AdaptadorSistema, CookieNavegador } from '../adaptadores/tipos.ts';
+import { ErroAcessoSistema, type AdaptadorSistema, type CookieNavegador, type SessaoNavegador } from '../adaptadores/tipos.ts';
 import type { Llm } from '../llm/tipos.ts';
 import type {
   ArquivoGerado,
@@ -138,6 +138,57 @@ export class NavegadorPlaywright implements Navegador {
     }
   }
 
+  /**
+   * Entra no sistema como o copiloto entraria antes de um fluxo, sem rodar passos (botão "Testar
+   * acesso" do console): com a conta de serviço ou com a sessão pedida para `usuarioId`.
+   */
+  async testarAcesso(usuarioId = ''): Promise<{ ok: boolean; detalhe: string }> {
+    const { adaptador } = this.deps;
+    let sessao: SessaoNavegador;
+    try {
+      sessao = await adaptador.sessaoNavegador(usuarioId);
+    } catch (e) {
+      return { ok: false, detalhe: e instanceof Error ? e.message : String(e) };
+    }
+    if (!sessao.login && !sessao.urlEntrada && sessao.cookies.length === 0) {
+      return { ok: true, detalhe: `Sem login: o navegador abre as telas do ${adaptador.nome} direto.` };
+    }
+    let browser: Browser;
+    try {
+      browser = await this.obterBrowser();
+    } catch (e) {
+      return { ok: false, detalhe: this.ultimaFalha?.detalhe ?? explicarFalhaAbertura(e) };
+    }
+    this.ativos++;
+    if (this.relogioOcioso) clearTimeout(this.relogioOcioso);
+    const contexto = await browser.newContext({
+      viewport: this.opcoes.janela,
+      locale: 'pt-BR',
+      timezoneId: 'America/Sao_Paulo',
+      extraHTTPHeaders: sessao.cabecalhos,
+    });
+    try {
+      await contexto.route(/\/copiloto\.js(\?.*)?$/, (r) => r.abort());
+      if (sessao.cookies.length) await contexto.addCookies(sessao.cookies.map((c) => cookieParaPlaywright(c, adaptador.urlBase)));
+      const page = await contexto.newPage();
+      if (sessao.login) {
+        await entrarComConta(page, sessao.login, adaptador.nome, this.opcoes);
+        return { ok: true, detalhe: `Entrou no ${adaptador.nome} como ${sessao.login.usuario}. Depois de entrar, a tela era ${caminhoCurto(page.url())}.` };
+      }
+      await page.goto(sessao.urlEntrada ?? adaptador.urlBase, { waitUntil: 'load', timeout: this.opcoes.tempoNavegacaoMs });
+      if (pareceTelaDeLogin(page.url())) {
+        return { ok: false, detalhe: `O ${adaptador.nome} entregou uma sessão para ${usuarioId}, mas pediu para entrar de novo (${caminhoCurto(page.url())}).` };
+      }
+      return { ok: true, detalhe: `Entrou no ${adaptador.nome} com a sessão de ${usuarioId}. A tela aberta foi ${caminhoCurto(page.url())}.` };
+    } catch (e) {
+      return { ok: false, detalhe: e instanceof Error ? e.message : String(e) };
+    } finally {
+      await contexto.close().catch(() => {});
+      this.ativos--;
+      this.agendarFechamento();
+    }
+  }
+
   async fechar(): Promise<void> {
     if (this.relogioOcioso) clearTimeout(this.relogioOcioso);
     this.relogioOcioso = null;
@@ -202,6 +253,60 @@ function explicarFalhaAbertura(e: unknown): string {
     return 'O Chromium não está instalado. Rode “npx playwright install chromium” no servidor (ou defina CHROMIUM_PATH) e reinicie.';
   }
   return 'O Chromium não abriu neste servidor. Confira a instalação do Playwright e reinicie o servidor.';
+}
+
+const CAMPO_USUARIO = 'input:is([type="email"], [type="text"], [type="tel"], :not([type])):visible';
+
+/**
+ * Entra no sistema com a conta de serviço: abre a página de login, preenche o primeiro campo de
+ * texto do formulário da senha e a senha, envia e espera o campo de senha sumir.
+ */
+export async function entrarComConta(
+  page: Page,
+  login: NonNullable<SessaoNavegador['login']>,
+  sistema: string,
+  opcoes: Pick<Required<OpcoesNavegador>, 'tempoElementoMs' | 'tempoNavegacaoMs'>,
+): Promise<void> {
+  const conferir = `Confira em Sistema, no console, a página de login, o usuário e a senha da conta do copiloto.`;
+  try {
+    await page.goto(login.url, { waitUntil: 'load', timeout: opcoes.tempoNavegacaoMs });
+  } catch {
+    throw new FalhaPasso('sessao_expirada', `Não consegui abrir a página de login do ${sistema} (${caminhoCurto(login.url)}). ${conferir}`);
+  }
+  const senha = page.locator('input[type="password"]:visible').first();
+  try {
+    await senha.waitFor({ state: 'visible', timeout: opcoes.tempoElementoMs });
+  } catch {
+    throw new FalhaPasso('sessao_expirada', `A página ${caminhoCurto(page.url())} do ${sistema} não tem campo de senha. ${conferir}`);
+  }
+  const formulario = page.locator('form', { has: page.locator('input[type="password"]') }).first();
+  const escopo = (await formulario.count()) > 0 ? formulario : page.locator('body');
+  const usuario = escopo.locator(CAMPO_USUARIO).first();
+  if ((await usuario.count()) === 0) {
+    throw new FalhaPasso('sessao_expirada', `Na página de login do ${sistema} não achei o campo do usuário. ${conferir}`);
+  }
+  await usuario.fill(login.usuario);
+  await senha.fill(login.senha);
+  const enviar = escopo.locator('button[type="submit"]:visible, input[type="submit"]:visible, button:not([type]):visible').first();
+  const navegou = page
+    .waitForEvent('framenavigated', { predicate: (f) => f === page.mainFrame(), timeout: opcoes.tempoElementoMs })
+    .catch(() => null);
+  if ((await enviar.count()) > 0) await enviar.click();
+  else await senha.press('Enter');
+  await navegou;
+  await page.waitForLoadState('load', { timeout: opcoes.tempoNavegacaoMs }).catch(() => {});
+  // Entrou quando o campo de senha some. Se ele continua e a tela mostra um aviso, o sistema recusou.
+  const limite = Date.now() + opcoes.tempoElementoMs;
+  const desde = Date.now();
+  let avisos: string[] = [];
+  while (Date.now() < limite) {
+    if (!(await senha.isVisible().catch(() => false))) return;
+    avisos = await lerAvisosDaPagina(page);
+    if (avisos.length && Date.now() - desde > 1_500) break;
+    await page.waitForTimeout(250);
+  }
+  const motivo = avisos.length ? ` A tela disse: “${encurtar(avisos.join(' · '), 160)}”.` : '';
+  throw new FalhaPasso('sessao_expirada', `O ${sistema} não aceitou a conta do copiloto (${login.usuario}).${motivo} ${conferir}`);
 }
 
 function cancelado(p: PedidoExecucaoNavegador, passo: number | null, inicio: number): ResultadoNavegador {
@@ -292,7 +397,8 @@ class ExecucaoFluxo {
     let sessao;
     try {
       sessao = await adaptador.sessaoNavegador(this.pedido.usuarioId);
-    } catch {
+    } catch (e) {
+      if (e instanceof ErroAcessoSistema) throw new FalhaPasso('sessao_expirada', `${e.message} Nada foi feito no sistema.`);
       throw new FalhaPasso(
         'sessao_expirada',
         `Não consegui abrir uma sessão no ${this.sistema} para ${this.nomePessoa}. Confira se o ${this.sistema} está no ar e se a pessoa ainda tem acesso.`,
@@ -314,10 +420,34 @@ class ExecucaoFluxo {
     this.page = await this.contexto.newPage();
     this.page.setDefaultTimeout(this.opcoes.tempoElementoMs);
     this.page.setDefaultNavigationTimeout(this.opcoes.tempoNavegacaoMs);
+    if (sessao.login) {
+      // Conector só pela tela: o navegador entra com a conta de serviço que a empresa cadastrou.
+      await entrarComConta(this.page, sessao.login, this.sistema, this.opcoes);
+      this.verificarCancelamento();
+      this.emitir({
+        tipo: 'login',
+        titulo: `Entrou no ${this.sistema} com a conta do copiloto`,
+        detalhe: `Usou a conta de serviço ${sessao.login.usuario}, cadastrada pela empresa. O pedido foi de ${this.nomePessoa}.`,
+      });
+      return;
+    }
+    if (sessao.urlEntrada) {
+      // Modo sessão com link de entrada única: abrir o link deixa o navegador logado como a pessoa.
+      try {
+        await this.page.goto(sessao.urlEntrada, { waitUntil: 'load', timeout: this.opcoes.tempoNavegacaoMs });
+      } catch {
+        this.verificarCancelamento();
+        throw new FalhaPasso('sessao_expirada', `O link de entrada do ${this.sistema} para ${this.nomePessoa} não abriu. Nada foi feito no sistema.`);
+      }
+      if (pareceTelaDeLogin(this.page.url())) throw this.falhaSessao();
+    }
+    const logado = sessao.cookies.length > 0 || !!sessao.urlEntrada;
     this.emitir({
       tipo: 'login',
-      titulo: `Entrou no ${this.sistema} com a sessão de ${this.nomePessoa}`,
-      detalhe: `O navegador usa as permissões de ${this.nomePessoa}, sem senha. A sessão vale só para esta execução.`,
+      titulo: logado ? `Entrou no ${this.sistema} com a sessão de ${this.nomePessoa}` : `Abriu o ${this.sistema}`,
+      detalhe: logado
+        ? `O navegador usa as permissões de ${this.nomePessoa}, sem senha. A sessão vale só para esta execução.`
+        : `O navegador abre as telas do ${this.sistema} sem entrar com nenhuma conta.`,
     });
   }
 
@@ -354,8 +484,7 @@ class ExecucaoFluxo {
   private async verificarSessao(destino?: string) {
     const atual = new URL(this.page.url());
     const pedido = destino ? new URL(destino) : null;
-    const pareceLogin = /\/(entrar|login|signin|sign-in|logon|acesso)(\/|$)/i.test(atual.pathname);
-    if (pareceLogin && (!pedido || pedido.pathname !== atual.pathname)) throw this.falhaSessao();
+    if (pareceTelaDeLogin(atual.toString()) && (!pedido || pedido.pathname !== atual.pathname)) throw this.falhaSessao();
   }
 
   private async aguardarNavegacaoDepoisDoClique(navegou: Promise<unknown>) {
@@ -878,6 +1007,15 @@ function cookieParaPlaywright(c: CookieNavegador, urlBase: string) {
     return { name: c.name, value: c.value, domain: c.domain, path: c.path ?? '/', httpOnly: c.httpOnly, secure: c.secure, sameSite: c.sameSite };
   }
   return { name: c.name, value: c.value, url: c.url ?? urlBase, httpOnly: c.httpOnly, secure: c.secure, sameSite: c.sameSite };
+}
+
+/** O endereço é de uma tela de entrar no sistema? */
+function pareceTelaDeLogin(url: string): boolean {
+  try {
+    return /\/(entrar|login|signin|sign-in|logon|acesso)(\/|$)/i.test(new URL(url).pathname);
+  } catch {
+    return false;
+  }
 }
 
 function caminhoCurto(url: string): string {

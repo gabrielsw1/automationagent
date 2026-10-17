@@ -3,7 +3,15 @@
 // personalizar e instalar o widget, convidar a equipe. Ao lado, o chat de teste.
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
-import { fmt, type Canais, type ConfigWidget, type Guia as DadosGuia, type ListaTarefas } from '@copiloto/shared';
+import {
+  fmt,
+  type Canais,
+  type ConectorSistema,
+  type ConfigWidget,
+  type Guia as DadosGuia,
+  type ListaTarefas,
+  type SistemaEmpresa,
+} from '@copiloto/shared';
 import { api } from '../../api/cliente.ts';
 import { useApi } from '../../api/hooks.ts';
 import { Botao } from '../../componentes/Botao.tsx';
@@ -14,6 +22,8 @@ import { Icone } from '../../componentes/icones.tsx';
 import { useMigalhas } from '../../componentes/pagina.tsx';
 import { usePode, useSessao } from '../../componentes/sessao.tsx';
 import { useToast } from '../../componentes/Toast.tsx';
+import { trechoInstalacao } from '../canais/instalacao.ts';
+import { ROTULO_MODO } from '../sistema/Acesso.tsx';
 import ModalDescrever from '../tarefas/ModalDescrever.tsx';
 import './guia.css';
 
@@ -28,8 +38,8 @@ export function textoFaltam(faltam: number): string {
 }
 
 /** Trecho de instalação do widget, igual ao da tela Canais e widget. */
-export function codigoInstalacao(urlScript: string, chave: string): string {
-  return `<script src="${urlScript}"\n  data-chave="${chave}"\n  data-usuario="ID_DO_USUARIO_LOGADO"\n  data-assinatura="HMAC_DO_ID_DO_USUARIO"\n  async></script>`;
+export function codigoInstalacao(urlScript: string, chave: string, conector: ConectorSistema = 'api'): string {
+  return trechoInstalacao(urlScript, chave, conector);
 }
 
 function Concluido() {
@@ -114,7 +124,8 @@ function PassoWidget({ podeEditar, aoVerificar }: { podeEditar: boolean; aoVerif
     );
   }
 
-  const codigo = codigoInstalacao(canais.dados.urlScript, canais.dados.chavePublica);
+  const tela = canais.dados.conector === 'tela';
+  const codigo = codigoInstalacao(canais.dados.urlScript, canais.dados.chavePublica, canais.dados.conector);
   const copiar = async () => {
     try {
       await navigator.clipboard.writeText(codigo);
@@ -127,8 +138,13 @@ function PassoWidget({ podeEditar, aoVerificar }: { podeEditar: boolean; aoVerif
   const assunto = `Instalar o copiloto no ${resumo.nomeSistema}`;
   const corpo =
     `Olá! Para o copiloto aparecer no ${resumo.nomeSistema}, cole este código antes do </body> nas páginas em que ele deve aparecer:\n\n${codigo}\n\n` +
-    'Troque ID_DO_USUARIO_LOGADO pelo identificador de quem está logado e HMAC_DO_ID_DO_USUARIO pelo HMAC-SHA256 desse ID com o segredo do widget, ' +
-    'calculado no servidor (nunca no navegador). Assim o copiloto age só com as permissões dessa pessoa.\n';
+    (tela
+      ? 'Troque ID_DO_USUARIO_LOGADO, NOME_DO_USUARIO, EMAIL_DO_USUARIO e PERFIS_SEPARADOS_POR_VIRGULA pelos dados de quem está logado, e ' +
+        'HMAC_DOS_DADOS_DO_USUARIO pelo HMAC-SHA256 desses dados (um por linha, com os perfis separados só por vírgula) com o segredo do widget, ' +
+        'calculado no servidor (nunca no navegador). Assim o copiloto sabe quem pede e o que essa pessoa pode fazer. ' +
+        'As instruções completas, com exemplos de código, estão em Canais e widget, no console do copiloto.\n'
+      : 'Troque ID_DO_USUARIO_LOGADO pelo identificador de quem está logado e HMAC_DO_ID_DO_USUARIO pelo HMAC-SHA256 desse ID com o segredo do widget, ' +
+        'calculado no servidor (nunca no navegador). Assim o copiloto age só com as permissões dessa pessoa.\n');
   const mailto = `mailto:?subject=${encodeURIComponent(assunto)}&body=${encodeURIComponent(corpo)}`;
 
   return (
@@ -188,11 +204,20 @@ function PassoWidget({ podeEditar, aoVerificar }: { podeEditar: boolean; aoVerif
         <pre className="mono cg-codigo">
           <code>{codigo}</code>
         </pre>
-        <p className="help">
-          Troque <span className="mono">ID_DO_USUARIO_LOGADO</span> pelo identificador de quem está usando o sistema, e{' '}
-          <span className="mono">HMAC_DO_ID_DO_USUARIO</span> pela assinatura calculada no seu servidor. Assim o copiloto age só com as permissões dessa
-          pessoa. <Link to="/canais">Ver como calcular a assinatura</Link>.
-        </p>
+        {tela ? (
+          <p className="help">
+            Troque <span className="mono">ID_DO_USUARIO_LOGADO</span>, <span className="mono">NOME_DO_USUARIO</span>,{' '}
+            <span className="mono">EMAIL_DO_USUARIO</span> e <span className="mono">PERFIS_SEPARADOS_POR_VIRGULA</span> pelos dados de quem está
+            usando o sistema, e <span className="mono">HMAC_DOS_DADOS_DO_USUARIO</span> pela assinatura calculada no seu servidor. Assim o copiloto sabe
+            quem pede e o que essa pessoa pode fazer. <Link to="/canais">Ver como calcular a assinatura</Link>.
+          </p>
+        ) : (
+          <p className="help">
+            Troque <span className="mono">ID_DO_USUARIO_LOGADO</span> pelo identificador de quem está usando o sistema, e{' '}
+            <span className="mono">HMAC_DO_ID_DO_USUARIO</span> pela assinatura calculada no seu servidor. Assim o copiloto age só com as permissões
+            dessa pessoa. <Link to="/canais">Ver como calcular a assinatura</Link>.
+          </p>
+        )}
       </div>
 
       {erroVerificar ? (
@@ -226,8 +251,12 @@ function PassoWidget({ podeEditar, aoVerificar }: { podeEditar: boolean; aoVerif
 export default function Guia() {
   const { resumo, recarregarResumo } = useSessao();
   const podeEditar = usePode('editar');
+  const podeAdministrar = usePode('administrar');
   const guia = useApi<DadosGuia>('/guia');
   const tarefas = useApi<ListaTarefas>('/tarefas');
+  // Sistema ligado só pelas telas (empresas novas) ou pela API (demonstração). Sem resposta, vale a API.
+  const sistema = useApi<SistemaEmpresa>('/sistema/config');
+  const pelasTelas = sistema.dados?.conector === 'tela';
   const [descrever, setDescrever] = useState(false);
   useMigalhas([{ rotulo: 'Guia de início' }]);
 
@@ -250,7 +279,11 @@ export default function Guia() {
   const linkFeito = (p: Passo): ReactNode => {
     switch (p.chave) {
       case 'sistema':
-        return null;
+        return pelasTelas ? (
+          <Link className="small strong" to="/sistema">
+            Ver sistema
+          </Link>
+        ) : null;
       case 'tarefa':
         return primeira ? (
           <Link className="small strong" to={`/tarefas/${primeira.id}`}>
@@ -279,6 +312,19 @@ export default function Guia() {
   };
 
   const resumoPasso = (p: Passo): ReactNode => {
+    if (p.chave === 'sistema' && p.feito && pelasTelas && sistema.dados) {
+      return (
+        <>
+          <p className="small">
+            <span className="muted">Telas no ar · </span>
+            <span className="mono">{g.sistema.url}</span>
+          </p>
+          <p className="small muted">
+            O copiloto entra pelas telas: {ROTULO_MODO[sistema.dados.acesso.modo].toLowerCase()}. Grave os fluxos em Aprender fluxo.
+          </p>
+        </>
+      );
+    }
     if (p.chave === 'sistema' && p.feito) {
       return (
         <>
@@ -309,6 +355,31 @@ export default function Guia() {
   const conteudoAtual = (p: Passo): ReactNode => {
     switch (p.chave) {
       case 'sistema':
+        if (pelasTelas) {
+          return (
+            <Aviso
+              tipo="aviso"
+              titulo={`Ainda não conseguimos abrir o ${g.sistema.nome}`}
+              acoes={
+                <>
+                  {podeAdministrar ? (
+                    <Link className="btn btn-secondary btn-sm" to="/sistema">
+                      Abrir Sistema
+                    </Link>
+                  ) : null}
+                  <Botao tamanho="sm" icone="atualizar" onClick={() => void guia.recarregar()}>
+                    Tentar de novo
+                  </Botao>
+                </>
+              }
+            >
+              <p className="small">{p.resumo}</p>
+              <p className="small">
+                Confira em Sistema o endereço das telas e como o copiloto entra nelas. Depois, tente de novo.
+              </p>
+            </Aviso>
+          );
+        }
         return (
           <Aviso
             tipo="aviso"

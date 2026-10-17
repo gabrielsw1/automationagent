@@ -1,10 +1,10 @@
 // Canais e widget (C8): rascunho da configuração do widget, publicar, descartar e instalação.
 import type { FastifyPluginAsync } from 'fastify';
 import { z } from 'zod';
-import type { Canais, ConfigWidget } from '@copiloto/shared';
+import type { Canais, ConfigWidget, SegredoWidget } from '@copiloto/shared';
 import { exigir, membro } from '../../auth/console.ts';
-import type { Contexto } from '../../contexto.ts';
-import { pedidoInvalido } from '../../util/erros.ts';
+import { ctxDe, type Contexto } from '../../contexto.ts';
+import { ErroHttp, pedidoInvalido } from '../../util/erros.ts';
 
 /** Domínio sem protocolo, caminho nem barra (aceita porta). Ex.: app.horizonte.com.br, localhost:4000. */
 export function normalizarDominio(entrada: string): string {
@@ -76,26 +76,28 @@ export function camposAlterados(a: ConfigWidget, b: ConfigWidget): string[] {
 }
 
 export function lerCanais(ctx: Contexto): Canais {
-  const { configuracoes, config } = ctx;
+  const { configuracoes, config, empresa } = ctx;
   const publicada = configuracoes.ler('widget_publicado');
   const rascunho = configuracoes.ler('widget_rascunho');
   return {
     publicada,
     rascunho,
     temAlteracoes: camposAlterados(publicada, rascunho).length > 0,
-    chavePublica: configuracoes.ler('widget_chave_publica'),
+    chavePublica: empresa.chavePublica,
     urlScript: `${config.urlPublica.replace(/\/+$/, '')}/copiloto.js`,
     instalacao: configuracoes.ler('widget_instalacao'),
+    conector: empresa.sistema.conector,
   };
 }
 
 const rotas: FastifyPluginAsync = async (app) => {
-  const ctx = app.ctx;
-  const { configuracoes, auditoria, banco } = ctx;
+  const { plataforma } = app;
 
-  app.get('/', { preHandler: exigir('ver') }, async (): Promise<Canais> => lerCanais(ctx));
+  app.get('/', { preHandler: exigir('ver') }, async (request): Promise<Canais> => lerCanais(ctxDe(request)));
 
   app.put('/rascunho', { preHandler: exigir('editar') }, async (request): Promise<Canais> => {
+    const ctx = ctxDe(request);
+    const { configuracoes, auditoria, banco } = ctx;
     const m = membro(request);
     const r = Pedido.safeParse(request.body ?? {});
     if (!r.success) throw pedidoInvalido(r.error.issues[0]?.message ?? 'Configuração inválida.');
@@ -114,17 +116,22 @@ const rotas: FastifyPluginAsync = async (app) => {
   });
 
   app.post('/publicar', { preHandler: exigir('editar') }, async (request): Promise<Canais> => {
+    const ctx = ctxDe(request);
+    const { configuracoes, auditoria } = ctx;
     const m = membro(request);
     const publicada = configuracoes.ler('widget_publicado');
     const rascunho = configuracoes.ler('widget_rascunho');
     const mudou = camposAlterados(publicada, rascunho);
     if (mudou.length === 0) return lerCanais(ctx);
     configuracoes.gravar('widget_publicado', rascunho, m.nome);
+    plataforma.atualizarDominios(ctx.empresa.id, rascunho.dominios);
     auditoria.registrar(m.nome, 'publicou a configuração do widget', 'Canais e widget', `Mudou ${mudou.join(', ')}`);
     return lerCanais(ctx);
   });
 
   app.post('/descartar', { preHandler: exigir('editar') }, async (request): Promise<Canais> => {
+    const ctx = ctxDe(request);
+    const { configuracoes, auditoria } = ctx;
     const m = membro(request);
     const publicada = configuracoes.ler('widget_publicado');
     const rascunho = configuracoes.ler('widget_rascunho');
@@ -132,6 +139,37 @@ const rotas: FastifyPluginAsync = async (app) => {
     configuracoes.gravar('widget_rascunho', publicada, m.nome);
     auditoria.registrar(m.nome, 'descartou as alterações do widget', 'Canais e widget');
     return lerCanais(ctx);
+  });
+
+  // Segredo que o sistema da empresa usa para assinar quem está logado no snippet. Só Admin vê.
+  function semSegredoProprio(ctx: Contexto) {
+    if (ctx.empresa.demo) {
+      throw new ErroHttp(
+        409,
+        'segredo_do_ambiente',
+        'Na demonstração o segredo vem da variável WIDGET_SEGREDO do servidor, a mesma que o Horizonte usa.',
+      );
+    }
+  }
+
+  app.get('/segredo', { preHandler: exigir('administrar') }, async (request): Promise<SegredoWidget> => {
+    const ctx = ctxDe(request);
+    semSegredoProprio(ctx);
+    ctx.auditoria.registrar(membro(request).nome, 'viu o segredo do widget', 'Canais e widget');
+    return { segredo: plataforma.segredoWidget(ctx.empresa) };
+  });
+
+  app.post('/segredo/novo', { preHandler: exigir('administrar') }, async (request): Promise<SegredoWidget> => {
+    const ctx = ctxDe(request);
+    semSegredoProprio(ctx);
+    const segredo = plataforma.novoSegredoWidget(ctx.empresa.id);
+    ctx.auditoria.registrar(
+      membro(request).nome,
+      'gerou um segredo novo do widget',
+      'Canais e widget',
+      'O segredo antigo parou de valer: o sistema precisa assinar com o novo.',
+    );
+    return { segredo };
   });
 };
 

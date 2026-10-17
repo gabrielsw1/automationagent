@@ -29,5 +29,5 @@ export {
 export { Menu, ItemMenu, type PropsBotaoMenu } from './Menu.tsx';
 export { useMigalhas, useOnline, useAtrasado, guardado, ProvedorMigalhas, type Migalha } from './pagina.tsx';
 export { Carregando, EstadoErro, EstadoOffline, EstadoVazio, SemPermissao } from './estados.tsx';
-export { ProvedorSessao, useSessao, useSessaoOpcional, usePode, type Sessao } from './sessao.tsx';
-export { ChatDeTeste, useUsuariosDoSistema, usuariosDoSistema } from './ChatDeTeste.tsx';
+export { ProvedorSessao, useSessao, useSessaoOpcional, usePode, recarregar, type Sessao } from './sessao.tsx';
+export { ChatDeTeste, useUsuariosDoSistema, usuariosDoSistema, esquecerUsuariosDoSistema } from './ChatDeTeste.tsx';

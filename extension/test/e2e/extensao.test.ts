@@ -16,9 +16,10 @@ import type { Bloco, Fluxo, MensagemWidget } from '@copiloto/shared';
 import { criarApp } from '@copiloto/server/src/app.ts';
 import { assinarUsuario } from '@copiloto/server/src/auth/widget.ts';
 import { lerConfig, type Config } from '@copiloto/server/src/config.ts';
-import { criarContexto, type Contexto } from '@copiloto/server/src/contexto.ts';
+import type { Contexto } from '@copiloto/server/src/contexto.ts';
 import { LlmSimulado } from '@copiloto/server/src/llm/simulado.ts';
 import { Fluxos } from '@copiloto/server/src/navegador/fluxos.ts';
+import { Plataforma, sistemaNovo } from '@copiloto/server/src/plataforma/index.ts';
 import { entrarComo } from '@copiloto/server/test/ajuda.ts';
 import { criarServidor } from '@copiloto/sistema-exemplo/src/servidor.ts';
 import { compilar } from '../../build/compilar.ts';
@@ -27,6 +28,7 @@ const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'copiloto-extensao-'));
 let horizonte: FastifyInstance;
 let urlHorizonte: string;
 let copiloto: FastifyInstance;
+let plataforma: Plataforma;
 let ctx: Contexto;
 let config: Config;
 let cookieConsole: string;
@@ -68,10 +70,17 @@ beforeAll(async () => {
     navegadorVisivel: false,
     sistema: { nome: 'Horizonte', urlBase: urlHorizonte, urlApi: urlHorizonte, chaveServico: 'chave-servico-local' },
   };
-  ctx = criarContexto(config, { arquivoBanco: ':memory:', llm: new LlmSimulado() });
-  copiloto = await criarApp(ctx);
+  // A empresa de demonstração, ligada pela API ao Horizonte que subiu aqui.
+  plataforma = new Plataforma(config, { emMemoria: true, llm: () => new LlmSimulado() });
+  const empresa = plataforma.criarEmpresa({
+    nome: 'Horizonte',
+    demo: true,
+    sistema: { ...sistemaNovo('Horizonte', urlHorizonte), conector: 'api' },
+  });
+  ctx = plataforma.contexto(empresa.id);
+  copiloto = await criarApp(plataforma);
   // O console põe este endereço na URL de gravação (copiloto_api): é para onde a extensão manda os passos.
-  config.urlPublica = await ouvir(copiloto);
+  config.urlPublica = ctx.config.urlPublica = await ouvir(copiloto);
   cookieConsole = entrarComo(ctx).cookie;
 
   navegador = await chromium.launchPersistentContext(path.join(temp, 'perfil'), {
@@ -85,10 +94,9 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await navegador?.close();
-  await ctx?.navegador.fechar();
   await copiloto?.close();
   await horizonte?.close();
-  ctx?.banco.fechar();
+  await plataforma?.fechar();
   // No Windows o Chromium solta os arquivos do perfil um pouco depois de fechar.
   fs.rmSync(temp, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
 });
@@ -134,7 +142,7 @@ describe('extensão no Chromium de verdade', { timeout: 180_000 }, () => {
       'Clicar em Abrir chamado',
     ]);
     // Cada evento chegou uma vez só, e nenhum valor digitado.
-    const eventos = new Fluxos(ctx.banco).obter(fluxo.id)!.eventosGravados;
+    const eventos = new Fluxos(ctx.banco, ctx.empresa.id).obter(fluxo.id)!.eventosGravados;
     expect(JSON.stringify(eventos)).not.toMatch(/Impressora sem tinta|Padaria Estrela|cupons/);
     expect(eventos.filter((e) => e.tipo === 'preencher')).toHaveLength(3);
     expect(eventos.filter((e) => e.tipo === 'selecionar')).toHaveLength(1);

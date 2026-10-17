@@ -1,6 +1,7 @@
-// Gravador de fluxos (/api/gravacao/:token). Quem chama é o widget, na aba do sistema que o
-// console abriu com ?copiloto_gravacao=<token>. Não há sessão do console: o token é o segredo
-// e só vale enquanto o fluxo está em gravação. Nunca chegam valores digitados, só o formato.
+// Gravador de fluxos (/api/gravacao/:token). Quem chama é o widget ou a extensão, na aba do sistema
+// que o console abriu com ?copiloto_gravacao=<token>. Não há sessão do console: o token é o segredo,
+// começa com o ID da empresa e só vale enquanto o fluxo está em gravação. Nunca chegam valores
+// digitados, só o formato.
 import type { FastifyPluginAsync } from 'fastify';
 import { z } from 'zod';
 import type { EventoGravado, GravacaoEstado } from '@copiloto/shared';
@@ -9,6 +10,7 @@ import { Fluxos, type LinhaFluxo } from '../navegador/fluxos.ts';
 import { agoraIso } from '../db/banco.ts';
 import { ErroHttp, pedidoInvalido } from '../util/erros.ts';
 import type { Contexto } from '../contexto.ts';
+import { empresaDoToken } from '../plataforma/index.ts';
 
 const MAX_EVENTOS = 2_000;
 
@@ -69,7 +71,7 @@ export function estadoGravacao(f: LinhaFluxo): GravacaoEstado {
  * passos e sugere os campos (só aplica se ninguém mexeu no fluxo enquanto isso).
  */
 export function concluirGravacao(ctx: Contexto, fluxo: LinhaFluxo): LinhaFluxo {
-  const fluxos = new Fluxos(ctx.banco);
+  const fluxos = new Fluxos(ctx.banco, ctx.empresa.id);
   const eventos = fluxo.eventosGravados;
   const camposTarefa = camposDaTarefa(ctx, fluxo.tarefaId);
   const { passos, camposSugeridos } = converterPorRegras(eventos, camposTarefa);
@@ -92,7 +94,7 @@ export function concluirGravacao(ctx: Contexto, fluxo: LinhaFluxo): LinhaFluxo {
 async function aprenderEmSegundoPlano(ctx: Contexto, fluxo: LinhaFluxo) {
   try {
     const r = await aprenderFluxo(ctx.llm, fluxo.eventosGravados, camposDaTarefa(ctx, fluxo.tarefaId));
-    const fluxos = new Fluxos(ctx.banco);
+    const fluxos = new Fluxos(ctx.banco, ctx.empresa.id);
     const agora = fluxos.obter(fluxo.id);
     if (!agora || agora.salvoEm !== fluxo.salvoEm || agora.status !== 'rascunho') return;
     fluxos.atualizar(fluxo.id, { passos: r.passos, campos_sugeridos: r.camposSugeridos });
@@ -110,24 +112,28 @@ export function camposDaTarefa(ctx: Contexto, tarefaId: string | null) {
 }
 
 const rotas: FastifyPluginAsync = async (app) => {
-  const { ctx } = app;
-  const fluxos = new Fluxos(ctx.banco);
-
-  const doToken = (token: string): LinhaFluxo => {
-    const f = fluxos.porToken(token);
-    if (!f) throw new ErroHttp(404, 'gravacao_nao_encontrada', 'Esta gravação não existe mais. Comece uma nova pelo console.');
-    return f;
+  /** A empresa vem na frente do token (`<empresa>.<aleatório>`); quem confere o token inteiro é o banco dela. */
+  const doToken = (token: string): { ctx: Contexto; fluxos: Fluxos; f: LinhaFluxo } => {
+    const empresaId = empresaDoToken(token);
+    const empresa = empresaId ? app.plataforma.empresa(empresaId) : undefined;
+    if (empresa?.status === 'ativa') {
+      const ctx = app.plataforma.contexto(empresa.id);
+      const fluxos = new Fluxos(ctx.banco, ctx.empresa.id);
+      const f = fluxos.porToken(token);
+      if (f) return { ctx, fluxos, f };
+    }
+    throw new ErroHttp(404, 'gravacao_nao_encontrada', 'Esta gravação não existe mais. Comece uma nova pelo console.');
   };
   const ativa = (f: LinhaFluxo) => {
     if (f.status !== 'gravando') throw new ErroHttp(409, 'gravacao_encerrada', 'Esta gravação já terminou. Comece uma nova pelo console.');
   };
 
   app.get<{ Params: { token: string } }>('/:token', async (request): Promise<GravacaoEstado> => {
-    return estadoGravacao(doToken(request.params.token));
+    return estadoGravacao(doToken(request.params.token).f);
   });
 
   app.post<{ Params: { token: string } }>('/:token/eventos', async (request) => {
-    const f = doToken(request.params.token);
+    const { ctx, fluxos, f } = doToken(request.params.token);
     ativa(f);
     const r = PedidoEventos.safeParse(request.body);
     if (!r.success) throw pedidoInvalido('Os eventos da gravação vieram em formato inválido.');
@@ -143,14 +149,14 @@ const rotas: FastifyPluginAsync = async (app) => {
   });
 
   app.post<{ Params: { token: string } }>('/:token/concluir', async (request) => {
-    const f = doToken(request.params.token);
+    const { ctx, f } = doToken(request.params.token);
     ativa(f);
     const atualizado = concluirGravacao(ctx, f);
     return { ok: true, fluxoId: atualizado.id };
   });
 
   app.post<{ Params: { token: string } }>('/:token/cancelar', async (request) => {
-    const f = doToken(request.params.token);
+    const { ctx, fluxos, f } = doToken(request.params.token);
     ativa(f);
     fluxos.atualizar(f.id, { status: 'rascunho', etapa: 'gravar', eventos_gravados: [], passos: [] });
     ctx.auditoria.registrar(f.gravadoPor ?? 'Gravador', 'cancelou a gravação do fluxo', f.nome);
