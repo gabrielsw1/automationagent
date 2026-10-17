@@ -14,7 +14,8 @@ import {
 import { exigir, membro } from '../../auth/console.ts';
 import { ctxDe, type Contexto } from '../../contexto.ts';
 import { agoraIso } from '../../db/banco.ts';
-import { conflito, naoEncontrado, pedidoInvalido } from '../../util/erros.ts';
+import { emailConvite } from '../../email/modelos.ts';
+import { conflito, ErroHttp, naoEncontrado, pedidoInvalido } from '../../util/erros.ts';
 import { tokenDaEmpresa } from '../../plataforma/index.ts';
 import { novoId } from '../../util/ids.ts';
 
@@ -121,13 +122,33 @@ const rotas: FastifyPluginAsync = async (app) => {
   const linkConvite = (token: string) => `${plataforma.config.urlConsole.replace(/\/+$/, '')}/convite/${token}`;
 
   /** O token começa com o ID da empresa: quem abre o link cai na equipe certa. */
-  const novoConvite = (ctx: Contexto) => {
+  const novoConvite = (ctx: Contexto, convidadoPor: string) => {
     const agora = new Date();
     return {
       convite_token: tokenDaEmpresa(ctx.empresa.id),
       convite_enviado_em: agora.toISOString(),
       convite_expira_em: new Date(agora.getTime() + DIAS_CONVITE * 86400_000).toISOString(),
+      convidado_por: convidadoPor,
     };
+  };
+
+  /** Manda o convite por e-mail. Falhou o envio: o convite fica guardado e o Admin pode reenviar. */
+  const enviarConvite = async (ctx: Contexto, l: LinhaMembro, quemConvidou: string) => {
+    try {
+      await plataforma.correio.enviar(
+        emailConvite({
+          para: l.email,
+          empresa: ctx.empresa.nome,
+          convidadoPor: quemConvidou,
+          perfil: l.perfil,
+          link: linkConvite(l.convite_token!),
+          validoAte: l.convite_expira_em!,
+        }),
+      );
+    } catch (e) {
+      console.error('Falha ao enviar o convite por e-mail:', e);
+      throw new ErroHttp(502, 'email_indisponivel', 'O convite foi criado, mas o e-mail não saiu. Tente “Reenviar” em instantes.');
+    }
   };
 
   // ---------- Equipe ----------
@@ -150,7 +171,7 @@ const rotas: FastifyPluginAsync = async (app) => {
     if (existente?.status === 'ativo') throw conflito(`${quem(existente)} já está na equipe.`);
     if (existente) throw conflito('Já existe um convite pendente para este e-mail. Use “Reenviar” para gerar um link novo.');
     const id = novoId('mbr');
-    const convite = novoConvite(ctx);
+    const convite = novoConvite(ctx, m.id);
     banco.inserir('equipe', {
       id,
       nome: null,
@@ -161,7 +182,8 @@ const rotas: FastifyPluginAsync = async (app) => {
       criado_em: agoraIso(),
     });
     auditoria.registrar(m.nome, 'convidou', d.email, `Perfil ${ROTULO_PERFIL[d.perfil]}`);
-    return { membro: membroDe(linha(ctx, id)), linkConvite: linkConvite(convite.convite_token) };
+    await enviarConvite(ctx, linha(ctx, id), m.nome);
+    return { membro: membroDe(linha(ctx, id)), linkConvite: linkConvite(convite.convite_token), envio: plataforma.correio.modo };
   });
 
   app.post<{ Params: { id: string } }>('/equipe/:id/reenviar', { preHandler: exigir('administrar') }, async (request) => {
@@ -169,10 +191,11 @@ const rotas: FastifyPluginAsync = async (app) => {
     const m = membro(request);
     const l = linha(ctx, request.params.id);
     if (l.status !== 'convidado') throw conflito(`${quem(l)} já aceitou o convite.`);
-    const convite = novoConvite(ctx);
+    const convite = novoConvite(ctx, m.id);
     ctx.banco.atualizar('equipe', l.id, convite);
     ctx.auditoria.registrar(m.nome, 'reenviou o convite', l.email, `Novo link válido por ${DIAS_CONVITE} dias`);
-    return { membro: membroDe(linha(ctx, l.id)), linkConvite: linkConvite(convite.convite_token) };
+    await enviarConvite(ctx, linha(ctx, l.id), m.nome);
+    return { membro: membroDe(linha(ctx, l.id)), linkConvite: linkConvite(convite.convite_token), envio: plataforma.correio.modo };
   });
 
   app.put<{ Params: { id: string } }>(
@@ -209,8 +232,13 @@ const rotas: FastifyPluginAsync = async (app) => {
       }
     }
     ctx.banco.executar('DELETE FROM equipe WHERE id = ?', l.id);
-    // A conta continua valendo nas outras empresas; nesta, as sessões abertas caem na hora.
-    plataforma.desvincular(l.email, ctx.empresa.id);
+    // A conta continua valendo nas outras empresas; nesta, as sessões abertas caem na hora, e a
+    // pessoa lê o motivo na próxima vez que entrar.
+    plataforma.desvincular(
+      l.email,
+      ctx.empresa.id,
+      l.status === 'ativo' ? `Seu acesso à ${ctx.empresa.nome} foi removido por um Admin dessa empresa.` : undefined,
+    );
     if (l.status === 'convidado') ctx.auditoria.registrar(m.nome, 'cancelou o convite', l.email);
     else ctx.auditoria.registrar(m.nome, 'removeu da equipe', quem(l), `Perfil ${ROTULO_PERFIL[l.perfil]}`);
     return { ok: true };

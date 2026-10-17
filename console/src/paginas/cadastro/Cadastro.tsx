@@ -1,7 +1,9 @@
 // Cadastro de uma empresa nova em três etapas: /criar-conta (Sua conta), /criar-conta/sistema
 // (Seu sistema) e /criar-conta/marca (Sua marca). A etapa 1 cria a empresa e abre a sessão nela;
 // as outras duas já rodam logadas, então recarregar a página no meio continua de onde parou.
-// Também é o "Criar outra empresa" do menu da conta: logado, a etapa 1 não pede o acesso.
+// Conta nova confirma o e-mail com o código (A5) antes da etapa 2: enquanto não confirma, qualquer
+// etapa mostra a confirmação. Também é o "Criar outra empresa" do menu da conta: logado, a etapa 1
+// não pede o acesso.
 import { useEffect, useState, type ReactNode } from 'react';
 import { Link, Navigate, useNavigate, useParams } from 'react-router-dom';
 import type { Eu, PrimeiroAcesso } from '@copiloto/shared';
@@ -10,6 +12,8 @@ import { Carregando, EstadoErro } from '../../componentes/estados.tsx';
 import { Progresso } from '../../componentes/formulario.tsx';
 import { Icone } from '../../componentes/icones.tsx';
 import { FaixaSemInternet } from '../../layout/Faixas.tsx';
+import TelaDeEntrada, { TopoDeAcesso } from '../entrar/TelaDeEntrada.tsx';
+import ConfirmarEmail from './ConfirmarEmail.tsx';
 import EtapaEmpresa, { OQueAconteceDepois } from './EtapaEmpresa.tsx';
 import EtapaMarca from './EtapaMarca.tsx';
 import EtapaSistema from './EtapaSistema.tsx';
@@ -22,30 +26,33 @@ function TelaDeCadastro({ direita, children }: { direita?: ReactNode; children: 
     <>
       <FaixaSemInternet />
       <div className="cc-tela">
-        <header className="cc-topo">
-          <div className="cc-topo-dentro">
-            <Link className="brandmark" to="/" aria-label="Copiloto, ir para o início">
-              <span className="logo-ph" aria-hidden="true">
-                S
-              </span>
-              <span>Copiloto</span>
-            </Link>
-            {direita}
-          </div>
-        </header>
+        <TopoDeAcesso direita={direita} />
         <main className="cc-main">{children}</main>
       </div>
     </>
   );
 }
 
-/** "Sua conta / Seu sistema / Sua marca", "Etapa N de 3" e a barra de progresso. */
-export function IndicadorEtapas({ atual, primeira, detalhe }: { atual: 1 | 2 | 3; primeira: string; detalhe?: string }) {
+/**
+ * "Sua conta / Seu sistema / Sua marca", "Etapa N de 3" e a barra de progresso. `compacto`: no
+ * cartão estreito da confirmação do e-mail (A5).
+ */
+export function IndicadorEtapas({
+  atual,
+  primeira,
+  detalhe,
+  compacto,
+}: {
+  atual: 1 | 2 | 3;
+  primeira: string;
+  detalhe?: string;
+  compacto?: boolean;
+}) {
   const nomes = [primeira, 'Seu sistema', 'Sua marca'];
   return (
     <div className="stack">
       <div className="row between wrap">
-        <ol className="row wrap cc-etapas" aria-label="Etapas do cadastro">
+        <ol className={`row wrap cc-etapas${compacto ? ' cc-etapas-compacto' : ''}`} aria-label="Etapas do cadastro">
           {nomes.map((n, i) => {
             const num = i + 1;
             const feita = num < atual;
@@ -95,7 +102,8 @@ export default function Cadastro() {
       .then(([acesso, eu]) => {
         if (!vivo) return;
         setEstado({ acesso, eu });
-        setLogadoAntes(!!eu);
+        // Conta ainda sem o e-mail confirmado está no meio do próprio cadastro (etapa 1 de "Sua conta").
+        setLogadoAntes(!!eu?.emailConfirmado);
         setErro(null);
       })
       .catch((e: ErroApiCliente) => vivo && setErro(e));
@@ -104,9 +112,10 @@ export default function Cadastro() {
     };
   }, [tentativa]);
 
+  const confirmando = !!estado?.eu && !estado.eu.emailConfirmado;
   useEffect(() => {
-    document.title = `${numero === 1 && logadoAntes ? 'Criar outra empresa' : 'Criar espaço'} · Copiloto`;
-  }, [numero, logadoAntes]);
+    document.title = `${confirmando ? 'Confirmar e-mail' : numero === 1 && logadoAntes ? 'Criar outra empresa' : 'Criar espaço'} · Copiloto Starta`;
+  }, [numero, logadoAntes, confirmando]);
 
   if (erro && !estado) {
     return (
@@ -124,6 +133,30 @@ export default function Cadastro() {
   }
 
   const { acesso, eu } = estado;
+  if (confirmando) {
+    return (
+      <TelaDeEntrada
+        direita={
+          <p className="small muted">
+            Já tem uma conta?{' '}
+            <Link className="strong" to="/entrar">
+              Entrar
+            </Link>
+          </p>
+        }
+      >
+        <div className="stack-lg">
+          <IndicadorEtapas atual={1} primeira="Sua conta" compacto />
+          <ConfirmarEmail
+            aoConfirmar={(confirmado) => {
+              setEstado({ acesso, eu: confirmado });
+              navegar('/criar-conta/sistema');
+            }}
+          />
+        </div>
+      </TelaDeEntrada>
+    );
+  }
   // Etapas 2 e 3 precisam da sessão na empresa nova.
   if (numero > 1 && !eu) return <Navigate to={`/entrar?voltar=${encodeURIComponent(`/criar-conta/${etapa}`)}`} replace />;
 
@@ -166,7 +199,8 @@ export default function Cadastro() {
                   primeiroAcesso={acesso.precisaCriarAdmin}
                   aoCriar={(novo) => {
                     setEstado({ acesso: { ...acesso, precisaCriarAdmin: false }, eu: novo });
-                    navegar('/criar-conta/sistema');
+                    // Conta nova: o código do e-mail aparece aqui mesmo, antes de "Seu sistema".
+                    if (novo.emailConfirmado) navegar('/criar-conta/sistema');
                   }}
                 />
               </div>

@@ -44,18 +44,25 @@ export function definirCookie(reply: FastifyReply, token: string, expira: Date, 
   });
 }
 
-/** Membro ativo da equipe da empresa com este e-mail. Atualiza o último acesso no máximo a cada 5 minutos. */
-export function membroNaEmpresa(ctx: Contexto, email: string): MembroLogado | undefined {
+/** Membro ativo da equipe da empresa com este e-mail, sem marcar acesso (listas e conferências). */
+export function perfilNaEmpresa(ctx: Contexto, email: string): (MembroLogado & { ultimoAcesso: string | null }) | undefined {
   const l = ctx.banco.um<{ id: string; nome: string | null; email: string; perfil: PerfilEquipe; ultimo_acesso: string | null }>(
     "SELECT id, nome, email, perfil, ultimo_acesso FROM equipe WHERE lower(email) = ? AND status = 'ativo'",
     email.trim().toLowerCase(),
   );
   if (!l) return undefined;
-  if (!l.ultimo_acesso || Date.now() - Date.parse(l.ultimo_acesso) > 5 * 60_000) {
+  const nome = l.nome ?? l.email;
+  return { id: l.id, nome, email: l.email, perfil: l.perfil, iniciais: iniciais(nome), ultimoAcesso: l.ultimo_acesso };
+}
+
+/** Membro ativo da equipe da empresa com este e-mail. Atualiza o último acesso no máximo a cada 5 minutos. */
+export function membroNaEmpresa(ctx: Contexto, email: string): MembroLogado | undefined {
+  const l = perfilNaEmpresa(ctx, email);
+  if (!l) return undefined;
+  if (!l.ultimoAcesso || Date.now() - Date.parse(l.ultimoAcesso) > 5 * 60_000) {
     ctx.banco.executar('UPDATE equipe SET ultimo_acesso = ? WHERE id = ?', agoraIso(), l.id);
   }
-  const nome = l.nome ?? l.email;
-  return { id: l.id, nome, email: l.email, perfil: l.perfil, iniciais: iniciais(nome) };
+  return { id: l.id, nome: l.nome, email: l.email, perfil: l.perfil, iniciais: l.iniciais };
 }
 
 /** Sessão, empresa e membro de um cookie, ou undefined (sessão vencida, empresa suspensa ou fora da equipe). */
@@ -84,6 +91,7 @@ export function euDe(ctx: Contexto, m: MembroLogado): Eu {
     empresa: resumo(ctx.empresa),
     empresas: ctx.plataforma.empresasDe(m.email).map(resumo),
     adminPlataforma: ctx.plataforma.adminDaPlataforma(m.email),
+    emailConfirmado: ctx.plataforma.conta(m.email)?.emailConfirmado ?? false,
   };
 }
 
@@ -91,6 +99,10 @@ export function euDe(ctx: Contexto, m: MembroLogado): Eu {
 export function exigir(permissao: Permissao = 'ver'): preHandlerHookHandler {
   return async function (request: FastifyRequest) {
     if (!request.membro || !request.ctx) throw new ErroHttp(401, 'nao_autenticado', 'Sua sessão expirou. Entre de novo.');
+    // Até confirmar o e-mail do cadastro, só as rotas de /auth respondem.
+    if (request.sessaoConsole && !request.sessaoConsole.conta.emailConfirmado) {
+      throw new ErroHttp(403, 'email_nao_confirmado', 'Confirme o seu e-mail para continuar. Enviamos um código de 6 dígitos.');
+    }
     if (!pode(request.membro.perfil, permissao)) {
       throw semPermissao(
         permissao === 'administrar'

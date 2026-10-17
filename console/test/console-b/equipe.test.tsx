@@ -109,7 +109,7 @@ describe('C9 · Equipe e limites', () => {
       conviteExpiraEm: '2026-10-24T12:00:00.000Z',
     };
     const { pedidos } = instalarFetch(
-      rotasBase({ 'POST /equipe/convites': { membro: novo, linkConvite: 'http://localhost:5173/convite/tok123' } }),
+      rotasBase({ 'POST /equipe/convites': { membro: novo, linkConvite: 'http://localhost:5173/convite/tok123', envio: 'caixa_local' } }),
     );
     renderizar(<Equipe />, { caminho: '/equipe' });
     fireEvent.click(await screen.findByRole('button', { name: /Convidar pessoa/ }));
@@ -122,8 +122,36 @@ describe('C9 · Equipe e limites', () => {
     const link = (await screen.findByLabelText('Link do convite')) as HTMLInputElement;
     expect(link.value).toBe('http://localhost:5173/convite/tok123');
     expect(screen.getByText(/Não enviamos e-mail/)).toBeTruthy();
+    // Sem SMTP no servidor: o e-mail ficou na caixa-de-saida.
+    expect(screen.getByRole('note').textContent).toBe(
+      'O envio de e-mail ainda não está configurado neste servidor (SMTP_URL). A mensagem ficou na pasta caixa-de-saida dos dados do servidor.',
+    );
     expect(pedidos.find((p) => p.caminho === '/equipe/convites')?.corpo).toEqual({ email: 'bruno@seusistema.com.br', perfil: 'leitor' });
     expect(within(screen.getAllByRole('table')[0]).getByText('bruno@seusistema.com.br')).toBeTruthy();
+  });
+
+  it('com SMTP no servidor, diz que o convite foi por e-mail e ainda mostra o link', async () => {
+    const novo: MembroEquipe = {
+      id: 'mem-9',
+      nome: null,
+      email: 'bruno@seusistema.com.br',
+      perfil: 'leitor',
+      status: 'convidado',
+      ultimoAcesso: null,
+      conviteEnviadoEm: agora,
+      conviteExpiraEm: '2026-10-24T12:00:00.000Z',
+    };
+    instalarFetch(rotasBase({ 'POST /equipe/convites': { membro: novo, linkConvite: 'http://localhost:5173/convite/tok123', envio: 'smtp' } }));
+    renderizar(<Equipe />, { caminho: '/equipe' });
+    fireEvent.click(await screen.findByRole('button', { name: /Convidar pessoa/ }));
+    const dialogo = await screen.findByRole('dialog');
+    expect(within(dialogo).getByText('O convite vai por e-mail, com um link que vale por 7 dias. Depois de criar, você também pode copiar o link.')).toBeTruthy();
+    fireEvent.change(within(dialogo).getByLabelText(/E-mail/), { target: { value: 'bruno@seusistema.com.br' } });
+    fireEvent.click(within(dialogo).getByRole('button', { name: 'Criar convite' }));
+    expect(((await screen.findByLabelText('Link do convite')) as HTMLInputElement).value).toBe('http://localhost:5173/convite/tok123');
+    expect(screen.getByText(/Enviamos o convite por e-mail para/)).toBeTruthy();
+    expect(screen.getByText(/Se preferir, copie o link e mande você mesmo\./)).toBeTruthy();
+    expect(screen.queryByRole('note')).toBeNull();
   });
 
   it('troca o perfil e remove com confirmação', async () => {

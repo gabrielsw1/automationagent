@@ -64,7 +64,7 @@ export function avisoChave() {
     return;
   }
   console.log(
-    'Claude: ANTHROPIC_API_KEY não encontrada neste terminal. O copiloto roda em modo simulado (respostas por regras).\n' +
+    'Claude: ANTHROPIC_API_KEY não encontrada neste terminal. Sem ela, o assistente avisa que não está ligado e o console mostra o que falta.\n' +
       (process.platform === 'win32'
         ? '  Se você usou "setx ANTHROPIC_API_KEY ...", feche este terminal e abra outro: o setx só vale para terminais novos.'
         : '  Defina com: export ANTHROPIC_API_KEY=...'),

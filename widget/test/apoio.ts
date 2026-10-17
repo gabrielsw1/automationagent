@@ -112,6 +112,7 @@ export function inicioFalso(mudar: Partial<WidgetInicio> = {}): WidgetInicio {
     recentes: [],
     conversaId: null,
     modoSimulado: false,
+    semClaude: false,
     modoTeste: false,
     pausa: null,
     ...mudar,

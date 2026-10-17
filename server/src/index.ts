@@ -26,8 +26,10 @@ const empresas = plataforma.listarEmpresas().filter((e) => e.status === 'ativa')
 for (const e of empresas) plataforma.contexto(e.id).conhecimento.retomar();
 
 const modo = config.llmSimulado
-  ? 'modelo SIMULADO (defina ANTHROPIC_API_KEY para usar o Claude)'
-  : `Claude ${config.modeloPrincipal} (rápido: ${config.modeloRapido})`;
+  ? 'modelo SIMULADO (COPILOTO_LLM=simulado: respostas por regras, só para testes)'
+  : config.temChaveClaude
+    ? `Claude ${config.modeloPrincipal} (rápido: ${config.modeloRapido})`
+    : 'SEM a chave do Claude: defina ANTHROPIC_API_KEY. Até lá, o assistente avisa que não está ligado';
 console.log(`Copiloto no ar em ${config.urlPublica} · ${modo} · ${empresas.length} empresa(s) ativa(s)`);
 
 async function encerrar() {

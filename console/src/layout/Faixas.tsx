@@ -1,4 +1,4 @@
-// Faixas globais do topo: sem internet, modo simulado e limite de gasto perto do fim.
+// Faixas globais do topo: sem internet, sem a chave do Claude, modo simulado e limite de gasto perto do fim.
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { fmt, type ResumoConsole } from '@copiloto/shared';
@@ -26,14 +26,26 @@ export function FaixasDoResumo({ resumo }: { resumo: ResumoConsole }) {
   const [lembrarEm, setLembrarEm] = useState(() => guardado.ler<string>(CHAVE_LEMBRAR));
   const gasto = resumo.alertaGasto;
   const mostrarGasto = gasto && lembrarEm !== hojeSp();
-  if (!resumo.modoSimulado && !mostrarGasto) return null;
+  if (!resumo.semClaude && !resumo.modoSimulado && !mostrarGasto) return null;
   return (
     <div className="ca-faixas">
+      {resumo.semClaude ? (
+        <div className="alert alert-danger" role="alert">
+          <Icone nome="alerta" />
+          <div className="stack-sm">
+            <p className="strong">O copiloto está sem a chave do Claude</p>
+            <p className="small">
+              Sem ela, o assistente não responde no widget e o console não aprende fluxos nem monta tarefas. Quem administra o servidor
+              precisa definir <span className="mono">ANTHROPIC_API_KEY</span> e reiniciar o copiloto.
+            </p>
+          </div>
+        </div>
+      ) : null}
       {resumo.modoSimulado ? (
         <div className="alert alert-warning" role="status">
           <Icone nome="info" />
           <p className="small">
-            O copiloto está em modo simulado: defina <span className="mono">ANTHROPIC_API_KEY</span> no servidor para usar o Claude.
+            O copiloto está em modo simulado (<span className="mono">COPILOTO_LLM=simulado</span>): as respostas seguem regras de teste, sem o Claude.
           </p>
         </div>
       ) : null}

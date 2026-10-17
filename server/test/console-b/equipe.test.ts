@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import type { Limites, MembroEquipe, RegistroAuditoria, Seguranca } from '@copiloto/shared';
-import { criarAmbiente, entrarComo, type Ambiente } from '../ajuda.ts';
+import { criarAmbiente, entrarComo, ultimoEmail, type Ambiente } from '../ajuda.ts';
 import { criarExecucao } from './dados.ts';
 
 let amb: Ambiente | undefined;
@@ -61,13 +61,25 @@ describe('equipe', () => {
     const token = linkConvite.split('/convite/')[1];
     const aberto = await amb.app.inject({ method: 'GET', url: `/api/console/auth/convite/${token}` });
     expect(aberto.statusCode).toBe(200);
-    expect(aberto.json()).toEqual({ email: 'leticia.prado@seusistema.com.br', perfil: 'suporte', empresa: 'Horizonte', contaExistente: false });
+    expect(aberto.json()).toEqual({
+      email: 'leticia.prado@seusistema.com.br',
+      perfil: 'suporte',
+      empresa: 'Horizonte',
+      contaExistente: false,
+      convidadoPor: { nome: 'Rafael Lima', perfil: 'admin' },
+      validoAte: membro.conviteExpiraEm,
+    });
+    // O convite sai por e-mail, com o link e quem convidou.
+    const email = ultimoEmail(amb, 'leticia.prado@seusistema.com.br');
+    expect(email?.assunto).toBe('Rafael Lima convidou você para o Copiloto da Horizonte');
+    expect(email?.texto).toContain(linkConvite);
+    expect(r.json().envio).toBe('caixa_local');
     expect(amb.ctx.auditoria.listar()[0]).toMatchObject({ ator: 'Rafael Lima', acao: 'convidou', alvo: 'leticia.prado@seusistema.com.br', detalhe: 'Perfil Suporte' });
 
     // Repetido: convite pendente ou pessoa já na equipe.
     expect((await pedir(amb, cookie, 'POST', '/equipe/convites', corpo)).statusCode).toBe(409);
-    const email = amb.ctx.banco.um<{ email: string }>("SELECT email FROM equipe WHERE perfil = 'suporte' AND status = 'ativo'")!.email;
-    const ja = await pedir(amb, cookie, 'POST', '/equipe/convites', { email, perfil: 'leitor' });
+    const ativo = amb.ctx.banco.um<{ email: string }>("SELECT email FROM equipe WHERE perfil = 'suporte' AND status = 'ativo'")!.email;
+    const ja = await pedir(amb, cookie, 'POST', '/equipe/convites', { email: ativo, perfil: 'leitor' });
     expect(ja.statusCode).toBe(409);
     expect(ja.json().mensagem).toContain('já está na equipe');
   });

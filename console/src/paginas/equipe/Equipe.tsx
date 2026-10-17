@@ -5,6 +5,7 @@ import { useLocation } from 'react-router-dom';
 import {
   fmt,
   ROTULO_PERFIL,
+  type EnvioEmail,
   type Limites,
   type MembroEquipe,
   type PerfilEquipe,
@@ -13,6 +14,7 @@ import {
 } from '@copiloto/shared';
 import { api } from '../../api/cliente.ts';
 import { useAcao, useApi } from '../../api/hooks.ts';
+import { NotaCaixaDeSaida } from '../../componentes/formulario.tsx';
 import { usePode, useSessao } from '../../componentes/sessao.tsx';
 import {
   AvisoErro,
@@ -101,7 +103,7 @@ export default function Equipe() {
 type Dialogo =
   | null
   | { tipo: 'convidar' }
-  | { tipo: 'link'; membro: MembroEquipe; link: string; reenviado: boolean }
+  | { tipo: 'link'; membro: MembroEquipe; link: string; reenviado: boolean; envio: EnvioEmail }
   | { tipo: 'remover'; membro: MembroEquipe }
   | { tipo: 'cancelar'; membro: MembroEquipe }
   | { tipo: 'rebaixar-si'; membro: MembroEquipe; perfil: PerfilEquipe };
@@ -120,7 +122,7 @@ function SecaoEquipe({
   const [dialogo, setDialogo] = useState<Dialogo>(null);
   // Linha da última troca de perfil ou reenvio, para mostrar o erro ao lado dela.
   const [linhaAcao, setLinhaAcao] = useState<string | null>(null);
-  const reenviar = useAcao((id: string) => api.post<{ membro: MembroEquipe; linkConvite: string }>(`/equipe/${id}/reenviar`));
+  const reenviar = useAcao((id: string) => api.post<ConviteCriado>(`/equipe/${id}/reenviar`));
   const trocar = useAcao((id: string, perfil: PerfilEquipe) => api.put<MembroEquipe>(`/equipe/${id}/perfil`, { perfil }));
   // Como no design: você primeiro, depois a ordem do servidor (ativos por perfil, convites no fim).
   const membros = [...(estado.dados ?? [])].sort((a, b) => Number(b.id === resumo.eu.id) - Number(a.id === resumo.eu.id));
@@ -223,7 +225,7 @@ function SecaoEquipe({
                                 const r = await reenviar.executar(m.id);
                                 if (r) {
                                   estado.definir((lista) => lista?.map((x) => (x.id === r.membro.id ? r.membro : x)));
-                                  setDialogo({ tipo: 'link', membro: r.membro, link: r.linkConvite, reenviado: true });
+                                  setDialogo({ tipo: 'link', membro: r.membro, link: r.linkConvite, reenviado: true, envio: r.envio });
                                 }
                               }}
                             >
@@ -328,9 +330,9 @@ function SecaoEquipe({
       {dialogo?.tipo === 'convidar' ? (
         <DialogoConvite
           aoFechar={() => setDialogo(null)}
-          aoConvidar={(membro, link) => {
+          aoConvidar={(membro, link, envio) => {
             estado.definir((lista) => [...(lista ?? []), membro]);
-            setDialogo({ tipo: 'link', membro, link, reenviado: false });
+            setDialogo({ tipo: 'link', membro, link, reenviado: false, envio });
             void recarregarResumo();
           }}
         />
@@ -346,11 +348,13 @@ function SecaoEquipe({
           }
         >
           <p className="small">
-            {dialogo.reenviado ? 'O link anterior deixou de valer. ' : ''}Não enviamos e-mail: copie o link e mande para{' '}
+            {dialogo.reenviado ? 'O link anterior deixou de valer. ' : ''}
+            {dialogo.envio === 'smtp' ? 'Enviamos o convite por e-mail para ' : 'Não enviamos e-mail: copie o link e mande para '}
             <span className="strong">{dialogo.membro.email}</span>. Ele vale por 7 dias
             {dialogo.membro.conviteExpiraEm ? `, até ${fmt.data(dialogo.membro.conviteExpiraEm)}` : ''}, e dá acesso como{' '}
-            {ROTULO_PERFIL[dialogo.membro.perfil]}.
+            {ROTULO_PERFIL[dialogo.membro.perfil]}.{dialogo.envio === 'smtp' ? ' Se preferir, copie o link e mande você mesmo.' : ''}
           </p>
+          <NotaCaixaDeSaida envio={dialogo.envio} />
           <div className="field">
             <label htmlFor="link-convite">Link do convite</label>
             <div className="row" style={{ gap: 'var(--s-2)' }}>
@@ -414,24 +418,31 @@ function SecaoEquipe({
   );
 }
 
+/** Resposta de "Criar convite" e de "Reenviar": o link e como o e-mail saiu (sem SMTP, fica na caixa-de-saida). */
+interface ConviteCriado {
+  membro: MembroEquipe;
+  linkConvite: string;
+  envio: EnvioEmail;
+}
+
 function DialogoConvite({
   aoFechar,
   aoConvidar,
 }: {
   aoFechar: () => void;
-  aoConvidar: (m: MembroEquipe, link: string) => void;
+  aoConvidar: (m: MembroEquipe, link: string, envio: EnvioEmail) => void;
 }) {
   const [email, setEmail] = useState('');
   const [perfil, setPerfil] = useState<PerfilEquipe>('suporte');
   const [tocado, setTocado] = useState(false);
-  const convidar = useAcao(() => api.post<{ membro: MembroEquipe; linkConvite: string }>('/equipe/convites', { email, perfil }));
+  const convidar = useAcao(() => api.post<ConviteCriado>('/equipe/convites', { email, perfil }));
   const online = useOnline();
   const emailOk = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
   const enviar = async () => {
     setTocado(true);
     if (!emailOk) return;
     const r = await convidar.executar();
-    if (r) aoConvidar(r.membro, r.linkConvite);
+    if (r) aoConvidar(r.membro, r.linkConvite, r.envio);
   };
   return (
     <Modal
@@ -480,7 +491,7 @@ function DialogoConvite({
               Digite um e-mail válido, por exemplo nome@empresa.com.br
             </span>
           ) : (
-            <span className="help">Não enviamos e-mail: depois de criar, você copia o link e manda para a pessoa.</span>
+            <span className="help">O convite vai por e-mail, com um link que vale por 7 dias. Depois de criar, você também pode copiar o link.</span>
           )}
         </div>
         <div className="field">

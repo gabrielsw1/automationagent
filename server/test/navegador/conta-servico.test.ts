@@ -12,7 +12,7 @@ import { AdaptadorTela, assinarPedidoSessao } from '../../src/adaptadores/tela.t
 import { LlmSimulado } from '../../src/llm/simulado.ts';
 import { NavegadorPlaywright } from '../../src/navegador/executor.ts';
 import type { EventoNavegador } from '../../src/navegador/tipos.ts';
-import { criarAmbiente, type Ambiente } from '../ajuda.ts';
+import { codigoEnviado, criarAmbiente, type Ambiente } from '../ajuda.ts';
 import { pastaTemporaria } from './ajuda-navegador.ts';
 
 let servidor: http.Server;
@@ -212,6 +212,13 @@ describe('conta de serviço (Chromium)', { timeout: 60_000 }, () => {
     expect(r.statusCode, r.body).toBe(200);
     expect(r.json<Eu>().empresa.nome).toBe('Pedra Branca');
     const cookie = String(r.headers['set-cookie']).split(';')[0];
+    const confirmado = await amb.app.inject({
+      method: 'POST',
+      url: '/api/console/auth/email/confirmar',
+      headers: { cookie },
+      payload: { codigo: codigoEnviado(amb, 'luana@pedrabranca.com.br') },
+    });
+    expect(confirmado.statusCode, confirmado.body).toBe(200);
     const pedir = (metodo: 'POST' | 'PUT', caminho: string, payload?: object) =>
       amb!.app.inject({ method: metodo, url: `/api/console${caminho}`, headers: { cookie }, payload });
     const salvar = (senha: string) =>

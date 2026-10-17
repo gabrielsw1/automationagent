@@ -322,4 +322,8 @@ export const MIGRACOES: string[] = [
     visto_em TEXT NOT NULL
   );
   `,
+  // 4: quem mandou o convite (a tela de aceitar mostra "Convite de Rafael Lima, Admin").
+  `
+  ALTER TABLE equipe ADD COLUMN convidado_por TEXT;
+  `,
 ];

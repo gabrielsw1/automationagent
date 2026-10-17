@@ -4,6 +4,8 @@ export class ErroHttp extends Error {
     readonly status: number,
     readonly codigo: string,
     mensagem: string,
+    /** Campos extras do corpo (ErroApi): `ate`, `restantes`, `aguardarS`, `email`. */
+    readonly extra: { ate?: string; restantes?: number; aguardarS?: number; email?: string } = {},
   ) {
     super(mensagem);
     this.name = 'ErroHttp';

@@ -150,6 +150,7 @@ describe('responder (modelo simulado)', () => {
     let chamadas = 0;
     const llm: Llm = {
       simulado: true,
+      semChave: false,
       modeloPrincipal: 'x',
       turno: async () => {
         chamadas += 1;
@@ -170,6 +171,7 @@ describe('responder (modelo simulado)', () => {
     let pedido: PedidoTurno | undefined;
     const llm: Llm = {
       simulado: false,
+      semChave: false,
       modeloPrincipal: 'claude-opus-5-5',
       turno: async (p) => {
         pedido = p;

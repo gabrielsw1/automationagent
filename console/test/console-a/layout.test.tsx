@@ -52,12 +52,21 @@ describe('Moldura do console', () => {
       caminho: '/painel',
       extra: { modoSimulado: true, alertaGasto: { usado: 1200, limite: 1500, percentual: 0.8 } },
     });
-    const simulado = 'O copiloto está em modo simulado: defina ANTHROPIC_API_KEY no servidor para usar o Claude.';
+    const simulado = 'O copiloto está em modo simulado (COPILOTO_LLM=simulado): as respostas seguem regras de teste, sem o Claude.';
     expect(screen.getByText((_, el) => el?.tagName === 'P' && el.textContent === simulado)).toBeTruthy();
+    expect(screen.queryByText('O copiloto está sem a chave do Claude')).toBeNull();
     expect(screen.getByText('Você usou 80% do limite de gasto deste mês')).toBeTruthy();
     expect(screen.getByRole('link', { name: 'Ajustar limite' }).getAttribute('href')).toBe('/equipe');
     fireEvent.click(screen.getByRole('button', { name: 'Lembrar amanhã' }));
     expect(screen.queryByText('Você usou 80% do limite de gasto deste mês')).toBeNull();
+  });
+
+  it('faixa vermelha quando o servidor está sem a chave do Claude', () => {
+    instalarFetch({});
+    renderizar(pagina, { caminho: '/painel', extra: { semClaude: true } });
+    const faixa = screen.getByRole('alert');
+    expect(faixa.textContent).toContain('O copiloto está sem a chave do Claude');
+    expect(faixa.textContent).toContain('ANTHROPIC_API_KEY');
   });
 
   it('busca no console e abre o resultado', async () => {
@@ -128,15 +137,33 @@ describe('Moldura do console', () => {
     expect(pedidos.find((p) => p.caminho === '/auth/empresa')?.corpo).toEqual({ empresaId: 'emp-acme' });
   });
 
-  it('menu da conta: empresa aberta, troca de empresa e erro ao trocar', async () => {
-    const recarregou = vi.spyOn(recarregar, 'console').mockImplementation(() => {});
-    instalarFetch({ 'POST /auth/empresa': { __status: 403, corpo: { erro: 'sem_permissao', mensagem: 'Você não está mais nesta empresa.' } } });
+  it('menu da conta: empresa aberta e "Trocar de empresa" leva à escolha da empresa', async () => {
+    instalarFetch({});
     renderizar(pagina, { caminho: '/painel', eu: { empresas: [HORIZONTE, ACME] } });
     fireEvent.click(screen.getByRole('button', { name: /Rafael Lima, Admin\. Abrir menu da conta/ }));
     const menu = await screen.findByRole('menu');
     expect(within(menu).getByText('Empresa aberta')).toBeTruthy();
-    expect(within(within(menu).getByRole('group', { name: 'Trocar de empresa' })).getByRole('menuitem', { name: /Acme Logística/ })).toBeTruthy();
+    expect(within(menu).getByRole('menuitem', { name: /Trocar de empresa/ }).getAttribute('href')).toBe('/entrar/empresa');
+    expect(within(menu).queryByRole('menuitem', { name: /Acme Logística/ })).toBeNull();
     expect(within(menu).getByRole('menuitem', { name: /Criar outra empresa/ })).toBeTruthy();
+  });
+
+  it('com uma empresa só, o menu da conta não oferece trocar', async () => {
+    instalarFetch({});
+    renderizar(pagina, { caminho: '/painel' });
+    fireEvent.click(screen.getByRole('button', { name: /Rafael Lima, Admin\. Abrir menu da conta/ }));
+    const menu = await screen.findByRole('menu');
+    expect(within(menu).queryByRole('menuitem', { name: /Trocar de empresa/ })).toBeNull();
+  });
+
+  it('erro ao trocar pelo seletor fica na empresa aberta e diz o motivo', async () => {
+    const recarregou = vi.spyOn(recarregar, 'console').mockImplementation(() => {});
+    instalarFetch({ 'POST /auth/empresa': { __status: 403, corpo: { erro: 'sem_permissao', mensagem: 'Você não está mais nesta empresa.' } } });
+    renderizar(pagina, { caminho: '/painel', eu: { empresas: [HORIZONTE, ACME] } });
+    const nav = screen.getByRole('navigation', { name: 'Menu principal' });
+    fireEvent.click(within(nav).getByRole('button', { name: 'Trocar de empresa. Empresa atual: Horizonte' }));
+    const menu = within(nav).getByRole('menu');
+    expect(within(within(menu).getByRole('group', { name: 'Trocar de empresa' })).getByRole('menuitem', { name: /Acme Logística/ })).toBeTruthy();
     fireEvent.click(within(menu).getByRole('menuitem', { name: /Acme Logística/ }));
     expect(await screen.findByText(/Não consegui abrir Acme Logística\. Você não está mais nesta empresa\./)).toBeTruthy();
     expect(recarregou).not.toHaveBeenCalled();

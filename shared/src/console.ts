@@ -42,6 +42,53 @@ export interface Eu {
   empresas: EmpresaResumo[];
   /** Pode ver o painel da plataforma (todas as empresas clientes). Vem de COPILOTO_ADMINS. */
   adminPlataforma: boolean;
+  /** Confirmou o e-mail com o código. Sem isso, o console só mostra a tela "Confirme o seu e-mail". */
+  emailConfirmado: boolean;
+}
+
+/** Empresa na tela "Em qual empresa você quer entrar?" (A2). */
+export interface EmpresaDaConta extends EmpresaResumo {
+  perfil: PerfilEquipe;
+  iniciais: string;
+  ultimoAcesso: string | null;
+}
+
+/**
+ * Resposta de "Entrar" e de "Salvar e entrar" (senha nova). `eu` é a empresa aberta (a última
+ * usada); null quando a conta não está em nenhuma empresa agora (e aí nenhuma sessão é aberta).
+ * Com mais de uma empresa, o console mostra a escolha antes do painel.
+ */
+export interface Entrada {
+  eu: Eu | null;
+  empresas: EmpresaDaConta[];
+  /** Avisos desde a última entrada, como "Seu acesso à Vetor CRM foi removido por um Admin dessa empresa." */
+  avisos: string[];
+}
+
+/** Estado da confirmação do e-mail (A5). */
+export interface ConfirmacaoEmail {
+  email: string;
+  /** Segundos até poder pedir outro código (0 = já pode). */
+  reenviarEmS: number;
+  expiraEm: string | null;
+  /** caixa_local: o servidor não tem provedor de e-mail (SMTP_URL) e guardou o e-mail em DATA_DIR/caixa-de-saida. */
+  envio: EnvioEmail;
+}
+
+export type EnvioEmail = 'smtp' | 'caixa_local';
+
+/** Link de senha nova aberto (A4). */
+export interface LinkSenhaAberto {
+  email: string;
+  expiraEm: string;
+}
+
+/** Pedido de link de senha nova (A3): a resposta é a mesma, exista ou não a conta. */
+export interface PedidoSenhaNova {
+  ok: true;
+  /** Segundos até poder pedir de novo. */
+  reenviarEmS: number;
+  envio: EnvioEmail;
 }
 
 // ---------- Empresas (SaaS: cada empresa cliente com o próprio espaço) ----------
@@ -138,14 +185,19 @@ export interface PrimeiroAcesso {
   demo: boolean;
   /** Qualquer pessoa pode criar a conta de uma empresa nova (COPILOTO_CADASTRO). */
   cadastroAberto: boolean;
+  /** Como os e-mails saem (código, senha nova, convite). */
+  envioEmail: EnvioEmail;
 }
 
 export interface ConviteAberto {
   email: string;
   perfil: PerfilEquipe;
   empresa: string;
-  /** O e-mail já tem acesso a outra empresa: aceitar pede a senha atual, não uma nova. */
+  /** O e-mail já tem conta: a pessoa entra com ela e aceita (POST /auth/convite/:token/aceitar). */
   contaExistente: boolean;
+  /** Quem convidou ("Convite de Rafael Lima, Admin"). */
+  convidadoPor: { nome: string; perfil: PerfilEquipe } | null;
+  validoAte: string | null;
 }
 
 /** Segredo do widget (só Admin): assina o usuário no snippet e os pedidos de sessão. */
@@ -181,7 +233,10 @@ export interface ResumoConsole {
   execucoesAtencao: number;
   aprovacoesPendentes: number;
   guia: { feitos: number; total: number };
+  /** COPILOTO_LLM=simulado: respostas por regras, só para testes. */
   modoSimulado: boolean;
+  /** Servidor sem ANTHROPIC_API_KEY: faixa vermelha dizendo o que falta. */
+  semClaude: boolean;
   /** Faixa "Você usou 80% do limite". */
   alertaGasto: null | { usado: number; limite: number; percentual: number };
   nomeSistema: string;
@@ -463,6 +518,14 @@ export interface ErroApi {
   mensagem: string;
   /** Código de referência para o suporte. Ex.: "7F3A-21". */
   ref?: string;
+  /** Entrada bloqueada (423): até quando. */
+  ate?: string;
+  /** Código incorreto: tentativas que sobram. */
+  restantes?: number;
+  /** Pedido repetido cedo demais (429): segundos para esperar. */
+  aguardarS?: number;
+  /** Convite vencido (410): o e-mail que recebe o convite novo. */
+  email?: string;
 }
 
 // ---------- Permissões do console ----------

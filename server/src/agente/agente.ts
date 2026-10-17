@@ -22,7 +22,7 @@ import {
 import type { Contexto } from '../contexto.ts';
 import { agoraIso } from '../db/banco.ts';
 import { camposExibidos } from '../execucao/motor.ts';
-import { RecusaDoModelo, type BlocoResposta, type MensagemLlm } from '../llm/tipos.ts';
+import { RecusaDoModelo, SemChaveClaude, type BlocoResposta, type MensagemLlm } from '../llm/tipos.ts';
 import { paraSearchResults } from '../conhecimento/citacoes.ts';
 import { podeExecutar, type TarefaEmUso } from '../servicos/catalogo.ts';
 import type { ConversaLinha } from '../servicos/conversas.ts';
@@ -551,6 +551,18 @@ export class Agente {
       ]);
       t.texto = 'Não posso ajudar com esse pedido por aqui. Se precisar, posso chamar uma pessoa da equipe.';
       t.blocos = [{ tipo: 'sugestoes', itens: [{ rotulo: 'Falar com uma pessoa', mensagem: 'Quero falar com uma pessoa' }] }];
+      return;
+    }
+    if (erro instanceof SemChaveClaude) {
+      // Sem a chave, nada é inventado: a pessoa sabe que o assistente não está ligado e pode chamar alguém.
+      t.blocos = [
+        {
+          tipo: 'erro',
+          titulo: 'O assistente ainda não está ligado',
+          detalhe: `A equipe da ${this.ctx.empresa.nome} está terminando de configurar o copiloto. Enquanto isso, uma pessoa da equipe pode ajudar.`,
+          acoes: [{ rotulo: 'Falar com uma pessoa', acao: 'humano', estilo: 'primario' }],
+        },
+      ];
       return;
     }
     const ref = codigoRef();

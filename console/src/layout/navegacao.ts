@@ -59,6 +59,14 @@ const TITULOS: Record<string, string> = {
   plataforma: 'Empresas clientes',
 };
 
+/** Nome e ícone de uma seção do console ("execucoes" → Execuções), ou undefined se não for uma. */
+export function secaoDoConsole(secao: string): { rotulo: string; icone: NomeIcone } | undefined {
+  const rotulo = TITULOS[secao];
+  if (!rotulo) return undefined;
+  const item = GRUPOS_NAV.flatMap((g) => g.itens).find((i) => i.para === `/${secao}`);
+  return { rotulo, icone: item?.icone ?? 'guia' };
+}
+
 /** Trilha padrão: "Copiloto > Painel"; em subpáginas, "Execuções > EX-20417". */
 export function migalhasPadrao(caminho: string): { rotulo: string; para?: string }[] {
   const [secao, detalhe] = caminho.split('/').filter(Boolean);

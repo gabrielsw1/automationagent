@@ -216,6 +216,7 @@ const rotas: FastifyPluginAsync = async (app) => {
       recentes: recentes(ctx, s.usuario),
       conversaId: aberta?.id ?? null,
       modoSimulado: ctx.llm.simulado,
+      semClaude: ctx.llm.semChave,
       modoTeste: s.teste,
       pausa: s.teste ? null : ctx.gastos.pausaAtiva(),
     };

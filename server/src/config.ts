@@ -24,8 +24,10 @@ export interface Config {
   /** URL do console (em dev, o Vite). Usada em links de convite. */
   urlConsole: string;
   dirDados: string;
-  /** Usa o modelo simulado: sem ANTHROPIC_API_KEY ou com COPILOTO_LLM=simulado. */
+  /** Usa o modelo simulado (respostas por regras): só com COPILOTO_LLM=simulado, para testes. */
   llmSimulado: boolean;
+  /** Há ANTHROPIC_API_KEY. Sem ela (e sem o modo simulado), o assistente avisa que não está ligado. */
+  temChaveClaude: boolean;
   modeloPrincipal: string;
   modeloRapido: string;
   esforco: 'low' | 'medium' | 'high' | 'xhigh' | 'max';
@@ -52,6 +54,14 @@ export interface Config {
   cadastroAberto: boolean;
   /** E-mails de quem vê o painel da plataforma com todas as empresas (COPILOTO_ADMINS, separados por vírgula). */
   adminsPlataforma: string[];
+  /** Provedor de e-mail (SMTP_URL, ex.: smtps://usuario:senha@smtp.provedor.com:465). Sem ele, os e-mails ficam em DATA_DIR/caixa-de-saida. */
+  smtpUrl: string;
+  /** Remetente dos e-mails (EMAIL_REMETENTE). */
+  emailRemetente: string;
+  /** Recebe os pedidos de contato do site (EMAIL_VENDAS). Sem ele, os pedidos ficam só no banco da plataforma. */
+  emailVendas: string;
+  /** Pasta com os textos jurídicos aprovados (TEXTOS_LEGAIS_DIR). Sem ela, o site mostra as minutas de docs/legal. */
+  textosLegaisDir: string | null;
   /** Exige a assinatura do usuário no snippet do widget. */
   exigirAssinatura: boolean;
   /** Mostra o navegador do Playwright (só para depurar fluxos). */
@@ -71,7 +81,8 @@ export function lerConfig(): Config {
     urlPublica: env('PUBLIC_URL', `http://localhost:${porta}`),
     urlConsole: env('CONSOLE_URL', 'http://localhost:5173'),
     dirDados: path.resolve(RAIZ_REPO, env('DATA_DIR', 'data')),
-    llmSimulado: env('COPILOTO_LLM', chave ? 'claude' : 'simulado') === 'simulado',
+    llmSimulado: env('COPILOTO_LLM', 'claude') === 'simulado',
+    temChaveClaude: chave !== '',
     modeloPrincipal: env('COPILOTO_MODELO', 'claude-opus-5-5'),
     modeloRapido: env('COPILOTO_MODELO_RAPIDO', 'claude-haiku-5-5'),
     esforco: env('COPILOTO_ESFORCO', 'medium') as Config['esforco'],
@@ -92,6 +103,10 @@ export function lerConfig(): Config {
       .split(',')
       .map((e) => e.trim().toLowerCase())
       .filter(Boolean),
+    smtpUrl: env('SMTP_URL', ''),
+    emailRemetente: env('EMAIL_REMETENTE', 'Copiloto Starta <nao-responda@starta.site>'),
+    emailVendas: env('EMAIL_VENDAS', '').trim(),
+    textosLegaisDir: process.env.TEXTOS_LEGAIS_DIR ? path.resolve(RAIZ_REPO, process.env.TEXTOS_LEGAIS_DIR) : null,
     exigirAssinatura: env('WIDGET_EXIGIR_ASSINATURA', '1') !== '0',
     navegadorVisivel: env('NAVEGADOR_VISIVEL', '0') === '1',
     chromiumPath: process.env.CHROMIUM_PATH || undefined,

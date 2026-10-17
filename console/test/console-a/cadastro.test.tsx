@@ -1,7 +1,7 @@
 // Cadastro de uma empresa nova em três etapas: Sua conta, Seu sistema e Sua marca.
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
-import type { ConfigWidget, Eu, SistemaEmpresa } from '@copiloto/shared';
+import { act, cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
+import type { ConfigWidget, ConfirmacaoEmail, Eu, SistemaEmpresa } from '@copiloto/shared';
 import Cadastro from '../../src/paginas/cadastro/Cadastro.tsx';
 import { regrasSenha } from '../../src/paginas/cadastro/regras.ts';
 import { instalarFetch, local, renderizar, status } from './ambiente.tsx';
@@ -13,6 +13,7 @@ vi.mock('@copiloto/widget/chat', () => ({
 afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
+  vi.useRealTimers();
 });
 
 const ACME = { id: 'emp-acme', nome: 'Acme Logística', demo: false };
@@ -22,10 +23,12 @@ const EU: Eu = {
   email: 'ana@acme.com.br',
   perfil: 'admin',
   iniciais: 'AR',
+  emailConfirmado: true,
   empresa: ACME,
   empresas: [ACME],
   adminPlataforma: false,
 };
+const NOVA: Eu = { ...EU, emailConfirmado: false };
 const ABERTO = { precisaCriarAdmin: false, demo: false, cadastroAberto: true };
 const SEM_SESSAO = status(401, { erro: 'sem_sessao', mensagem: 'Entre de novo.' });
 
@@ -53,6 +56,22 @@ const WIDGET: ConfigWidget = {
 const pagina = <Cadastro />;
 const rota = '/criar-conta/:etapa?';
 
+const CODIGO: ConfirmacaoEmail = { email: 'ana@acme.com.br', reenviarEmS: 45, expiraEm: '2026-10-17T13:10:00.000Z', envio: 'smtp' };
+const CAIXA_LOCAL =
+  'O envio de e-mail ainda não está configurado neste servidor (SMTP_URL). A mensagem ficou na pasta caixa-de-saida dos dados do servidor.';
+
+/** Cola o código no primeiro quadrado, como o preenchimento do celular. */
+function colarCodigo(codigo: string) {
+  fireEvent.paste(screen.getByLabelText('Dígito 1 de 6'), { clipboardData: { getData: () => codigo } });
+}
+const digitos = () => [1, 2, 3, 4, 5, 6].map((n) => (screen.getByLabelText(`Dígito ${n} de 6`) as HTMLInputElement).value).join('');
+
+/** Deixa rodar o que o React agendou fora do act (o efeito que liga a contagem depois da resposta). */
+const respirar = () => act(() => new Promise((r) => setTimeout(r, 0)));
+function passar(segundos: number) {
+  for (let i = 0; i < segundos; i++) act(() => vi.advanceTimersByTime(1000));
+}
+
 function preencherConta() {
   fireEvent.change(screen.getByLabelText(/Seu nome/), { target: { value: 'Ana Ribeiro' } });
   fireEvent.change(screen.getByLabelText(/E-mail de trabalho/), { target: { value: 'ana@acme.com.br' } });
@@ -78,11 +97,13 @@ describe('Regras da senha', () => {
 });
 
 describe('Cadastro · etapa 1 (Sua conta)', () => {
-  it('cria o espaço com os aceites e segue para "Seu sistema"', async () => {
+  it('cria o espaço com os aceites, confirma o e-mail pelo código e segue para "Seu sistema"', async () => {
     const { pedidos } = instalarFetch({
       'GET /auth/primeiro-acesso': ABERTO,
       'GET /auth/eu': SEM_SESSAO,
-      'POST /auth/cadastro': EU,
+      'POST /auth/cadastro': NOVA,
+      'GET /auth/email': CODIGO,
+      'POST /auth/email/confirmar': EU,
       'GET /sistema/config': SISTEMA,
     });
     renderizar(pagina, { caminho: '/criar-conta', rota });
@@ -105,12 +126,25 @@ describe('Cadastro · etapa 1 (Sua conta)', () => {
     fireEvent.change(screen.getByLabelText(/E-mail de trabalho/), { target: { value: 'ana@acme.com.br' } });
     fireEvent.click(screen.getByLabelText(/Termos de uso/));
     fireEvent.click(screen.getByRole('button', { name: 'Criar espaço' }));
-    await waitFor(() => expect(local()).toBe('/criar-conta/sistema'));
     expect(pedidos.find((p) => p.caminho === '/auth/cadastro')?.corpo).toEqual({
       empresa: { nome: 'Acme Logística', cnpj: '11222333000181', faixaUsuarios: 'ate_1000' },
       pessoa: { nome: 'Ana Ribeiro', email: 'ana@acme.com.br', senha: 'segura2026' },
       aceites: { termos: true, dados: true },
     });
+
+    // A5: o código chega no e-mail; ainda é a etapa 1.
+    expect(await screen.findByRole('heading', { name: 'Confirme o seu e-mail' })).toBeTruthy();
+    expect(local()).toBe('/criar-conta');
+    expect(screen.getByText('Etapa 1 de 3')).toBeTruthy();
+    expect(screen.getByText((_, el) => el?.tagName === 'P' && el.textContent === 'Enviamos um código de 6 dígitos para ana@acme.com.br.')).toBeTruthy();
+    expect(screen.getByText('Pode colar o código inteiro no primeiro quadrado. Ele vale por 10 minutos.')).toBeTruthy();
+    expect(screen.getByText('Não chegou? Confira a caixa de spam ou de promoções. O assunto é “Seu código do Copiloto Starta”.')).toBeTruthy();
+    expect(screen.queryByRole('note')).toBeNull();
+    colarCodigo('482 710');
+    expect(digitos()).toBe('482710');
+    fireEvent.click(screen.getByRole('button', { name: 'Confirmar' }));
+    await waitFor(() => expect(local()).toBe('/criar-conta/sistema'));
+    expect(pedidos.find((p) => p.caminho === '/auth/email/confirmar')?.corpo).toEqual({ codigo: '482710' });
     expect(await screen.findByRole('heading', { name: 'Seu sistema' })).toBeTruthy();
   });
 
@@ -148,6 +182,112 @@ describe('Cadastro · etapa 1 (Sua conta)', () => {
       empresa: { nome: 'Beta', faixaUsuarios: 'ate_200' },
       aceites: { termos: true, dados: true },
     });
+  });
+});
+
+describe('A5 · Confirme o seu e-mail', () => {
+  const sessaoNova = (rotas: Record<string, unknown> = {}) =>
+    instalarFetch({ 'GET /auth/primeiro-acesso': ABERTO, 'GET /auth/eu': NOVA, 'GET /auth/email': CODIGO, ...rotas });
+
+  it('quem volta sem confirmar vê o código no lugar da etapa; código curto e código incorreto', async () => {
+    const { pedidos } = sessaoNova({
+      'POST /auth/email/confirmar': status(400, { erro: 'codigo_incorreto', mensagem: 'Código incorreto. Restam 4 tentativas.', restantes: 4 }),
+    });
+    renderizar(pagina, { caminho: '/criar-conta/sistema', rota });
+    expect(await screen.findByRole('heading', { name: 'Confirme o seu e-mail' })).toBeTruthy();
+    expect(pedidos.some((p) => p.caminho === '/sistema/config')).toBe(false);
+
+    // Um dígito por quadrado, o foco anda sozinho.
+    fireEvent.change(screen.getByLabelText('Dígito 1 de 6'), { target: { value: '4' } });
+    expect(document.activeElement).toBe(screen.getByLabelText('Dígito 2 de 6'));
+    fireEvent.change(screen.getByLabelText('Dígito 2 de 6'), { target: { value: '8' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Confirmar' }));
+    expect(screen.getByRole('alert').textContent).toBe('Digite os 6 dígitos do código.');
+    expect(pedidos.some((p) => p.caminho === '/auth/email/confirmar')).toBe(false);
+
+    fireEvent.change(screen.getByLabelText('Dígito 3 de 6'), { target: { value: '2711' } });
+    expect(digitos()).toBe('482711');
+    fireEvent.click(screen.getByRole('button', { name: 'Confirmar' }));
+    expect(await screen.findByText('Código incorreto. Restam 4 tentativas.')).toBeTruthy();
+    expect(screen.getByLabelText('Dígito 1 de 6').getAttribute('aria-invalid')).toBe('true');
+    expect(local()).toBe('/criar-conta/sistema');
+  });
+
+  it('código expirado: "Enviar outro código" pede um novo e volta aos quadrados', async () => {
+    const { pedidos } = sessaoNova({
+      'POST /auth/email/confirmar': status(410, {
+        erro: 'codigo_expirado',
+        mensagem: 'Este código expirou. Cada código vale por 10 minutos. Peça outro e use o mais recente.',
+      }),
+      'POST /auth/email/reenviar': CODIGO,
+    });
+    renderizar(pagina, { caminho: '/criar-conta', rota });
+    await screen.findByRole('heading', { name: 'Confirme o seu e-mail' });
+    colarCodigo('482710');
+    fireEvent.click(screen.getByRole('button', { name: 'Confirmar' }));
+    expect(await screen.findByText('Este código expirou. Cada código vale por 10 minutos. Peça outro e use o mais recente.')).toBeTruthy();
+    expect(screen.queryByLabelText('Dígito 1 de 6')).toBeNull();
+    expect(screen.getByText((_, el) => el?.tagName === 'P' && el.textContent === 'Vamos enviar para ana@acme.com.br. Trocar e-mail')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Enviar outro código' }));
+    expect(await screen.findByLabelText('Dígito 1 de 6')).toBeTruthy();
+    expect(digitos()).toBe('');
+    expect(screen.getByRole('status').textContent).toBe('Enviamos um código novo para ana@acme.com.br.');
+    expect(pedidos.filter((p) => p.caminho === '/auth/email/reenviar')).toHaveLength(1);
+  });
+
+  it('"Reenviar código" só libera depois da espera do servidor', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    let reenvios = 0;
+    const { pedidos } = sessaoNova({
+      'POST /auth/email/reenviar': () =>
+        ++reenvios === 1 ? CODIGO : status(429, { erro: 'aguarde', mensagem: 'Aguarde 30 s para pedir outro código.', aguardarS: 30 }),
+    });
+    renderizar(pagina, { caminho: '/criar-conta', rota });
+    const botao = (await screen.findByRole('button', { name: 'Reenviar código em 45 s' })) as HTMLButtonElement;
+    expect(botao.disabled).toBe(true);
+    await respirar();
+    passar(1);
+    expect(screen.getByRole('button', { name: 'Reenviar código em 44 s' })).toBeTruthy();
+    passar(44);
+    fireEvent.click(screen.getByRole('button', { name: 'Reenviar código' }));
+    expect(await screen.findByRole('button', { name: 'Reenviar código em 45 s' })).toBeTruthy();
+    expect(pedidos.filter((p) => p.caminho === '/auth/email/reenviar')).toHaveLength(1);
+
+    // Outra aba pediu antes: o servidor diz quanto falta e a contagem segue o servidor.
+    await respirar();
+    passar(45);
+    fireEvent.click(screen.getByRole('button', { name: 'Reenviar código' }));
+    expect(await screen.findByText('Aguarde 30 s para pedir outro código.')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Reenviar código em 30 s' })).toBeTruthy();
+  });
+
+  it('"Trocar e-mail" pede um e-mail de trabalho e manda o código para ele', async () => {
+    const { pedidos } = sessaoNova({
+      'POST /auth/email/trocar': ({ corpo }: { corpo: unknown }) => ({ ...CODIGO, email: (corpo as { email: string }).email }),
+    });
+    renderizar(pagina, { caminho: '/criar-conta', rota });
+    await screen.findByRole('heading', { name: 'Confirme o seu e-mail' });
+    fireEvent.click(screen.getByRole('button', { name: 'Trocar e-mail' }));
+    expect(screen.getByRole('heading', { name: 'Trocar e-mail' })).toBeTruthy();
+    const campo = screen.getByLabelText(/E-mail de trabalho/) as HTMLInputElement;
+    expect(campo.value).toBe('ana@acme.com.br');
+
+    fireEvent.change(campo, { target: { value: 'ana@gmail.com' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Enviar código' }));
+    expect(screen.getByText('Use o e-mail da empresa, por exemplo nome@suaempresa.com.br')).toBeTruthy();
+    expect(pedidos.some((p) => p.caminho === '/auth/email/trocar')).toBe(false);
+
+    fireEvent.change(campo, { target: { value: ' ana.ribeiro@acme.com.br ' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Enviar código' }));
+    expect(await screen.findByRole('heading', { name: 'Confirme o seu e-mail' })).toBeTruthy();
+    expect(pedidos.find((p) => p.caminho === '/auth/email/trocar')?.corpo).toEqual({ email: 'ana.ribeiro@acme.com.br' });
+    expect(screen.getByText((_, el) => el?.tagName === 'P' && el.textContent === 'Enviamos um código de 6 dígitos para ana.ribeiro@acme.com.br.')).toBeTruthy();
+  });
+
+  it('sem SMTP no servidor, diz que o código ficou na caixa-de-saida', async () => {
+    sessaoNova({ 'GET /auth/email': { ...CODIGO, envio: 'caixa_local' } });
+    renderizar(pagina, { caminho: '/criar-conta', rota });
+    expect((await screen.findByRole('note')).textContent).toBe(CAIXA_LOCAL);
   });
 });
 

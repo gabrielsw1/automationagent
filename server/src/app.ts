@@ -1,4 +1,5 @@
-// Servidor HTTP (Fastify): API do widget, API do console, gravador de fluxos e arquivos estáticos.
+// Servidor HTTP (Fastify): API do widget, API do console, gravador de fluxos, rotas públicas do site
+// e arquivos estáticos.
 import fs from 'node:fs';
 import path from 'node:path';
 import Fastify, { type FastifyInstance } from 'fastify';
@@ -8,12 +9,14 @@ import multipart from '@fastify/multipart';
 import estatico from '@fastify/static';
 import type { ErroApi } from '@copiloto/shared';
 import { RAIZ_REPO } from './config.ts';
+import { SemChaveClaude } from './llm/tipos.ts';
 import type { Plataforma } from './plataforma/index.ts';
 import { ErroHttp } from './util/erros.ts';
 import { codigoRef } from './util/ids.ts';
 import rotasWidget from './rotas/widget.ts';
 import rotasGravacao from './rotas/gravacao.ts';
 import rotasConsole from './rotas/console/index.ts';
+import rotasPublicas from './rotas/publico.ts';
 
 declare module 'fastify' {
   interface FastifyInstance {
@@ -61,8 +64,12 @@ export async function criarApp(plataforma: Plataforma, opcoes: OpcoesApp = {}): 
 
   app.setErrorHandler((erro, request, reply) => {
     if (erro instanceof ErroHttp) {
-      const corpo: ErroApi = { erro: erro.codigo, mensagem: erro.message };
+      const corpo: ErroApi = { erro: erro.codigo, mensagem: erro.message, ...erro.extra };
       return reply.status(erro.status).send(corpo);
+    }
+    if (erro instanceof SemChaveClaude) {
+      const corpo: ErroApi = { erro: 'sem_claude', mensagem: erro.message };
+      return reply.status(503).send(corpo);
     }
     const e = erro as { validation?: unknown; statusCode?: number; message?: string };
     if (e.validation || (e.statusCode && e.statusCode >= 400 && e.statusCode < 500)) {
@@ -84,6 +91,7 @@ export async function criarApp(plataforma: Plataforma, opcoes: OpcoesApp = {}): 
   app.get('/api/saude', async () => ({
     ok: true,
     modoSimulado: plataforma.config.llmSimulado,
+    claude: plataforma.config.llmSimulado ? 'simulado' : plataforma.config.temChaveClaude ? 'ligado' : 'sem_chave',
     sistema: 'Copiloto',
     urlConsole: plataforma.config.urlConsole,
   }));
@@ -91,6 +99,8 @@ export async function criarApp(plataforma: Plataforma, opcoes: OpcoesApp = {}): 
   await app.register(rotasWidget, { prefix: '/api/widget' });
   await app.register(rotasGravacao, { prefix: '/api/gravacao' });
   await app.register(rotasConsole, { prefix: '/api/console' });
+  // Site do produto (sem sessão): planos, pedidos de contato e textos jurídicos.
+  await app.register(rotasPublicas, { prefix: '/api/publico' });
 
   // copiloto.js (script do widget). Em dev, `npm run dev` recompila widget/dist a cada mudança.
   const distWidget = path.join(RAIZ_REPO, 'widget', 'dist');

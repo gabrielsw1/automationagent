@@ -67,6 +67,7 @@ export function resumo(perfil: PerfilEquipe = 'admin', extra: Partial<ResumoCons
       email: 'rafael.lima@seusistema.com.br',
       perfil,
       iniciais: 'RL',
+      emailConfirmado: true,
       empresa: HORIZONTE,
       empresas: [HORIZONTE],
       adminPlataforma: false,
@@ -76,6 +77,7 @@ export function resumo(perfil: PerfilEquipe = 'admin', extra: Partial<ResumoCons
     aprovacoesPendentes: 1,
     guia: { feitos: 3, total: 5 },
     modoSimulado: false,
+    semClaude: false,
     alertaGasto: null,
     nomeSistema: 'Horizonte',
     ...extra,
@@ -116,6 +118,26 @@ export function renderizar(
     </ProvedorSessao>,
   );
   return { ...r, sessao };
+}
+
+/**
+ * Telas de acesso (entrar, escolher a empresa, senha, convite), sem sessão, cada uma na sua rota.
+ * `caminho` pode levar o estado da navegação, como a entrada que segue para a escolha da empresa.
+ */
+export function renderizarRotas(rotas: Record<string, ReactNode>, caminho: string | { pathname: string; search?: string; state?: unknown }) {
+  return render(
+    <ProvedorToast>
+      <MemoryRouter initialEntries={[caminho]}>
+        <Espiao />
+        <Routes>
+          {Object.entries(rotas).map(([rota, elemento]) => (
+            <Route key={rota} path={rota} element={elemento} />
+          ))}
+          <Route path="*" element={<div>outra página</div>} />
+        </Routes>
+      </MemoryRouter>
+    </ProvedorToast>,
+  );
 }
 
 export const USUARIOS = [
