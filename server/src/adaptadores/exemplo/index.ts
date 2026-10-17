@@ -5,9 +5,11 @@
 // Para o seu sistema real, copie esta pasta, troque as chamadas e aponte ADAPTADOR=<pasta>.
 import type { UsuarioSistema } from '@copiloto/shared';
 import type { Config } from '../../config.ts';
+import path from 'node:path';
 import {
   ErroConexaoSistema,
   type AdaptadorSistema,
+  type ArquivoBaixado,
   type ChamadaApi,
   type RespostaApi,
   type RotaApi,
@@ -80,6 +82,30 @@ export class AdaptadorHorizonte implements AdaptadorSistema {
     }
     const { cookie } = r.corpo as { cookie: { name: string; value: string } };
     return { cookies: [{ name: cookie.name, value: cookie.value, url: this.urlBase }] };
+  }
+
+  async baixarArquivo(url: string, usuarioId: string): Promise<ArquivoBaixado | null> {
+    let alvo: URL;
+    try {
+      alvo = new URL(url, this.urlApi);
+    } catch {
+      return null;
+    }
+    // Só baixa do próprio Horizonte: o link vem de uma resposta da API, nunca de fora.
+    const origens = [this.urlApi, this.urlBase].map((u) => new URL(u).origin);
+    if (!origens.includes(alvo.origin)) return null;
+    try {
+      const r = await fetch(alvo, {
+        headers: { authorization: `Bearer ${this.chave}`, 'x-usuario-id': usuarioId },
+        signal: AbortSignal.timeout(20_000),
+      });
+      if (!r.ok) return null;
+      const disposicao = r.headers.get('content-disposition') ?? '';
+      const nome = disposicao.match(/filename="?([^";]+)"?/)?.[1] ?? path.basename(alvo.pathname);
+      return { nome, tipo: r.headers.get('content-type') ?? 'application/octet-stream', conteudo: Buffer.from(await r.arrayBuffer()) };
+    } catch {
+      return null;
+    }
   }
 
   async chamar(c: ChamadaApi): Promise<RespostaApi> {

@@ -82,6 +82,18 @@ export interface AdaptadorSistema {
 
   /** Sessão autenticada como o usuário, para o caminho navegador (Playwright). */
   sessaoNavegador(usuarioId: string): Promise<SessaoNavegador>;
+
+  /**
+   * Opcional: baixa um arquivo que a API devolveu como link (ex.: arquivo_url de um relatório),
+   * para o copiloto entregar à pessoa por um link próprio. null se não for do sistema ou não existir.
+   */
+  baixarArquivo?(url: string, usuarioId: string): Promise<ArquivoBaixado | null>;
+}
+
+export interface ArquivoBaixado {
+  nome: string;
+  tipo: string;
+  conteudo: Buffer;
 }
 
 /** Falha de rede ou tempo esgotado ao falar com o sistema. */

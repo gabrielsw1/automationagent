@@ -13,7 +13,7 @@ export function criarAdaptador(config: Config): AdaptadorSistema {
   const criar = ADAPTADORES[config.adaptador];
   if (!criar) {
     throw new Error(
-      `Adaptador "${config.adaptador}" não existe. Opções: ${Object.keys(ADAPTADORES).join(', ')}. Veja server/src/adaptadores/README.md.`,
+      `Adaptador "${config.adaptador}" não existe. Opções: ${Object.keys(ADAPTADORES).join(', ')}. Veja a seção "Ligar ao seu sistema de verdade" do README.`,
     );
   }
   return criar(config);
