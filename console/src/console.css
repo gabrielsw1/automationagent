@@ -1,0 +1,6 @@
+/* Estilos próprios do console. Cores só por var(--token) de shared/styles/tokens.css. */
+.estado { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: var(--s-3); padding: var(--s-12) var(--s-6); text-align: center; color: var(--ink-700); }
+.estado-carregando { flex-direction: row; }
+.esqueleto { display: flex; flex-direction: column; gap: var(--s-3); padding: var(--s-4); }
+.esqueleto-linha { height: 14px; border-radius: var(--r-sm); background: linear-gradient(90deg, var(--surface-2), var(--line), var(--surface-2)); background-size: 200% 100%; animation: esqueleto 1.2s ease-in-out infinite; }
+@keyframes esqueleto { from { background-position: 200% 0; } to { background-position: -200% 0; } }
