@@ -290,9 +290,12 @@ a conta; com sessão, `pessoa` é opcional e a empresa nova entra na conta); `GE
 `GET /sistema/config` → `SistemaEmpresa`; `PUT /sistema/config` `SistemaEmpresaPedido` (administrar; 409 `sistema_fixo` na demonstração);
 `POST /sistema/verificar {url}` → `VerificacaoSistema`; `POST /sistema/testar-acesso {usuarioId?}` → `VerificacaoSistema`;
 `GET /canais/segredo` · `POST /canais/segredo/novo` → `SegredoWidget` (administrar);
-`GET /plataforma/empresas` → `EmpresaPlataforma[]` e `PUT /plataforma/empresas/:id/status {status}` (só `COPILOTO_ADMINS`); `GET /resumo` → `ResumoConsole`; `GET /eventos` (SSE de `EventoConsole`, ver `server/src/eventos.ts`);
+`GET /resumo` → `ResumoConsole`; `GET /eventos` (SSE de `EventoConsole`, ver `server/src/eventos.ts`);
 `GET /sistema/usuarios` → `UsuarioSistema[]`; `GET /sistema/perfis`; `GET /sistema/rotas` → `RotaApi[]`; `GET /sistema/conexao`;
 `POST /teste/token {usuarioId}` → `{ token, usuario }` (token de widget em modo de teste para o `ChatCopiloto`).
+
+A Plataforma Starta (todas as empresas) não passa por aqui: tem API própria em `/api/plataforma` (cookie `starta_sessao`,
+rotas em `server/src/rotas/plataforma/`, tipos em `shared/src/plataforma.ts`) e tela própria no console em `/plataforma/*`.
 
 console-a:
 

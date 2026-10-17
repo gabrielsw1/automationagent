@@ -208,28 +208,6 @@ export interface SegredoWidget {
   segredo: string;
 }
 
-/** Linha do painel da plataforma: métricas da empresa, nunca o conteúdo (conversas, prints). */
-export interface EmpresaPlataforma {
-  id: string;
-  nome: string;
-  demo: boolean;
-  status: 'ativa' | 'suspensa';
-  criadoEm: string;
-  criadoPor: string | null;
-  cnpj: string | null;
-  faixaUsuarios: FaixaUsuarios | null;
-  sistema: { nome: string; url: string; conector: ConectorSistema; acesso: ModoAcesso };
-  /** Pessoas ativas na equipe do console. */
-  equipe: number;
-  /** Pessoas do sistema que já usaram o widget. */
-  usuarios: number;
-  tarefasAtivas: number;
-  execucoes30d: number;
-  /** De 0 a 1; null sem execuções no período. */
-  sucesso30d: number | null;
-  ultimaExecucao: string | null;
-}
-
 /** Contadores do menu lateral e faixas globais. */
 export interface ResumoConsole {
   eu: Eu;
