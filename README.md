@@ -200,9 +200,16 @@ Para um sistema com API, dá para escrever um adaptador em `server/src/adaptador
 | `COPILOTO_CHAVE_MESTRA` | Cifra os segredos das empresas no banco. Sem ela, deriva do `SESSAO_SEGREDO`. Guarde-a: sem ela, as senhas das contas de serviço não abrem. |
 | `COPILOTO_ADMINS` | E-mails (separados por vírgula) da equipe Starta. Na primeira vez que o servidor sobe, cada e-mail sem conta recebe o link para ativar o acesso à Plataforma (senha e aplicativo autenticador); o link também sai no log. |
 | `COPILOTO_CADASTRO` | `fechado` desliga o cadastro de empresas novas pela tela de entrada. |
-| `EMAIL_VENDAS` | Recebe por e-mail os pedidos de **Agendar demonstração** e **Falar com vendas** do site. Sem ela, os pedidos ficam só no banco da plataforma. |
+| `EMAIL_VENDAS` | Recebe por e-mail os pedidos de **Agendar demonstração** e **Falar com vendas** do site, os pedidos de **Mudar de plano** e, na cobrança manual, cada fatura a cobrar. Sem ela, tudo fica só no banco da plataforma. |
 | `TEXTOS_LEGAIS_DIR` | Pasta com os textos jurídicos aprovados (`termos.md`, `privacidade.md`, `contrato-lgpd.md`). O texto que faltar ali vem da minuta em `docs/legal`, com o aviso de revisão jurídica. |
 | `PUBLIC_URL` e `CONSOLE_URL` | Endereços públicos do servidor e do console (links de arquivos e de convite). |
+| `ASAAS_API_KEY` | Chave da conta do Asaas que cobra as faturas e os pacotes de créditos. Sem ela, a cobrança é manual (a Starta envia por e-mail e marca como paga no painel). No PowerShell, use aspas simples: `$env:ASAAS_API_KEY = '$aact_...'`. |
+| `ASAAS_AMBIENTE` | `sandbox` (padrão, para testar) ou `producao`. |
+| `ASAAS_WEBHOOK_TOKEN` | Token que você cadastra no webhook do Asaas, apontado para `{PUBLIC_URL}/api/pagamentos/asaas`. Sem ele, os avisos de pagamento são recusados. |
+| `ASAAS_NOTA_FISCAL` | `1` emite a nota fiscal de serviço pelo Asaas a cada fatura paga (precisa dos dados fiscais configurados na conta do Asaas). |
+| `ASAAS_NF_SERVICO_ID` ou `ASAAS_NF_SERVICO_CODIGO` | Serviço municipal da nota fiscal: o id no Asaas ou o código da prefeitura. |
+| `ASAAS_NF_SERVICO_NOME` | Descrição do serviço na nota fiscal. |
+| `ASAAS_NF_IMPOSTOS` | Impostos da nota, em percentuais: `iss=2,pis=0.65,cofins=3,reterIss=0` (o que faltar é zero). |
 
 As outras variáveis estão em `.env.example`.
 

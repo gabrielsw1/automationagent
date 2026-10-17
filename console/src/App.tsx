@@ -27,6 +27,7 @@ const DetalheExecucao = lazy(() => import('./paginas/execucoes/DetalheExecucao.t
 const Conhecimento = lazy(() => import('./paginas/conhecimento/Conhecimento.tsx'));
 const Canais = lazy(() => import('./paginas/canais/Canais.tsx'));
 const Equipe = lazy(() => import('./paginas/equipe/Equipe.tsx'));
+const Plano = lazy(() => import('./paginas/plano/Plano.tsx'));
 const Sistema = lazy(() => import('./paginas/sistema/Sistema.tsx'));
 // Plataforma Starta: moldura e sessão próprias (a equipe Starta), fora do console das empresas.
 const AreaPlataforma = lazy(() => import('./paginas/plataforma/AreaPlataforma.tsx'));
@@ -106,6 +107,7 @@ function AreaLogada() {
             <Route path="/canais" element={<Canais />} />
             <Route path="/sistema" element={<Sistema />} />
             <Route path="/equipe" element={<Equipe />} />
+            <Route path="/plano" element={<Plano />} />
             <Route path="*" element={<Navigate to="/painel" replace />} />
           </Routes>
         </Suspense>

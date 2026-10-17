@@ -219,7 +219,8 @@ export interface ResumoConsole {
   /** Servidor sem ANTHROPIC_API_KEY: faixa vermelha dizendo o que falta. */
   semClaude: boolean;
   /** Faixa "Você usou 80% do limite". */
-  alertaGasto: null | { usado: number; limite: number; percentual: number };
+  /** `base`: o que o uso mede (custo, ou créditos extras no plano com preço do crédito). */
+  alertaGasto: null | { usado: number; limite: number; percentual: number; base?: Limites['base'] };
   nomeSistema: string;
 }
 
@@ -439,6 +440,11 @@ export interface Canais {
 // ---------- Equipe, limites e segurança (C9) ----------
 
 export interface Limites {
+  /**
+   * O que o uso do mês mede. `custo`: o que o Claude e o navegador custaram (demonstração e empresas
+   * sem preço de crédito). `creditos`: o valor dos créditos extras do mês, no plano com preço de crédito.
+   */
+  base: 'custo' | 'creditos';
   mensal: number;
   porUsuarioDia: number;
   alerta80: boolean;

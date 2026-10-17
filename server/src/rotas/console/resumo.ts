@@ -31,7 +31,7 @@ const rotas: FastifyPluginAsync = async (app) => {
       semClaude: llm.semChave,
       alertaGasto:
         limites.alerta80 && percentual >= 0.8
-          ? { usado: limites.usoMes, limite: limites.mensal, percentual }
+          ? { usado: limites.usoMes, limite: limites.mensal, percentual, base: limites.base }
           : null,
       nomeSistema: adaptador.nome,
     };

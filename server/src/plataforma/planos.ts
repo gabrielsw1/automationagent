@@ -11,6 +11,7 @@ export interface LinhaPlano {
   usuarios_min: number;
   usuarios_max: number | null;
   creditos_incluidos: number | null;
+  pacote_creditos: number;
   preco_mensal_centavos: number | null;
   taxa_implantacao_centavos: number | null;
   preco_credito_extra_centavos: number | null;
@@ -35,6 +36,7 @@ export function dePlano(l: LinhaPlano): Plano {
     usuariosMin: l.usuarios_min,
     usuariosMax: l.usuarios_max,
     creditosIncluidos: l.creditos_incluidos,
+    pacoteCreditos: l.pacote_creditos,
     precoMensalCentavos: l.preco_mensal_centavos,
     taxaImplantacaoCentavos: l.taxa_implantacao_centavos,
     precoCreditoExtraCentavos: l.preco_credito_extra_centavos,

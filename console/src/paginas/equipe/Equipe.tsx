@@ -778,7 +778,7 @@ function Uso({ limites: l, mes }: { limites: Limites; mes: string }) {
   return (
     <div className="card-flat stack-sm" style={{ padding: 'var(--s-4) var(--s-5)' }}>
       <div className="row between wrap">
-        <span className="small strong">Uso em {mes}</span>
+        <span className="small strong">{l.base === 'creditos' ? `Créditos extras em ${mes}` : `Uso em ${mes}`}</span>
         <span className="small num">
           <span className="strong">{fmt.moeda(l.usoMes)}</span> de {fmt.moeda(l.mensal)} · {pct}%
         </span>
@@ -796,7 +796,11 @@ function Uso({ limites: l, mes }: { limites: Limites; mes: string }) {
       <div className="row between wrap tiny muted">
         <span>Renova em {fmt.data(l.renovaEm)}</span>
         <span>
-          {fracao >= 1
+          {l.base === 'creditos'
+            ? fracao >= 1
+              ? 'Limite atingido: as tarefas param quando os créditos do mês acabam.'
+              : `Créditos além do plano e dos pacotes. No ritmo atual, fecha o mês perto de ${fmt.moeda(l.previsaoMes)}`
+            : fracao >= 1
             ? l.aoAtingir === 'pausar_tudo'
               ? 'Limite atingido: o copiloto está pausado até renovar.'
               : 'Limite atingido: tarefas pelo navegador estão pausadas até renovar.'

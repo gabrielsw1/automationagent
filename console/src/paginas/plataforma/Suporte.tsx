@@ -89,7 +89,7 @@ export default function Suporte() {
                   ),
                 },
                 { titulo: 'Empresa', classe: 'cp-sem-quebra', celula: (c) => c.empresa },
-                { titulo: 'Usuários', classe: 'small cp-sem-quebra', celula: (c) => ROTULO_FAIXA_USUARIOS[c.faixa] ?? c.faixa },
+                { titulo: 'Usuários', classe: 'small cp-sem-quebra', celula: (c) => (c.faixa ? (ROTULO_FAIXA_USUARIOS[c.faixa] ?? c.faixa) : '—') },
                 { titulo: 'Pedido', celula: (c) => <span className="badge badge-outline">{ROTULO_ORIGEM_CONTATO[c.origem] ?? c.origem}</span> },
                 { titulo: 'Mensagem', classe: 'small cp-texto-longo', celula: (c) => c.mensagem ?? <span className="muted">—</span> },
               ]}

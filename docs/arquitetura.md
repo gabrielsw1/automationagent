@@ -49,6 +49,35 @@ Regras:
   ativação; `Eu.adminPlataforma` diz se o e-mail da conta tem acesso ativo à Plataforma. Modo suporte: cookie do console `sup.<token>`
   (`acessos_suporte`), perfil `suporte` por 60 minutos, auditoria e e-mail aos Admins da empresa.
 
+## Cobrança (`server/src/cobranca/`)
+
+- **Ciclo:** o mês do calendário em America/Sao_Paulo (`cobranca/ciclo.ts`). Créditos do ciclo = incluídos no plano + pacotes
+  pagos no ciclo. Cada execução concluída gasta 1 crédito pelo roteiro ou 5 com conserto visual (`creditosDaExecucao`, `shared/src/plataforma.ts`).
+- **Quando acabam** (`Creditos.verificar`, chamado por `Gastos.verificar` antes do limite em R$): a tarefa segue como crédito extra só
+  se o plano tem preço do crédito extra e o valor dos extras do mês (extras × preço) ainda está abaixo do limite mensal; senão, recusa com
+  "Os créditos do mês acabaram. Um Admin pode comprar um pacote em Plano e créditos." Empresa com plano e preços
+  (`Creditos.cobraPorCredito`): o "gasto do mês" do console e dos limites é o valor dos extras. Demonstração e planos sem
+  preço seguem com o custo em R$ de antes.
+- **Fechamento** (`Faturas.fecharMes`): na subida do servidor e de hora em hora. Uma fatura mensal por empresa e mês (índice
+  único `faturas_mensal`), para empresas fora da demonstração com plano desde antes do fim do mês. Itens: assinatura, taxa de
+  implantação (só na primeira) e créditos extras. Preço que falta: pula a empresa, escreve no log e mostra
+  "preço não definido" nas pendências da Plataforma. Vencimento: 10 dias depois do fechamento (pacote: 3 dias); na cobrança
+  manual, a mesma rodada marca como vencida a fatura que passou do vencimento sem pagamento.
+- **Pagamento:** com `ASAAS_API_KEY`, `cobranca/asaas.ts` cria o cliente e a cobrança (boleto, cartão pelo link do Asaas, ou o
+  token do cartão guardado depois do primeiro pagamento, para a recarga automática). O Asaas avisa em
+  `POST {PUBLIC_URL}/api/pagamentos/asaas` com o cabeçalho `asaas-access-token` = `ASAAS_WEBHOOK_TOKEN` (`rotas/pagamentos.ts`;
+  cada evento é tratado uma vez, tabela `eventos_pagamento`). Fatura paga de pacote libera os créditos. Nota fiscal de serviço
+  só com `ASAAS_NOTA_FISCAL=1` e os dados fiscais da conta do Asaas. Sem chave, a cobrança é manual: a fatura fica
+  "Aguardando pagamento", o e-mail vai para `EMAIL_VENDAS`, e a Starta usa **Marcar como paga** ou **Cancelar** no painel da
+  empresa (registrado na auditoria da empresa).
+- **Tabelas** (migração 5 da plataforma): `faturas` (itens em JSON, `exemplo = 1` só no seed), `eventos_pagamento`, e em
+  `empresas` os dados de cobrança, o cartão guardado (final, bandeira, token cifrado), a recarga automática e `cobranca_desde`.
+  `planos.pacote_creditos` é o tamanho do pacote avulso (Configurações › Planos e preços).
+- **Rotas:** `GET /api/console/plano` → `PlanoECreditos` (Admin, ou a Starta no modo suporte, só leitura); `POST /plano/pacotes`,
+  `PUT /plano/recarga`, `PUT /plano/cobranca`, `PUT /plano/metodo`, `POST /plano/mudanca` (pedido em `contatos`, origem
+  `mudanca_plano`, e-mail para `EMAIL_VENDAS`), `GET /plano/faturas/:id/pdf` (demonstrativo, `cobranca/pdf.ts`).
+  Plataforma: `GET /empresas/:id/faturas`, `POST /empresas/:id/faturas/:fatura/paga|cancelar`.
+
 ## Regras que valem para todo o código
 
 - Texto para pessoas em português do Brasil, frases completas, sem jargão técnico (o design é a referência de tom).
@@ -82,6 +111,7 @@ Regras:
 | `configuracoes` | `servicos/configuracoes.ts` | `ler/gravar/metadados` de `widget_publicado`, `widget_rascunho`, `widget_chave_publica`, `widget_instalacao`, `limites`, `seguranca`, `guia_feitos` |
 | `auditoria` | `servicos/auditoria.ts` | `registrar(ator, acao, alvo, detalhe?)`, `listar()` |
 | `gastos` | `servicos/gastos.ts` | Custos em R$, `limites()`, `verificar()`, `pausaAtiva()`, `gastoEntre()` |
+| `creditos` | `cobranca/creditos.ts` | Créditos do ciclo, `verificar()` antes de cada tarefa, uso por tarefa (Plano e créditos) |
 | `conversas` | `servicos/conversas.ts` | Mensagens do widget (emite SSE), transcrição do Claude (só acrescenta) |
 | `catalogo` | `servicos/catalogo.ts` | Tarefas e versões (`criar`, `salvarRascunho`, `publicar`, `emUso`, `testes`...) |
 | `conhecimento` | `conhecimento/` | `buscar`, `registrarSemResposta`, `responder`, `retomar` |

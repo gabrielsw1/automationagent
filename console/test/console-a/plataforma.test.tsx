@@ -349,6 +349,7 @@ describe('Plataforma Starta › Configurações', () => {
       usuariosMin: 1,
       usuariosMax: 200,
       creditosIncluidos: 3000,
+      pacoteCreditos: 1000,
       precoMensalCentavos: null,
       taxaImplantacaoCentavos: null,
       precoCreditoExtraCentavos: 40,

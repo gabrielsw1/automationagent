@@ -43,6 +43,7 @@ function plano(p: Partial<Plano> & Pick<Plano, 'id' | 'nome' | 'botao'>): Plano 
     usuariosMin: 1,
     usuariosMax: null,
     creditosIncluidos: null,
+    pacoteCreditos: 1000,
     precoMensalCentavos: null,
     taxaImplantacaoCentavos: null,
     precoCreditoExtraCentavos: null,

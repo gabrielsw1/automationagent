@@ -18,6 +18,7 @@ import rotasGravacao from './rotas/gravacao.ts';
 import rotasConsole from './rotas/console/index.ts';
 import rotasPlataforma from './rotas/plataforma/index.ts';
 import rotasPublicas from './rotas/publico.ts';
+import rotasPagamentos from './rotas/pagamentos.ts';
 
 declare module 'fastify' {
   interface FastifyInstance {
@@ -103,6 +104,8 @@ export async function criarApp(plataforma: Plataforma, opcoes: OpcoesApp = {}): 
   await app.register(rotasPlataforma, { prefix: '/api/plataforma' });
   // Site do produto (sem sessão): planos, pedidos de contato e textos jurídicos.
   await app.register(rotasPublicas, { prefix: '/api/publico' });
+  // Avisos do gateway de pagamento (Asaas), com token próprio.
+  await app.register(rotasPagamentos, { prefix: '/api/pagamentos' });
 
   // copiloto.js (script do widget). Em dev, `npm run dev` recompila widget/dist a cada mudança.
   const distWidget = path.join(RAIZ_REPO, 'widget', 'dist');

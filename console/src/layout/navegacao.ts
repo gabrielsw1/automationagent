@@ -6,6 +6,8 @@ export interface ItemNav {
   rotulo: string;
   icone: NomeIcone;
   contador?: 'execucoes';
+  /** Só o Admin vê (e a Starta no modo suporte). */
+  soAdmin?: boolean;
 }
 
 export const GRUPOS_NAV: {
@@ -36,7 +38,10 @@ export const GRUPOS_NAV: {
   },
   {
     rotulo: 'Conta',
-    itens: [{ para: '/equipe', rotulo: 'Equipe e limites', icone: 'equipe' }],
+    itens: [
+      { para: '/equipe', rotulo: 'Equipe e limites', icone: 'equipe' },
+      { para: '/plano', rotulo: 'Plano e créditos', icone: 'cartao', soAdmin: true },
+    ],
   },
   {
     // Só para quem administra a plataforma (COPILOTO_ADMINS): todas as empresas clientes.
@@ -56,6 +61,7 @@ const TITULOS: Record<string, string> = {
   canais: 'Canais e widget',
   sistema: 'Sistema',
   equipe: 'Equipe e limites',
+  plano: 'Plano e créditos',
   plataforma: 'Empresas clientes',
 };
 

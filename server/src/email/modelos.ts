@@ -1,6 +1,16 @@
 // Textos dos e-mails. O assunto do código é o que a tela de confirmação cita ("Seu código do
 // Copiloto Starta"), para a pessoa achar na caixa de entrada.
-import { fmt, ROTULO_FAIXA_USUARIOS, ROTULO_PERFIL, type ContatoRecebido, type PerfilEquipe } from '@copiloto/shared';
+import {
+  fmt,
+  nomeCompetencia,
+  precoEmReais,
+  ROTULO_FAIXA_USUARIOS,
+  ROTULO_PERFIL,
+  type ContatoRecebido,
+  type DadosCobranca,
+  type Fatura,
+  type PerfilEquipe,
+} from '@copiloto/shared';
 import type { EmailSaindo } from './index.ts';
 
 const ASSINATURA = 'Equipe Copiloto Starta';
@@ -104,6 +114,7 @@ const ASSUNTO_CONTATO: Record<ContatoRecebido['origem'], string> = {
   demonstracao: 'Pedido de demonstração',
   vendas: 'Contato com vendas',
   piloto: 'Pedido de piloto',
+  mudanca_plano: 'Pedido de mudança de plano',
 };
 
 /** Pedido do site para a equipe de vendas (EMAIL_VENDAS). "Responder" vai direto para quem pediu. */
@@ -119,10 +130,60 @@ export function emailContatoVendas(para: string, c: ContatoRecebido): EmailSaind
         `E-mail: ${c.email}`,
         `Empresa: ${c.empresa}`,
         `Telefone: ${c.telefone ?? 'não informado'}`,
-        `Usuários do sistema: ${ROTULO_FAIXA_USUARIOS[c.faixa]}`,
+        `Usuários do sistema: ${c.faixa ? ROTULO_FAIXA_USUARIOS[c.faixa] : 'não informado'}`,
       ].join('\n'),
       c.mensagem ? `Mensagem:\n${c.mensagem}` : 'Sem mensagem.',
       'Responda este e-mail para falar direto com quem pediu.',
+    ].join('\n\n'),
+  };
+}
+
+/** "Mudar de plano" em Plano e créditos, para a equipe de vendas (EMAIL_VENDAS). */
+export function emailMudancaPlano(d: {
+  para: string;
+  empresa: string;
+  cnpj: string | null;
+  pessoa: string;
+  email: string;
+  planoAtual: string | null;
+  planoPedido: string;
+  mensagem: string | null;
+  em: string;
+  linkPlataforma: string;
+}): EmailSaindo {
+  return {
+    para: d.para,
+    responderPara: d.email,
+    assunto: `Pedido de mudança de plano: ${d.empresa}`,
+    texto: [
+      `${d.pessoa} (${d.email}), Admin da ${d.empresa}, pediu para mudar de plano em ${fmt.dataHora(d.em)}.`,
+      [`Empresa: ${d.empresa}${d.cnpj ? ` (CNPJ ${d.cnpj})` : ''}`, `Plano atual: ${d.planoAtual ?? 'sem plano'}`, `Plano pedido: ${d.planoPedido}`].join('\n'),
+      d.mensagem ? `Mensagem:\n${d.mensagem}` : 'Sem mensagem.',
+      `Nada muda até a Starta confirmar com a empresa e trocar o plano na Plataforma: ${d.linkPlataforma}`,
+      'Responda este e-mail para falar direto com quem pediu.',
+    ].join('\n\n'),
+  };
+}
+
+/** Cobrança manual (sem ASAAS_API_KEY): a equipe Starta recebe a fatura para cobrar a empresa. */
+export function emailFaturaManual(d: { para: string; empresa: string; cobranca: DadosCobranca; fatura: Fatura; linkPlataforma: string }): EmailSaindo {
+  const f = d.fatura;
+  const qual = f.tipo === 'mensal' && f.competencia ? `Fatura de ${nomeCompetencia(f.competencia)}` : `Pacote de ${fmt.numero(f.creditos ?? 0)} créditos`;
+  const c = d.cobranca;
+  return {
+    para: d.para,
+    assunto: `Cobrar: ${qual} da ${d.empresa}`,
+    texto: [
+      `${qual} da ${d.empresa}: ${precoEmReais(f.totalCentavos) ?? 'valor não definido'}, vencimento em ${f.vencimento ? fmt.data(`${f.vencimento}T12:00:00Z`) : 'a combinar'}.`,
+      f.itens.map((i) => `- ${i.descricao}${i.quantidade > 1 ? ` (${fmt.numero(i.quantidade)})` : ''}: ${precoEmReais(i.totalCentavos) ?? 'sem valor'}`).join('\n'),
+      [
+        `Razão social: ${c.razaoSocial ?? 'não informada'}`,
+        `CNPJ: ${c.cnpj ?? 'não informado'}`,
+        `E-mail de cobrança: ${c.emailCobranca ?? 'não informado'}`,
+        `Forma escolhida: ${c.metodo === 'cartao' ? 'cartão de crédito' : 'boleto'}`,
+      ].join('\n'),
+      `A cobrança pelo Asaas não está ligada (ASAAS_API_KEY), então a Starta cobra a empresa. Quando o pagamento chegar, marque a fatura como paga na Plataforma${f.tipo === 'pacote' ? ' (os créditos do pacote entram nessa hora)' : ''}: ${d.linkPlataforma}`,
+      ASSINATURA,
     ].join('\n\n'),
   };
 }
