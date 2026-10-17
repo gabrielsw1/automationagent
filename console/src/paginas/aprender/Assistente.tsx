@@ -93,7 +93,7 @@ export default function Assistente({ fluxoId }: { fluxoId: string }) {
       setEtapa(f.passos.length ? 'revisar' : 'gravar');
       setSelecionado(1);
       if (f.passos.length) toast.sucesso(`Gravação concluída com ${f.passos.length} ${f.passos.length === 1 ? 'passo' : 'passos'}. Confira cada um.`);
-    } else if (antes === null) setEtapa(f.passos.length ? f.etapa : 'gravar');
+    } else if (antes === null) setEtapa(!f.passos.length ? 'gravar' : f.status === 'publicado' ? 'revisar' : f.etapa);
   }, [f, toast]);
 
   useEventosConsole((e) => {
@@ -347,7 +347,7 @@ export default function Assistente({ fluxoId }: { fluxoId: string }) {
           titulo={`Esta é a versão ${f.versao}, publicada e em uso`}
           acoes={
             <>
-              <Botao tamanho="sm" variante="primario" icone="editar" carregando={agindo && confirmar === null} disabled={!online} onClick={() => void novaVersao()}>
+              <Botao tamanho="sm" variante="primario" icone="mais" carregando={agindo && confirmar === null} disabled={!online} onClick={() => void novaVersao()}>
                 Criar nova versão
               </Botao>
               <Botao tamanho="sm" icone="aprender" disabled={!online} onClick={() => pedirGravarDeNovo()}>

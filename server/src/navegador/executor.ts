@@ -19,6 +19,7 @@ import type {
   ResultadoNavegador,
 } from './tipos.ts';
 import { acharSensiveis, borrarImagem } from './mascara.ts';
+import { SCRIPT_NOMES } from './pagina.ts';
 import { apagarPrintsVencidos, salvarPrint } from './prints.ts';
 import { ATRIBUTO_ALVO, coletarElementos, descreverElemento, limparMarcas, perguntarAoClaude } from './recuperacao.ts';
 import { localizar, papelDoSeletor } from './seletores.ts';
@@ -307,6 +308,8 @@ class ExecucaoFluxo {
     });
     // O widget do copiloto também está nas telas do sistema; no navegador do copiloto ele só atrapalha.
     await this.contexto.route(/\/copiloto\.js(\?.*)?$/, (r) => r.abort());
+    // Código de página transformado pelo tsx chama __name (ver pagina.ts).
+    await this.contexto.addInitScript({ content: SCRIPT_NOMES });
     if (sessao.cookies.length) await this.contexto.addCookies(sessao.cookies.map((c) => cookieParaPlaywright(c, adaptador.urlBase)));
     this.page = await this.contexto.newPage();
     this.page.setDefaultTimeout(this.opcoes.tempoElementoMs);
@@ -657,6 +660,7 @@ class ExecucaoFluxo {
   private async paginaAuxiliar(): Promise<Page> {
     if (this.auxiliar && !this.auxiliar.isClosed()) return this.auxiliar;
     this.auxiliar = await this.contexto!.newPage();
+    await this.auxiliar.evaluate(SCRIPT_NOMES);
     return this.auxiliar;
   }
 

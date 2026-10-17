@@ -2,6 +2,7 @@
 // sensíveis (CPF, CNPJ, e-mail, senha, cartão); depois do print, borra essas regiões na própria
 // imagem (canvas numa página auxiliar em branco). A página do sistema não é alterada.
 import type { Page } from 'playwright';
+import { avaliar } from './pagina.ts';
 
 /* Código de página (page.evaluate): nomes do navegador declarados só neste arquivo (ver pagina.ts). */
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -27,7 +28,7 @@ export interface Caixa {
  * inteira (pixels CSS, as mesmas do print de página inteira).
  */
 export async function acharSensiveis(page: Page): Promise<Caixa[]> {
-  return page.evaluate(() => {
+  return avaliar(page, () => {
     const NOME_SENSIVEL = /cpf|cnpj|documento|\bdoc\b|doc_|_doc|e-?mail|senha|password|passwd|cart[aã]o|card|cvv|cvc|cc-|rg\b|pis\b|conta|agencia|token/i;
     const TEXTO_SENSIVEL = [
       /\b\d{3}\.\d{3}\.\d{3}-\d{2}\b/g, // CPF
@@ -87,7 +88,7 @@ export async function acharSensiveis(page: Page): Promise<Caixa[]> {
     }
 
     return caixas;
-  });
+  }, null);
 }
 
 /**
@@ -96,8 +97,9 @@ export async function acharSensiveis(page: Page): Promise<Caixa[]> {
  */
 export async function borrarImagem(auxiliar: Page, png: Buffer, caixas: Caixa[]): Promise<Buffer> {
   if (caixas.length === 0) return png;
-  const dataUrl: string = await auxiliar.evaluate(
-    async ({ b64, caixas }) => {
+  const dataUrl: string = await avaliar(
+    auxiliar,
+    async ({ b64, caixas }: { b64: string; caixas: Caixa[] }) => {
       const img = new Image();
       img.src = `data:image/png;base64,${b64}`;
       await img.decode();

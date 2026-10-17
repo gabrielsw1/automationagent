@@ -8,6 +8,7 @@ import type { BlocoEntrada, Llm, UsoLlm } from '../llm/tipos.ts';
 import type { Caixa } from './mascara.ts';
 import { papelDoSeletor, pistasDoSeletor } from './seletores.ts';
 import { encurtar, humanizar, melhorSimilaridade, normalizar } from './texto.ts';
+import { avaliar } from './pagina.ts';
 
 /* Código de página (page.evaluate): nomes do navegador declarados só neste arquivo (ver pagina.ts). */
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -41,8 +42,9 @@ export interface ElementoPagina {
 
 /** Lista os elementos interativos visíveis (e os marcados com data-campo) e numera cada um na página. */
 export async function coletarElementos(page: Page, limite = 150): Promise<ElementoPagina[]> {
-  return page.evaluate(
-    ({ atributo, limite }) => {
+  return avaliar(
+    page,
+    ({ atributo, limite }: { atributo: string; limite: number }) => {
       for (const el of Array.from<any>(document.querySelectorAll(`[${atributo}]`))) el.removeAttribute(atributo);
       const seletor =
         'button, a[href], input:not([type=hidden]), select, textarea, summary, [role=button], [role=link], [role=menuitem], [role=tab], [role=checkbox], [role=radio], [role=combobox], [role=textbox], [data-campo]';

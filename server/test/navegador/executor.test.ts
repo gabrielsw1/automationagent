@@ -9,6 +9,7 @@ import { Banco } from '../../src/db/banco.ts';
 import { LlmSimulado } from '../../src/llm/simulado.ts';
 import { NavegadorPlaywright } from '../../src/navegador/executor.ts';
 import { acharSensiveis, borrarImagem } from '../../src/navegador/mascara.ts';
+import { avaliar } from '../../src/navegador/pagina.ts';
 import type { EventoNavegador, PedidoExecucaoNavegador } from '../../src/navegador/tipos.ts';
 import { AdaptadorTelas, LINHA_DIGITAVEL, pastaTemporaria, subirTelas, type ServidorTelas } from './ajuda-navegador.ts';
 
@@ -323,6 +324,20 @@ describe('mascaramento dos prints', { timeout: 30_000 }, () => {
       );
       expect(comparar.dentro).toBeGreaterThan(0);
       expect(comparar.fora).toBe(0);
+    } finally {
+      await b.close();
+    }
+  });
+
+  it('roda código de página transformado pelo tsx (chamadas a __name)', async () => {
+    const b = await chromium.launch();
+    try {
+      const page = await b.newPage();
+      await page.setContent('<p>ok</p>');
+      // O tsx (esbuild com keepNames) escreve funções internas assim:
+      const comoTsx = new Function('return (n) => { const dobro = __name((x) => x * 2, "dobro"); return dobro(n); }')() as (n: number) => number;
+      await expect(page.evaluate(comoTsx, 21)).rejects.toThrow(/__name/);
+      expect(await avaliar(page, comoTsx, 21)).toBe(42);
     } finally {
       await b.close();
     }

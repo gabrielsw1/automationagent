@@ -89,7 +89,7 @@ export function CabecaPasso({
   children?: ReactNode;
 }) {
   return (
-    <div className="card-head">
+    <div className="card-head ap-cabeca-passo">
       <div className="stack-sm" style={{ gap: 2, minWidth: 0 }}>
         <span className="tiny muted">
           Passo {passo.n} de {total} · {ROTULO_TIPO[passo.tipo]}
