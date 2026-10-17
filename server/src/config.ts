@@ -58,6 +58,10 @@ export interface Config {
   smtpUrl: string;
   /** Remetente dos e-mails (EMAIL_REMETENTE). */
   emailRemetente: string;
+  /** Recebe os pedidos de contato do site (EMAIL_VENDAS). Sem ele, os pedidos ficam só no banco da plataforma. */
+  emailVendas: string;
+  /** Pasta com os textos jurídicos aprovados (TEXTOS_LEGAIS_DIR). Sem ela, o site mostra as minutas de docs/legal. */
+  textosLegaisDir: string | null;
   /** Exige a assinatura do usuário no snippet do widget. */
   exigirAssinatura: boolean;
   /** Mostra o navegador do Playwright (só para depurar fluxos). */
@@ -101,6 +105,8 @@ export function lerConfig(): Config {
       .filter(Boolean),
     smtpUrl: env('SMTP_URL', ''),
     emailRemetente: env('EMAIL_REMETENTE', 'Copiloto Starta <nao-responda@starta.site>'),
+    emailVendas: env('EMAIL_VENDAS', '').trim(),
+    textosLegaisDir: process.env.TEXTOS_LEGAIS_DIR ? path.resolve(RAIZ_REPO, process.env.TEXTOS_LEGAIS_DIR) : null,
     exigirAssinatura: env('WIDGET_EXIGIR_ASSINATURA', '1') !== '0',
     navegadorVisivel: env('NAVEGADOR_VISIVEL', '0') === '1',
     chromiumPath: process.env.CHROMIUM_PATH || undefined,

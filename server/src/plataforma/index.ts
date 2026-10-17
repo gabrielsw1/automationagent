@@ -5,13 +5,13 @@
 //   alguém precisa e reaproveitado depois. Nada de uma empresa passa pelo contexto de outra.
 // - O banco da plataforma (DATA_DIR/plataforma.db) guarda só o que precisa ser achado antes de
 //   saber a empresa: a lista de empresas, a chave pública do widget, as contas do console, as
-//   sessões e o índice e-mail → empresas.
+//   sessões e o índice e-mail → empresas. E o que é da Starta: planos e pedidos de contato do site.
 // - Tokens que chegam sem sessão (gravação de fluxo, convite) começam com o ID da empresa
 //   (`<empresa>.<aleatório>`), e o token do widget leva a empresa assinada.
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
-import type { ConectorSistema, FaixaUsuarios, ModoAcesso } from '@copiloto/shared';
+import type { ConectorSistema, ContatoPedido, ContatoRecebido, FaixaUsuarios, ModoAcesso, Plano, PrecosPlano } from '@copiloto/shared';
 import type { AdaptadorSistema } from '../adaptadores/tipos.ts';
 import { hashSenha, verificarSenha } from '../auth/senha.ts';
 import type { Config } from '../config.ts';
@@ -23,6 +23,8 @@ import type { Navegador } from '../navegador/tipos.ts';
 import { novoId, tokenAleatorio } from '../util/ids.ts';
 import { Cofre } from './cofre.ts';
 import { MIGRACOES_PLATAFORMA } from './esquema.ts';
+import { COLUNA_PRECO, dePlano, type LinhaPlano } from './planos.ts';
+import { versaoDosTermos } from './textos.ts';
 
 /** Como o copiloto fala com o sistema da empresa (a senha da conta de serviço fica no cofre). */
 export interface SistemaGuardado {
@@ -141,6 +143,34 @@ function deLinha(l: LinhaEmpresa): Empresa {
   };
 }
 
+interface LinhaContato {
+  id: string;
+  nome: string;
+  email: string;
+  empresa: string;
+  telefone: string | null;
+  faixa: FaixaUsuarios;
+  mensagem: string | null;
+  origem: ContatoRecebido['origem'];
+  criado_em: string;
+  ip: string | null;
+}
+
+function deContato(l: LinhaContato): ContatoRecebido {
+  return {
+    id: l.id,
+    nome: l.nome,
+    email: l.email,
+    empresa: l.empresa,
+    telefone: l.telefone,
+    faixa: l.faixa,
+    mensagem: l.mensagem,
+    origem: l.origem,
+    criadoEm: l.criado_em,
+    ip: l.ip,
+  };
+}
+
 /** Token que leva a empresa na frente, para achar o banco certo sem sessão. */
 export function tokenDaEmpresa(empresaId: string, bytes = 24): string {
   return `${empresaId}.${tokenAleatorio(bytes)}`;
@@ -216,6 +246,8 @@ export class Plataforma {
     cnpj?: string;
     faixaUsuarios?: FaixaUsuarios;
     termosAceitos?: boolean;
+    /** Versão dos textos aceitos. Padrão: a dos textos servidos agora (versaoDosTermos). */
+    termosVersao?: string;
   }): Empresa {
     const id = novoId('emp');
     const host = hostDe(d.sistema.url);
@@ -233,6 +265,7 @@ export class Plataforma {
       cnpj: d.cnpj ?? null,
       faixa_usuarios: d.faixaUsuarios ?? null,
       termos_aceitos_em: d.termosAceitos ? agoraIso() : null,
+      termos_versao: d.termosAceitos ? (d.termosVersao ?? versaoDosTermos(this.config)) : null,
       criado_por: d.criadoPor ?? null,
       criado_em: agoraIso(),
     });
@@ -630,6 +663,55 @@ export class Plataforma {
   /** "Sair de todos os outros aparelhos": encerra as sessões da conta. */
   encerrarSessoesDaConta(contaId: string) {
     this.banco.executar('DELETE FROM sessoes WHERE conta_id = ?', contaId);
+  }
+
+  // ---------------------------------------------------------------- site: planos e pedidos de contato
+
+  /** Planos na ordem do site. */
+  planos(): Plano[] {
+    return this.banco.todos<LinhaPlano>('SELECT * FROM planos ORDER BY ordem, id').map(dePlano);
+  }
+
+  plano(id: string): Plano | undefined {
+    const l = this.banco.um<LinhaPlano>('SELECT * FROM planos WHERE id = ?', id);
+    return l ? dePlano(l) : undefined;
+  }
+
+  /** Muda os preços de um plano, em centavos. null volta a "Sob consulta"; o que não vier fica como está. */
+  atualizarPrecosPlano(id: string, precos: Partial<PrecosPlano>): Plano {
+    if (!this.plano(id)) throw new Error(`Plano ${id} não existe.`);
+    const dados: Record<string, unknown> = { atualizado_em: agoraIso() };
+    for (const campo of Object.keys(COLUNA_PRECO) as (keyof PrecosPlano)[]) {
+      const valor = precos[campo];
+      if (valor === undefined) continue;
+      if (valor !== null && !(Number.isInteger(valor) && valor >= 0)) throw new Error(`${campo}: centavos inteiros, a partir de zero.`);
+      dados[COLUNA_PRECO[campo]] = valor;
+    }
+    this.banco.atualizar('planos', id, dados);
+    return this.plano(id)!;
+  }
+
+  /** Guarda o pedido de "Agendar demonstração" ou "Falar com vendas". Pedidos não mudam nem somem. */
+  registrarContato(d: ContatoPedido & { ip: string | null }): ContatoRecebido {
+    const id = novoId('ctt');
+    this.banco.inserir('contatos', {
+      id,
+      nome: d.nome.trim(),
+      email: d.email.trim().toLowerCase(),
+      empresa: d.empresa.trim(),
+      telefone: d.telefone?.trim() || null,
+      faixa: d.faixa,
+      mensagem: d.mensagem?.trim() || null,
+      origem: d.origem,
+      criado_em: agoraIso(),
+      ip: d.ip,
+    });
+    return deContato(this.banco.um<LinhaContato>('SELECT * FROM contatos WHERE id = ?', id)!);
+  }
+
+  /** Pedidos de contato do site, os mais novos primeiro. */
+  contatos(limite = 200): ContatoRecebido[] {
+    return this.banco.todos<LinhaContato>('SELECT * FROM contatos ORDER BY criado_em DESC, rowid DESC LIMIT ?', limite).map(deContato);
   }
 
   // ---------------------------------------------------------------- encerrar

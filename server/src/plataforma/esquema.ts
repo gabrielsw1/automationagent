@@ -1,6 +1,7 @@
 // Banco da plataforma (DATA_DIR/plataforma.db): empresas clientes, contas de acesso ao console,
-// sessões e o índice de quem está em qual empresa. Os dados de cada empresa (tarefas, fluxos,
-// execuções, conversas, conhecimento, equipe) ficam no banco dela, em DATA_DIR/empresas/<id>/.
+// sessões, o índice de quem está em qual empresa, os planos e os pedidos de contato do site. Os
+// dados de cada empresa (tarefas, fluxos, execuções, conversas, conhecimento, equipe) ficam no
+// banco dela, em DATA_DIR/empresas/<id>/.
 // Como em db/esquema.ts: nunca edite uma migração publicada, acrescente outra no fim.
 export const MIGRACOES_PLATAFORMA: string[] = [
   `
@@ -90,5 +91,63 @@ export const MIGRACOES_PLATAFORMA: string[] = [
     texto TEXT NOT NULL,
     criado_em TEXT NOT NULL
   );
+  `,
+  // 3: site do produto. A tabela de planos que o site lê (preço NULL aparece como "Sob consulta" até
+  // a Starta definir; a semente são os três planos do design), os pedidos de contato do site
+  // ("Agendar demonstração", "Falar com vendas"), que só se acrescentam, e a versão dos Termos de uso
+  // e do contrato de tratamento de dados (LGPD) aceita no cadastro.
+  `
+  CREATE TABLE planos (
+    id TEXT PRIMARY KEY,
+    nome TEXT NOT NULL,
+    ordem INTEGER NOT NULL,
+    descricao TEXT NOT NULL,
+    usuarios_min INTEGER NOT NULL,
+    -- NULL: sem limite ("Mais de 1.000 usuários").
+    usuarios_max INTEGER,
+    -- Por mês; NULL: sob medida.
+    creditos_incluidos INTEGER,
+    -- Centavos de real. NULL: ainda não definido.
+    preco_mensal_centavos INTEGER,
+    taxa_implantacao_centavos INTEGER,
+    preco_credito_extra_centavos INTEGER,
+    -- Linha abaixo do preço; {implantacao} vira a taxa de implantação.
+    nota_preco TEXT NOT NULL DEFAULT '',
+    -- JSON: itens da lista depois de usuários, créditos e crédito extra.
+    destaques TEXT NOT NULL DEFAULT '[]',
+    botao TEXT NOT NULL CHECK (botao IN ('cadastro', 'demonstracao', 'vendas')),
+    atualizado_em TEXT NOT NULL
+  );
+  INSERT INTO planos (id, nome, ordem, descricao, usuarios_min, usuarios_max, creditos_incluidos, nota_preco, destaques, botao, atualizado_em) VALUES
+    ('piloto', 'Piloto', 1, 'Para validar com um grupo de clientes, com a Starta ao seu lado.', 1, 200, 3000,
+     'mais taxa de implantação {implantacao}, cobrada uma vez',
+     '["Implantação assistida: gravamos as primeiras tarefas com você","Assistente no seu sistema, com a sua marca"]',
+     'cadastro', strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    ('crescimento', 'Crescimento', 2, 'Para levar o copiloto a toda a sua base de clientes.', 201, 1000, 15000,
+     'sem taxa de implantação para quem vem do piloto',
+     '["Conector por API opcional, para tarefas que já têm API"]',
+     'demonstracao', strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    ('escala', 'Escala', 3, 'Para bases grandes ou mais de um sistema.', 1001, NULL, NULL,
+     'proposta conforme volume',
+     '["Vários sistemas no mesmo espaço","Acordo de nível de serviço e contato dedicado"]',
+     'vendas', strftime('%Y-%m-%dT%H:%M:%fZ', 'now'));
+
+  CREATE TABLE contatos (
+    id TEXT PRIMARY KEY,
+    nome TEXT NOT NULL,
+    email TEXT NOT NULL,
+    empresa TEXT NOT NULL,
+    telefone TEXT,
+    -- FaixaUsuarios: quantos usuários o sistema tem.
+    faixa TEXT NOT NULL,
+    mensagem TEXT,
+    origem TEXT NOT NULL CHECK (origem IN ('demonstracao', 'vendas', 'piloto')),
+    criado_em TEXT NOT NULL,
+    ip TEXT
+  );
+  CREATE INDEX contatos_criado ON contatos(criado_em);
+
+  -- Ex.: "termos@2026-10-17 contrato-lgpd@2026-10-17" (plataforma/textos.ts, versaoDosTermos).
+  ALTER TABLE empresas ADD COLUMN termos_versao TEXT;
   `,
 ];

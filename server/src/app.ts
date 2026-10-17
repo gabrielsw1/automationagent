@@ -1,4 +1,5 @@
-// Servidor HTTP (Fastify): API do widget, API do console, gravador de fluxos e arquivos estáticos.
+// Servidor HTTP (Fastify): API do widget, API do console, gravador de fluxos, rotas públicas do site
+// e arquivos estáticos.
 import fs from 'node:fs';
 import path from 'node:path';
 import Fastify, { type FastifyInstance } from 'fastify';
@@ -15,6 +16,7 @@ import { codigoRef } from './util/ids.ts';
 import rotasWidget from './rotas/widget.ts';
 import rotasGravacao from './rotas/gravacao.ts';
 import rotasConsole from './rotas/console/index.ts';
+import rotasPublicas from './rotas/publico.ts';
 
 declare module 'fastify' {
   interface FastifyInstance {
@@ -97,6 +99,8 @@ export async function criarApp(plataforma: Plataforma, opcoes: OpcoesApp = {}): 
   await app.register(rotasWidget, { prefix: '/api/widget' });
   await app.register(rotasGravacao, { prefix: '/api/gravacao' });
   await app.register(rotasConsole, { prefix: '/api/console' });
+  // Site do produto (sem sessão): planos, pedidos de contato e textos jurídicos.
+  await app.register(rotasPublicas, { prefix: '/api/publico' });
 
   // copiloto.js (script do widget). Em dev, `npm run dev` recompila widget/dist a cada mudança.
   const distWidget = path.join(RAIZ_REPO, 'widget', 'dist');

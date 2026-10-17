@@ -137,15 +137,33 @@ describe('Moldura do console', () => {
     expect(pedidos.find((p) => p.caminho === '/auth/empresa')?.corpo).toEqual({ empresaId: 'emp-acme' });
   });
 
-  it('menu da conta: empresa aberta, troca de empresa e erro ao trocar', async () => {
-    const recarregou = vi.spyOn(recarregar, 'console').mockImplementation(() => {});
-    instalarFetch({ 'POST /auth/empresa': { __status: 403, corpo: { erro: 'sem_permissao', mensagem: 'Você não está mais nesta empresa.' } } });
+  it('menu da conta: empresa aberta e "Trocar de empresa" leva à escolha da empresa', async () => {
+    instalarFetch({});
     renderizar(pagina, { caminho: '/painel', eu: { empresas: [HORIZONTE, ACME] } });
     fireEvent.click(screen.getByRole('button', { name: /Rafael Lima, Admin\. Abrir menu da conta/ }));
     const menu = await screen.findByRole('menu');
     expect(within(menu).getByText('Empresa aberta')).toBeTruthy();
-    expect(within(within(menu).getByRole('group', { name: 'Trocar de empresa' })).getByRole('menuitem', { name: /Acme Logística/ })).toBeTruthy();
+    expect(within(menu).getByRole('menuitem', { name: /Trocar de empresa/ }).getAttribute('href')).toBe('/entrar/empresa');
+    expect(within(menu).queryByRole('menuitem', { name: /Acme Logística/ })).toBeNull();
     expect(within(menu).getByRole('menuitem', { name: /Criar outra empresa/ })).toBeTruthy();
+  });
+
+  it('com uma empresa só, o menu da conta não oferece trocar', async () => {
+    instalarFetch({});
+    renderizar(pagina, { caminho: '/painel' });
+    fireEvent.click(screen.getByRole('button', { name: /Rafael Lima, Admin\. Abrir menu da conta/ }));
+    const menu = await screen.findByRole('menu');
+    expect(within(menu).queryByRole('menuitem', { name: /Trocar de empresa/ })).toBeNull();
+  });
+
+  it('erro ao trocar pelo seletor fica na empresa aberta e diz o motivo', async () => {
+    const recarregou = vi.spyOn(recarregar, 'console').mockImplementation(() => {});
+    instalarFetch({ 'POST /auth/empresa': { __status: 403, corpo: { erro: 'sem_permissao', mensagem: 'Você não está mais nesta empresa.' } } });
+    renderizar(pagina, { caminho: '/painel', eu: { empresas: [HORIZONTE, ACME] } });
+    const nav = screen.getByRole('navigation', { name: 'Menu principal' });
+    fireEvent.click(within(nav).getByRole('button', { name: 'Trocar de empresa. Empresa atual: Horizonte' }));
+    const menu = within(nav).getByRole('menu');
+    expect(within(within(menu).getByRole('group', { name: 'Trocar de empresa' })).getByRole('menuitem', { name: /Acme Logística/ })).toBeTruthy();
     fireEvent.click(within(menu).getByRole('menuitem', { name: /Acme Logística/ }));
     expect(await screen.findByText(/Não consegui abrir Acme Logística\. Você não está mais nesta empresa\./)).toBeTruthy();
     expect(recarregou).not.toHaveBeenCalled();

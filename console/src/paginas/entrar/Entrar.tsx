@@ -1,39 +1,75 @@
-// Entrar no console. Quando ainda não há nenhum acesso neste copiloto, leva direto ao cadastro da
-// primeira empresa; com o cadastro aberto, um link leva a "Criar a conta da sua empresa".
-import { useEffect, useState, type FormEvent } from 'react';
-import { Link, Navigate, useNavigate, useSearchParams } from 'react-router-dom';
-import type { Eu, PrimeiroAcesso } from '@copiloto/shared';
+// A1 · Entrar no Copiloto. Depois de entrar, segue para a escolha da empresa, para o código do
+// e-mail ou direto para onde a pessoa ia (?voltar=, que aparece no cartão). Com ?convite=<token>
+// (A6, e-mail que já tem conta), o servidor aceita o convite na mesma entrada e abre aquela empresa.
+// 5 senhas erradas bloqueiam a entrada com senha por 15 minutos: a tela diz até quando e oferece
+// redefinir a senha. Quando ainda não há nenhum acesso neste copiloto, leva ao cadastro.
+import { useEffect, useId, useRef, useState, type FormEvent } from 'react';
+import { Link, Navigate, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
+import { fmt, type Entrada, type PrimeiroAcesso } from '@copiloto/shared';
 import { api, ErroApiCliente } from '../../api/cliente.ts';
 import { Botao } from '../../componentes/Botao.tsx';
 import { Carregando, EstadoErro } from '../../componentes/estados.tsx';
 import { Aviso, Campo } from '../../componentes/formulario.tsx';
 import { Icone } from '../../componentes/icones.tsx';
+import { secaoDoConsole } from '../../layout/navegacao.ts';
 import { emailValido } from '../cadastro/regras.ts';
+import { CampoSenha, destinoDepoisDeEntrar, useSeguirEntrada } from './pecas.tsx';
 import TelaDeEntrada from './TelaDeEntrada.tsx';
 
-/** ?voltar=<caminho do console>: só caminhos daqui, nunca outro site. */
-export function destinoDepoisDeEntrar(voltar: string | null): string {
-  const v = voltar ?? '';
-  if (!v.startsWith('/') || v.startsWith('//') || v.startsWith('/\\') || v.startsWith('/entrar')) return '/';
-  return v;
+/** "Depois de entrar: Execuções › EX-20431". Só para seções do console. */
+function DepoisDeEntrar({ destino }: { destino: string }) {
+  const [secao = '', detalhe] = destino.split('?')[0].split('/').filter(Boolean);
+  const s = secaoDoConsole(secao);
+  if (!s) return null;
+  let item = detalhe;
+  try {
+    item = detalhe && decodeURIComponent(detalhe);
+  } catch {
+    // Caminho malformado: mostra como veio.
+  }
+  return (
+    <span className="context-pill ce-destino">
+      <Icone nome={s.icone} tamanho="sm" />
+      Depois de entrar: {s.rotulo}
+      {item ? (
+        <>
+          {' › '}
+          <span className="mono">{item}</span>
+        </>
+      ) : null}
+    </span>
+  );
 }
 
 function FormEntrar({ demo, cadastroAberto }: { demo: boolean; cadastroAberto: boolean }) {
+  const id = useId();
   const navegar = useNavigate();
+  const seguir = useSeguirEntrada();
+  const { state } = useLocation();
   const [busca] = useSearchParams();
-  const [email, setEmail] = useState('');
+  const destino = destinoDepoisDeEntrar(busca.get('voltar'));
+  const convite = busca.get('convite');
+  const [email, setEmail] = useState(() => (state as { email?: string } | null)?.email ?? '');
   const [senha, setSenha] = useState('');
-  const [verSenha, setVerSenha] = useState(false);
   const [enviando, setEnviando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
-  // Conta certa, mas fora de todas as equipes (403 sem_empresa).
-  const [semEmpresa, setSemEmpresa] = useState(false);
+  // Bloqueio depois de 5 senhas erradas (423): vale para o e-mail digitado, até `ate`.
+  const [bloqueio, setBloqueio] = useState<{ email: string; ate: string; mensagem: string } | null>(null);
   const [tocado, setTocado] = useState(false);
+  const campoSenha = useRef<HTMLInputElement>(null);
 
+  useEffect(() => {
+    if (!bloqueio) return;
+    const t = setTimeout(() => setBloqueio(null), Math.max(0, Date.parse(bloqueio.ate) - Date.now()));
+    return () => clearTimeout(t);
+  }, [bloqueio]);
+
+  const bloqueado = bloqueio?.email === email.trim().toLowerCase() ? bloqueio : null;
   const erroEmail = tocado && email && !emailValido(email) ? 'Digite um e-mail completo, por exemplo nome@empresa.com.br' : null;
 
   const enviar = async (e: FormEvent) => {
     e.preventDefault();
+    if (bloqueado) return;
     setTocado(true);
     if (!emailValido(email) || !senha) {
       setErro(!senha && emailValido(email) ? 'Digite a sua senha.' : 'Digite o e-mail e a senha.');
@@ -41,39 +77,52 @@ function FormEntrar({ demo, cadastroAberto }: { demo: boolean; cadastroAberto: b
     }
     setEnviando(true);
     setErro(null);
-    setSemEmpresa(false);
     try {
-      await api.post<Eu>('/auth/entrar', { email: email.trim(), senha });
-      navegar(destinoDepoisDeEntrar(busca.get('voltar')), { replace: true });
+      const entrada = await api.post<Entrada>('/auth/entrar', { email: email.trim(), senha, ...(convite ? { convite } : {}) });
+      if (convite && entrada.eu) {
+        // Convite aceito na entrada: a sessão já abriu na empresa do convite.
+        navegar(entrada.eu.emailConfirmado ? '/' : '/criar-conta', { replace: true });
+        return;
+      }
+      seguir(entrada, email.trim(), destino);
     } catch (ex) {
       const e = ex as ErroApiCliente;
-      if (e.erro === 'sem_empresa') setSemEmpresa(true);
-      else setErro(e.message);
+      if (e.erro === 'bloqueado' && e.extra.ate) {
+        setBloqueio({ email: email.trim().toLowerCase(), ate: e.extra.ate, mensagem: e.message });
+        setSenha('');
+      } else {
+        setErro(e.message);
+        // Senha errada: o e-mail continua preenchido e a senha volta vazia, com o foco nela.
+        if (e.erro === 'credenciais') {
+          setSenha('');
+          campoSenha.current?.focus();
+        }
+      }
     } finally {
       setEnviando(false);
     }
   };
 
   return (
-    <form className="stack" onSubmit={enviar} noValidate>
+    <form className="stack" onSubmit={enviar} noValidate aria-labelledby={`${id}-t`}>
+      {destino !== '/' ? <DepoisDeEntrar destino={destino} /> : null}
       <div className="stack-sm">
-        <h1 className="h2">Entrar no console</h1>
+        <h1 id={`${id}-t`} className="h2">
+          Entrar no Copiloto
+        </h1>
         <p className="muted">Acompanhe o que o copiloto faz e configure as tarefas dele.</p>
       </div>
-      {erro ? (
+      {bloqueado ? (
+        <div className="alert alert-warning" role="alert">
+          <Icone nome="cadeado" />
+          <div className="stack-sm" style={{ gap: 2 }}>
+            <p className="small strong">{bloqueado.mensagem}</p>
+            <p className="small">Você pode redefinir a senha agora.</p>
+          </div>
+        </div>
+      ) : erro ? (
         <Aviso tipo="erro" papel="alert">
           {erro}
-        </Aviso>
-      ) : null}
-      {semEmpresa ? (
-        <Aviso tipo="aviso" papel="alert" titulo="Seu acesso não está em nenhuma equipe agora">
-          {cadastroAberto ? (
-            <>
-              Peça um convite novo a um Admin da sua empresa ou <Link to="/criar-conta">crie a conta de uma empresa nova</Link>.
-            </>
-          ) : (
-            'Peça um convite novo a um Admin da sua empresa.'
-          )}
         </Aviso>
       ) : null}
       <Campo rotulo="E-mail" erro={erroEmail}>
@@ -87,25 +136,44 @@ function FormEntrar({ demo, cadastroAberto }: { demo: boolean; cadastroAberto: b
             onChange={(e) => setEmail(e.target.value)}
             onBlur={() => setTocado(true)}
             placeholder="nome@empresa.com.br"
-            autoFocus
+            autoFocus={!email}
           />
         )}
       </Campo>
-      <Campo rotulo="Senha">
-        {(p) => (
-          <div className="ca-senha">
-            <input {...p} type={verSenha ? 'text' : 'password'} autoComplete="current-password" value={senha} onChange={(e) => setSenha(e.target.value)} />
-            <button type="button" className="btn btn-ghost btn-sm ca-ver-senha" onClick={() => setVerSenha((v) => !v)} aria-pressed={verSenha}>
-              {verSenha ? 'Esconder' : 'Mostrar'}
-            </button>
-          </div>
-        )}
-      </Campo>
-      <Botao type="submit" variante="primario" tamanho="lg" bloco carregando={enviando}>
-        Entrar
-      </Botao>
+      {bloqueado ? (
+        <>
+          <Link className="btn btn-primary btn-lg btn-block" to="/senha" state={{ email: email.trim() }}>
+            Redefinir a senha
+          </Link>
+          <button className="btn btn-secondary btn-lg btn-block" type="button" disabled aria-describedby={`${id}-libera`}>
+            <Icone nome="relogio" tamanho="sm" />
+            Entrar
+          </button>
+          <p id={`${id}-libera`} className="tiny muted" style={{ textAlign: 'center' }}>
+            Entrar com senha volta a funcionar às {fmt.hora(bloqueado.ate)}.
+          </p>
+        </>
+      ) : (
+        <>
+          <CampoSenha
+            rotulo="Senha"
+            autoComplete="current-password"
+            valor={senha}
+            aoMudar={setSenha}
+            entrada={campoSenha}
+            acessorio={
+              <Link className="small strong" to="/senha" state={{ email: email.trim() }}>
+                Esqueci a senha
+              </Link>
+            }
+          />
+          <Botao type="submit" variante="primario" tamanho="lg" bloco carregando={enviando}>
+            Entrar
+          </Botao>
+        </>
+      )}
       {demo ? (
-        <div className="card-flat ca-dica-demo">
+        <div className="card-flat ca-nota">
           <Icone nome="info" tamanho="sm" />
           <p className="small">
             Dados de exemplo: <span className="mono">rafael.lima@seusistema.com.br</span> / <span className="mono">copiloto123</span>
@@ -113,11 +181,16 @@ function FormEntrar({ demo, cadastroAberto }: { demo: boolean; cadastroAberto: b
         </div>
       ) : null}
       {cadastroAberto ? (
-        <p className="small muted">
-          Sua empresa ainda não usa o copiloto? <Link to="/criar-conta">Criar a conta da sua empresa</Link>
-        </p>
+        <>
+          <hr className="divider" />
+          <p className="small muted" style={{ textAlign: 'center' }}>
+            Sua empresa ainda não usa o Copiloto?{' '}
+            <Link className="strong" to="/criar-conta">
+              Criar conta da empresa
+            </Link>
+          </p>
+        </>
       ) : null}
-      <p className="tiny muted">Esqueceu a senha? Peça a um Admin para reenviar o seu convite em Equipe e limites.</p>
     </form>
   );
 }
@@ -128,7 +201,7 @@ export default function Entrar() {
   const [tentativa, setTentativa] = useState(0);
 
   useEffect(() => {
-    document.title = 'Entrar · Copiloto';
+    document.title = 'Entrar · Copiloto Starta';
     let vivo = true;
     api
       .get<PrimeiroAcesso>('/auth/primeiro-acesso')
@@ -140,7 +213,24 @@ export default function Entrar() {
   }, [tentativa]);
 
   return (
-    <TelaDeEntrada>
+    <TelaDeEntrada
+      direita={
+        <Link className="small strong" to="/">
+          Conhecer o Copiloto
+        </Link>
+      }
+      rodape={
+        <>
+          <p className="small muted">
+            É da equipe da Starta?{' '}
+            <Link className="strong" to="/plataforma/entrar">
+              Entrar na plataforma
+            </Link>
+          </p>
+          <p className="tiny muted">O copiloto executa tarefas no seu sistema só depois do “confirmo” de quem pediu, com as permissões dessa pessoa.</p>
+        </>
+      }
+    >
       {erro && !estado ? (
         <EstadoErro erro={erro} aoTentar={() => setTentativa((n) => n + 1)} titulo="Não consegui falar com o servidor do copiloto" />
       ) : !estado ? (
