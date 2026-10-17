@@ -12,10 +12,11 @@ import {
   type FluxoComConserto,
   type MembroStarta,
   type NovaEmpresaStarta,
+  type Plano,
   type SuporteAberto,
 } from '@copiloto/shared';
 import type { ErroApiCliente } from '../../api/cliente.ts';
-import { apiPlataforma, useApiPlataforma, type PlanoStarta, type RegravacaoSugerida } from '../../api/plataforma.ts';
+import { apiPlataforma, useApiPlataforma, type RegravacaoSugerida } from '../../api/plataforma.ts';
 import { Botao } from '../../componentes/Botao.tsx';
 import { Campo } from '../../componentes/formulario.tsx';
 import { Icone } from '../../componentes/icones.tsx';
@@ -51,7 +52,7 @@ function paraCampoData(iso: string | null | undefined): string {
 }
 
 /** Planos para os campos de seleção; sem a lista, fica o plano atual (para não apagar sem querer). */
-function OpcoesPlano({ planos, atual }: { planos: PlanoStarta[] | undefined; atual: { id: string; nome: string } | null }) {
+function OpcoesPlano({ planos, atual }: { planos: Plano[] | undefined; atual: { id: string; nome: string } | null }) {
   const lista = planos ?? (atual ? [{ id: atual.id, nome: atual.nome }] : []);
   return (
     <>
@@ -68,7 +69,7 @@ function OpcoesPlano({ planos, atual }: { planos: PlanoStarta[] | undefined; atu
 // ---------------------------------------------------------------- Nova empresa
 
 export function ModalNovaEmpresa({ aberto, aoFechar, aoCriar }: { aberto: boolean; aoFechar: () => void; aoCriar: (id: string | null) => void }) {
-  const planos = useApiPlataforma<PlanoStarta[]>(aberto ? '/planos' : null);
+  const planos = useApiPlataforma<Plano[]>(aberto ? '/planos' : null);
   const [nome, setNome] = useState('');
   const [email, setEmail] = useState('');
   const [cnpj, setCnpj] = useState('');
@@ -225,7 +226,7 @@ export function ModalAcompanhamento({
   aoFechar: () => void;
   aoSalvar: (d: DetalheEmpresaStarta) => void;
 }) {
-  const planos = useApiPlataforma<PlanoStarta[]>(aberto ? '/planos' : null);
+  const planos = useApiPlataforma<Plano[]>(aberto ? '/planos' : null);
   const equipe = useApiPlataforma<MembroStarta[]>(aberto ? '/equipe' : null);
   const contrato = empresa.implantacao.find((e) => e.chave === 'contrato');
   const inicial = {

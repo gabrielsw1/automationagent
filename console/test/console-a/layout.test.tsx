@@ -169,6 +169,25 @@ describe('Moldura do console', () => {
     expect(recarregou).not.toHaveBeenCalled();
   });
 
+  it('"Plano e créditos" fica em Conta só para o Admin (e para a Starta no modo suporte)', async () => {
+    instalarFetch({});
+    const conta = () => within(within(screen.getByRole('navigation', { name: 'Menu principal' })).getByRole('group', { name: 'Conta' }));
+    renderizar(pagina, { caminho: '/painel' });
+    expect(conta().getAllByRole('link').map((l) => l.textContent)).toEqual(['Equipe e limites', 'Plano e créditos']);
+    expect(conta().getByRole('link', { name: 'Plano e créditos' }).getAttribute('href')).toBe('/plano');
+    cleanup();
+    renderizar(pagina, { caminho: '/painel', perfil: 'editor' });
+    expect(conta().queryByRole('link', { name: 'Plano e créditos' })).toBeNull();
+    cleanup();
+    renderizar(pagina, {
+      caminho: '/plano',
+      perfil: 'suporte',
+      eu: { modoSuporte: { pessoa: 'Gabriel Moreno', motivo: 'Ajuda com a fatura', ate: '2099-01-01T00:00:00.000Z' } },
+    });
+    expect(conta().getByRole('link', { name: 'Plano e créditos' }).getAttribute('aria-current')).toBe('page');
+    expect(document.title).toBe('Plano e créditos · Copiloto');
+  });
+
   it('só quem administra a plataforma vê "Empresas clientes"', async () => {
     instalarFetch({});
     renderizar(pagina, { caminho: '/painel', eu: { adminPlataforma: true } });

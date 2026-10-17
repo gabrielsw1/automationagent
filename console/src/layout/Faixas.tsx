@@ -56,9 +56,16 @@ export function FaixasDoResumo({ resumo }: { resumo: ResumoConsole }) {
             <p className="strong">
               Você usou {Math.floor(gasto.percentual * 100)}% do limite de gasto deste mês
             </p>
-            <p className="small">
-              {fmt.moeda(gasto.usado)} de {fmt.moeda(gasto.limite)}. Ao chegar a 100%, as tarefas pelo navegador pausam e as por API continuam.
-            </p>
+            {gasto.base === 'creditos' ? (
+              <p className="small">
+                {fmt.moeda(gasto.usado)} em créditos extras, de {fmt.moeda(gasto.limite)}. Ao chegar a 100%, as tarefas param até um Admin comprar um
+                pacote em <Link to="/plano">Plano e créditos</Link> ou aumentar o limite.
+              </p>
+            ) : (
+              <p className="small">
+                {fmt.moeda(gasto.usado)} de {fmt.moeda(gasto.limite)}. Ao chegar a 100%, as tarefas pelo navegador pausam e as por API continuam.
+              </p>
+            )}
             <div className="row wrap" style={{ gap: 'var(--s-3)' }}>
               <Link className="btn btn-secondary btn-sm" to="/equipe">
                 Ajustar limite

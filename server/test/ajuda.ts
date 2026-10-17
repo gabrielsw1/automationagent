@@ -165,6 +165,10 @@ export interface OpcoesAmbiente {
   dirDados?: string;
   /** Cria a demonstração como no primeiro início (semente e contas da equipe com a senha padrão). */
   semear?: boolean;
+  /** Troca partes da config (ex.: o Asaas ligado, EMAIL_VENDAS). */
+  config?: Partial<Config>;
+  /** `fetch` das chamadas ao Asaas (um falso: os testes não falam com o Asaas). */
+  fetch?: typeof fetch;
 }
 
 /**
@@ -173,7 +177,7 @@ export interface OpcoesAmbiente {
  * Feche com `app.close()`.
  */
 export async function criarAmbiente(opcoes: OpcoesAmbiente = {}): Promise<Ambiente> {
-  const config: Config = { ...lerConfig(), llmSimulado: true, dirDados: opcoes.dirDados ?? '/tmp/copiloto-teste-inexistente' };
+  const config: Config = { ...lerConfig(), llmSimulado: true, dirDados: opcoes.dirDados ?? '/tmp/copiloto-teste-inexistente', ...opcoes.config };
   const adaptador = (opcoes.adaptador as AdaptadorFalso | undefined) ?? new AdaptadorFalso();
   const correio = new CaixaLocal(null);
   const plataforma = new Plataforma(config, {
@@ -182,6 +186,7 @@ export async function criarAmbiente(opcoes: OpcoesAmbiente = {}): Promise<Ambien
     llm: (e) => (e.demo && opcoes.llm) || new LlmSimulado(),
     adaptador: (e) => (e.demo ? adaptador : undefined),
     navegador: (e) => (e.demo ? opcoes.navegador : undefined),
+    fetch: opcoes.fetch,
   });
   const seed = opcoes.semear ? semearPlataforma(plataforma) : undefined;
   const empresa =

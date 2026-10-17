@@ -19,7 +19,7 @@ export function BuscaEmpresa({ id, classe }: { id: string; classe?: string }) {
         id={id}
         className="input"
         type="search"
-        placeholder="Buscar empresa ou responsável"
+        placeholder="Buscar empresa, CNPJ ou responsável"
         value={valor}
         onChange={(e) => {
           const v = e.target.value;

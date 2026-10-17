@@ -1,6 +1,6 @@
 // Plataforma Starta: a área da equipe que vende e acompanha o copiloto (A7 e S7). Métricas por
 // empresa, nunca o conteúdo das conversas; o conteúdo só com "Entrar como suporte".
-import type { FaixaUsuarios, ModoAcesso } from './console.ts';
+import type { ConectorSistema, FaixaUsuarios, ModoAcesso } from './console.ts';
 
 // ---------- Créditos ----------
 
@@ -106,6 +106,8 @@ export interface LinhaEmpresaStarta {
   id: string;
   nome: string;
   iniciais: string;
+  /** Só dígitos; a busca da lista também acha por CNPJ. */
+  cnpj: string | null;
   demo: boolean;
   situacao: SituacaoEmpresa;
   fase: FaseEmpresa;
@@ -179,11 +181,12 @@ export interface AcessoSuporteResumo {
 
 export interface DetalheEmpresaStarta extends LinhaEmpresaStarta {
   dominio: string | null;
-  cnpj: string | null;
   faixaUsuarios: FaixaUsuarios | null;
   /** Limite de usuários do plano ("180 de 200"); null sem plano ou sem limite. */
   limiteUsuarios: number | null;
   acesso: ModoAcesso;
+  /** Como o copiloto fala com o sistema: pela API (sem login de pessoa) ou pela tela. */
+  conector: ConectorSistema;
   adminEmpresa: { nome: string; email: string } | null;
   criadoEm: string;
   metaTarefas: number | null;
@@ -219,6 +222,7 @@ export interface ModoSuporte {
 export interface UsoEmpresa {
   empresaId: string;
   nome: string;
+  demo: boolean;
   execucoes: number;
   creditos: number;
   creditosRoteiro: number;
@@ -234,7 +238,7 @@ export interface UsoPlataforma {
   desde: string;
   ate: string;
   empresas: UsoEmpresa[];
-  total: Omit<UsoEmpresa, 'empresaId' | 'nome'>;
+  total: Omit<UsoEmpresa, 'empresaId' | 'nome' | 'demo'>;
 }
 
 export interface SaudeFluxo extends FluxoComConserto {

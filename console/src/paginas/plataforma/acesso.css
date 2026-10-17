@@ -1,0 +1,24 @@
+/* Telas de acesso da Plataforma (A7 e ativação). Cores só por var(--token). */
+.cp-topo-escuro { background: var(--ink-900); border-bottom-color: var(--ink-900); color: var(--white); }
+.cp-topo-escuro .brandmark { color: var(--white); }
+.cp-restrito { gap: var(--s-2); color: var(--white); }
+.cp-acesso { width: 100%; max-width: 440px; margin: 0 auto; }
+.cp-registrado { width: 100%; max-width: 440px; margin: 0 auto; gap: var(--s-2); justify-content: center; }
+
+/* Botão escuro da Plataforma ("Continuar", "Entrar na plataforma"): o rosa fica para o console das empresas. */
+.btn.cp-btn-escuro:not([disabled]), .btn.cp-btn-escuro.is-loading { background: var(--ink-900); border-color: var(--ink-900); color: var(--white); }
+.btn.cp-btn-escuro:not([disabled]):hover { background: var(--ink-700); color: var(--white); }
+
+/* Código de 6 dígitos do aplicativo autenticador */
+.cp-codigo-2fa { height: 56px; font-family: var(--font-mono); font-size: var(--fs-24); letter-spacing: .3em; text-align: center; }
+.cp-codigo-recuperacao { font-family: var(--font-mono); letter-spacing: .08em; }
+.cp-link-centro { align-self: center; }
+
+/* Ativação: passos numerados, QR code e chave em blocos de 4 */
+.cp-passos { list-style: none; margin: 0; padding: 0; }
+.cp-passo { display: grid; grid-template-columns: 28px minmax(0, 1fr); gap: var(--s-3); }
+.cp-passo + .cp-passo { padding-top: var(--s-6); border-top: 1px solid var(--line); }
+.cp-passo-n { width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; background: var(--surface-2); color: var(--ink-900); font-size: var(--fs-13); font-weight: 700; }
+.cp-qr { width: 168px; height: 168px; padding: var(--s-2); border: 1px solid var(--line); border-radius: var(--r-md); background: var(--white); }
+.cp-chave { font-family: var(--font-mono); font-size: var(--fs-14); overflow-wrap: anywhere; text-wrap: balance; }
+.cp-guardei { padding: var(--s-3) var(--s-4); border-radius: var(--r-md); background: var(--surface); }

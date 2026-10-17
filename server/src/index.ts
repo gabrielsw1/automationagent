@@ -32,6 +32,8 @@ await app.listen({ port: config.porta, host: config.host });
 // Abre as empresas ativas para retomar o que ficou pela metade (base de conhecimento, execuções).
 const empresas = plataforma.listarEmpresas().filter((e) => e.status === 'ativa');
 for (const e of empresas) plataforma.contexto(e.id).conhecimento.retomar();
+// Fecha as faturas do mês anterior (agora e de hora em hora; não repete as que já existem).
+plataforma.faturas.iniciarFechamento();
 
 const modo = config.llmSimulado
   ? 'modelo SIMULADO (COPILOTO_LLM=simulado: respostas por regras, só para testes)'
@@ -39,6 +41,11 @@ const modo = config.llmSimulado
     ? `Claude ${config.modeloPrincipal} (rápido: ${config.modeloRapido})`
     : 'SEM a chave do Claude: defina ANTHROPIC_API_KEY. Até lá, o assistente avisa que não está ligado';
 console.log(`Copiloto no ar em ${config.urlPublica} · ${modo} · ${empresas.length} empresa(s) ativa(s)`);
+console.log(
+  config.asaas.chave
+    ? `Cobrança pelo Asaas (${config.asaas.ambiente}).${config.asaas.tokenWebhook ? '' : ' Defina ASAAS_WEBHOOK_TOKEN para receber os avisos de pagamento.'}`
+    : 'Cobrança manual: sem ASAAS_API_KEY, a equipe Starta envia as cobranças e marca as faturas como pagas na Plataforma.',
+);
 
 async function encerrar() {
   await app.close();

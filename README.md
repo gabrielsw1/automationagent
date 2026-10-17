@@ -158,7 +158,8 @@ O copiloto atende várias empresas no mesmo servidor. Cada empresa tem um banco 
 - **Widget por empresa:** cada empresa tem a própria chave pública e o próprio segredo de assinatura (Canais e widget › Segredo, só Admin vê; dá para gerar outro). Para empresas clientes, a assinatura do snippet é sempre obrigatória.
 - **Logo do widget:** em **Sua marca** ou em **Canais e widget › Aparência**, um PNG ou SVG quadrado de até 1 MB. O servidor confere o arquivo pelo conteúdo (SVG com script, eventos ou links externos é recusado) e guarda em `data/empresas/<id>/marca/`. O widget mostra o logo no topo e ao lado das respostas depois de **Publicar alterações**; sem logo, ou se a imagem não abrir, volta ao ícone padrão.
 - **Demonstração:** a empresa Horizonte continua sendo criada pelo seed, com o sistema de exemplo configurado pelas variáveis `SISTEMA_*`. As empresas novas não mexem nela.
-- **Painel da Starta:** quem está em `COPILOTO_ADMINS` vê, no console, a página **Empresas clientes**, com todas as empresas, uso dos últimos 30 dias e o botão de suspender ou reativar. Suspender derruba as sessões da empresa e para o widget dela.
+- **Plataforma Starta (`/plataforma`):** o painel interno da equipe Starta, com contas próprias, separadas das contas das empresas. Para entrar é preciso a senha e o código de 6 dígitos de um aplicativo autenticador (Google Authenticator, Microsoft Authenticator e parecidos), com 10 códigos de recuperação. Na primeira vez, cada e-mail de `COPILOTO_ADMINS` recebe um link de ativação, que também aparece no log do servidor. Depois disso, quem já está na equipe convida os outros em **Configurações**. O painel mostra as empresas com métricas e nunca o conteúdo das conversas, além de implantações, uso e custos, saúde dos fluxos, suporte e os preços dos planos. Pausar uma empresa derruba as sessões dela e para o widget. **Entrar como suporte** abre o console da empresa por 60 minutos com o perfil Suporte, pede o motivo, registra na auditoria da empresa e avisa os Admins dela por e-mail.
+- **Créditos:** cada execução concluída gasta 1 crédito pelo roteiro gravado, ou 5 quando o agente visual consertou um passo. Testes não gastam. Um fluxo com mais de 10 consertos em 30 dias aparece como quebrado no painel da Starta.
 - **Segredos:** a senha da conta de serviço de cada empresa é cifrada no banco (AES-256-GCM) com `COPILOTO_CHAVE_MESTRA` e nunca volta para o console.
 
 ## Ligar ao sistema de uma empresa
@@ -200,11 +201,18 @@ Para um sistema com API, dá para escrever um adaptador em `server/src/adaptador
 | `ANTHROPIC_API_KEY` | Chave do Claude. Defina como variável de ambiente, nunca em arquivo. |
 | `SESSAO_SEGREDO` | Assina as sessões do console e os tokens do widget. Troque em produção. |
 | `COPILOTO_CHAVE_MESTRA` | Cifra os segredos das empresas no banco. Sem ela, deriva do `SESSAO_SEGREDO`. Guarde-a: sem ela, as senhas das contas de serviço não abrem. |
-| `COPILOTO_ADMINS` | E-mails (separados por vírgula) que veem o painel **Empresas clientes**. |
+| `COPILOTO_ADMINS` | E-mails (separados por vírgula) da equipe Starta. Na primeira vez que o servidor sobe, cada e-mail sem conta recebe o link para ativar o acesso à Plataforma (senha e aplicativo autenticador); o link também sai no log. |
 | `COPILOTO_CADASTRO` | `fechado` desliga o cadastro de empresas novas pela tela de entrada. |
-| `EMAIL_VENDAS` | Recebe por e-mail os pedidos de **Agendar demonstração** e **Falar com vendas** do site. Sem ela, os pedidos ficam só no banco da plataforma. |
+| `EMAIL_VENDAS` | Recebe por e-mail os pedidos de **Agendar demonstração** e **Falar com vendas** do site, os pedidos de **Mudar de plano** e, na cobrança manual, cada fatura a cobrar. Sem ela, tudo fica só no banco da plataforma. |
 | `TEXTOS_LEGAIS_DIR` | Pasta com os textos jurídicos aprovados (`termos.md`, `privacidade.md`, `contrato-lgpd.md`). O texto que faltar ali vem da minuta em `docs/legal`, com o aviso de revisão jurídica. |
 | `PUBLIC_URL` e `CONSOLE_URL` | Endereços públicos do servidor e do console (links de arquivos e de convite). |
+| `ASAAS_API_KEY` | Chave da conta do Asaas que cobra as faturas e os pacotes de créditos. Sem ela, a cobrança é manual (a Starta envia por e-mail e marca como paga no painel). No PowerShell, use aspas simples: `$env:ASAAS_API_KEY = '$aact_...'`. |
+| `ASAAS_AMBIENTE` | `sandbox` (padrão, para testar) ou `producao`. |
+| `ASAAS_WEBHOOK_TOKEN` | Token que você cadastra no webhook do Asaas, apontado para `{PUBLIC_URL}/api/pagamentos/asaas`. Sem ele, os avisos de pagamento são recusados. |
+| `ASAAS_NOTA_FISCAL` | `1` emite a nota fiscal de serviço pelo Asaas a cada fatura paga (precisa dos dados fiscais configurados na conta do Asaas). |
+| `ASAAS_NF_SERVICO_ID` ou `ASAAS_NF_SERVICO_CODIGO` | Serviço municipal da nota fiscal: o id no Asaas ou o código da prefeitura. |
+| `ASAAS_NF_SERVICO_NOME` | Descrição do serviço na nota fiscal. |
+| `ASAAS_NF_IMPOSTOS` | Impostos da nota, em percentuais: `iss=2,pis=0.65,cofins=3,reterIss=0` (o que faltar é zero). |
 
 As outras variáveis estão em `.env.example`.
 
