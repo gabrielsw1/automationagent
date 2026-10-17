@@ -282,7 +282,11 @@ console-b:
 
 navegador: `GET /fluxos` → `Fluxo[]`; `POST /fluxos {nome, tarefaId?, urlInicial}` → `{ fluxo, token, urlGravacao }`;
 `GET /fluxos/:id`; `PUT /fluxos/:id` (revisar/mapear); `POST /fluxos/:id/aprender` (Claude transforma os eventos em passos e sugere campos);
-`POST /fluxos/:id/testar {valores, usuarioId}`; `POST /fluxos/:id/publicar`; `DELETE /fluxos/:id`; `GET /prints/:id` (imagem).
+`POST /fluxos/:id/testar {valores, usuarioId}`; `POST /fluxos/:id/publicar`; `DELETE /fluxos/:id`; `GET /prints/:id` (imagem);
+`GET /prints/:id/info`; `GET /fluxos/:id/gravacao` (passos gravados até agora, para o "N passos até agora" ao vivo);
+`POST /fluxos/:id/gravar` (abre uma gravação nova para o fluxo); `POST /fluxos/:id/concluir-gravacao`; `POST /fluxos/:id/cancelar-gravacao`;
+`POST /fluxos/:id/nova-versao` (fluxo publicado fica só leitura: editar cria versão nova); `POST /fluxos/:id/criar-tarefa`.
+Execuções de teste usam IDs `teste_*`, gravam o uso do Claude com `execucao_id` nulo e penduram os prints no fluxo.
 
 conhecimento: `GET /conhecimento/fontes` → `FonteConhecimento[]`; `POST /conhecimento/fontes/site {url, limitePaginas?}`;
 `POST /conhecimento/fontes/arquivo` (multipart: PDF, DOCX, TXT, MD); `POST /conhecimento/fontes/video` (transcrição .vtt/.srt ou texto);

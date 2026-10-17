@@ -70,7 +70,7 @@ const TIPOS_ANEXO: Record<string, string> = {
   '.xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
   '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
 };
-const LIMITE_ANEXO = 10 * 1024 * 1024;
+const LIMITE_ANEXO = 25 * 1024 * 1024;
 
 function hostDe(origem: string | undefined): string | null {
   if (!origem) return null;
@@ -456,7 +456,7 @@ const rotas: FastifyPluginAsync = async (app) => {
     const ext = path.extname(arquivo.filename).toLowerCase();
     if (!TIPOS_ANEXO[ext]) throw pedidoInvalido('Tipo de arquivo não aceito. Envie PDF, imagem, planilha, DOCX ou TXT.');
     const buffer = await arquivo.toBuffer();
-    if (buffer.length > LIMITE_ANEXO) throw new ErroHttp(413, 'arquivo_grande', 'O arquivo passa de 10 MB.');
+    if (buffer.length > LIMITE_ANEXO) throw new ErroHttp(413, 'arquivo_grande', 'O arquivo passa de 25 MB.');
     const id = novoId('anx');
     const dir = path.join(ctx.config.dirDados, 'anexos');
     fs.mkdirSync(dir, { recursive: true });
