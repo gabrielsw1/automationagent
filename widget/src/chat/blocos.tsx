@@ -375,7 +375,10 @@ export function CartaoRecibo({ bloco }: { bloco: BlocoDe<'recibo'> }) {
   const restante = temJanela ? limite - agora : 0;
   const { min, seg } = partesTempo(restante);
   const link = bloco.link ? acoes.link(bloco.link.url) : null;
-  const viaNavegador = /navegador/i.test(bloco.resumo);
+  const viaNavegador = /navegador|pela tela/i.test(bloco.resumo);
+  // O código da execução vem logo depois do resumo; se o resumo já termina com ele, não repete.
+  const sufixo = ` · ${bloco.execucaoId}`;
+  const resumo = bloco.resumo.endsWith(sufixo) ? bloco.resumo.slice(0, -sufixo.length) : bloco.resumo;
   return (
     <section className={`action-card cp-cartao cp-recibo${bloco.desfeito ? ' cp-recibo-desfeito' : ''}`} aria-labelledby={id}>
       <div className="ac-head cp-ac-sucesso">
@@ -390,7 +393,7 @@ export function CartaoRecibo({ bloco }: { bloco: BlocoDe<'recibo'> }) {
         <p className="row tiny muted cp-gap-6">
           <Icone nome={viaNavegador ? 'janela' : 'codigo'} tamanho="sm" />
           <span>
-            {bloco.resumo} · <span className="mono">{bloco.execucaoId}</span>
+            {resumo} · <span className="mono">{bloco.execucaoId}</span>
           </span>
         </p>
       </div>
@@ -508,6 +511,7 @@ export function CartaoConflito({ bloco }: { bloco: BlocoDe<'conflito'> }) {
   const id = useId();
   const { existente } = bloco;
   const temAbrir = bloco.acoes.some((a) => a.acao === 'abrir');
+  const podeAtualizar = bloco.acoes.some((a) => a.acao === 'atualizar');
   return (
     <>
       <section className="card cp-conflito" aria-labelledby={id}>
@@ -526,7 +530,9 @@ export function CartaoConflito({ bloco }: { bloco: BlocoDe<'conflito'> }) {
         )}
       </section>
       <p className="small cp-recuo-4">
-        Como prefere seguir? Se escolher atualizar, mostro o que muda e peço sua confirmação antes.
+        {podeAtualizar
+          ? 'Como prefere seguir? Se escolher atualizar, mostro o que muda e peço sua confirmação antes.'
+          : 'Como prefere seguir?'}
       </p>
       <BotoesAcao acoes={bloco.acoes} execucaoId={bloco.execucaoId} />
     </>
@@ -618,16 +624,12 @@ export function CartaoAprovacao({ bloco }: { bloco: BlocoDe<'aprovacao'> }) {
         </div>
       ) : (
         <div className="ac-foot cp-ac-estado cp-ac-coluna-esq">
+          {/* O aviso "Pedido de aprovação enviado a …" vem logo abaixo, na mensagem seguinte (W7). */}
           {bloco.estado === 'enviada' && (
-            <>
-              <span className="badge badge-warning">
-                <Icone nome="relogio" tamanho="sm" />
-                Aguardando aprovação
-              </span>
-              <span className="small">
-                {nome ? `Pedido enviado a ${nome}. Aviso você aqui quando responder.` : 'Pedido enviado. Aviso você aqui quando responderem.'}
-              </span>
-            </>
+            <span className="badge badge-warning">
+              <Icone nome="relogio" tamanho="sm" />
+              Aguardando aprovação
+            </span>
           )}
           {bloco.estado === 'aprovada' && (
             <>

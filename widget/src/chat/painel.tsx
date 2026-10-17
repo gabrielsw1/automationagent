@@ -19,12 +19,15 @@ export function useChat(controlador: ControladorChat): EstadoChat {
 export function Cabecalho({
   nome,
   estado,
+  semConexao,
   aoNovaConversa,
   aoMinimizar,
   aoFechar,
 }: {
   nome: string;
   estado?: EstadoChat['estadoConversa'];
+  /** Sem internet ou com o canal de eventos caindo: mostra "Reconectando" no lugar de "Online" (W6). */
+  semConexao?: boolean;
   aoNovaConversa?: () => void;
   aoMinimizar?: () => void;
   aoFechar?: () => void;
@@ -44,9 +47,16 @@ export function Cabecalho({
         ) : (
           <div className="title cp-truncar">{nome}</div>
         )}
-        <div className={`status${esperando ? ' cp-status-espera' : ''}`}>
-          {pessoa ? `${pessoa.papel} · Online` : esperando ? 'Chamando uma pessoa do suporte' : 'Online'}
-        </div>
+        {semConexao ? (
+          <div className="status cp-status-sem-rede">
+            <Icone nome="semRede" tamanho="sm" />
+            Reconectando
+          </div>
+        ) : (
+          <div className={`status${esperando ? ' cp-status-espera' : ''}`}>
+            {pessoa ? `${pessoa.papel} · Online` : esperando ? 'Chamando uma pessoa do suporte' : 'Online'}
+          </div>
+        )}
       </div>
       {aoNovaConversa && (
         <button type="button" className="btn btn-ghost btn-icon btn-sm" aria-label="Nova conversa" title="Nova conversa" onClick={aoNovaConversa}>
@@ -186,9 +196,10 @@ export function BoasVindas({
     <div className="stack cp-boas-vindas">
       <section className="stack-sm cp-ola">
         <AvatarCopiloto tamanho="lg" />
-        <h1 className="h3">
+        {/* h2: no console o chat fica dentro de uma página que já tem o seu h1. */}
+        <h2 className="h3">
           {fmt.saudacao()}, {primeiroNome}.
-        </h1>
+        </h2>
         <p className="muted">{boasVindas}</p>
         {secao && (
           <div className="row">
@@ -230,8 +241,8 @@ export function BoasVindas({
             {recentes.slice(0, 4).map((r) => {
               const s = STATUS_RECENTE[r.status] ?? { classe: '', texto: r.status };
               return (
-                <li key={r.execucaoId} className="row between cp-recente">
-                  <div className="stack-sm grow cp-gap-2 cp-min0">
+                <li key={r.execucaoId} className="cp-recente">
+                  <div className="stack-sm cp-gap-2 cp-min0">
                     <span className="small strong">{r.titulo}</span>
                     <span className="tiny muted">
                       {fmt.quando(r.quando)} · <span className="mono">{r.execucaoId}</span>
@@ -279,12 +290,25 @@ export interface PropsPainel {
   aoMinimizar?: () => void;
   /** Quando passa a true, rola até o fim e põe o foco na caixa de mensagem. */
   visivel?: boolean;
+  /** false: não põe o foco na caixa de mensagem ao abrir (o chat embutido numa página não a rola). Padrão true. */
+  focarAoAbrir?: boolean;
   altura?: number | string;
   className?: string;
   estilo?: CSSProperties;
 }
 
-export function Painel({ controlador, modo, contextoPagina, aoFechar, aoMinimizar, visivel = true, altura, className, estilo }: PropsPainel) {
+export function Painel({
+  controlador,
+  modo,
+  contextoPagina,
+  aoFechar,
+  aoMinimizar,
+  visivel = true,
+  focarAoAbrir = true,
+  altura,
+  className,
+  estilo,
+}: PropsPainel) {
   const estado = useChat(controlador);
   const inicio = controlador.inicio;
   const composer = useRef<ControleComposer>(null);
@@ -330,17 +354,25 @@ export function Painel({ controlador, modo, contextoPagina, aoFechar, aoMinimiza
   }, [controlador, modo]);
 
   // Rola até o fim quando chega coisa nova (se a pessoa já estava perto do fim ou acabou de enviar).
+  // Nas boas-vindas (W1) fica no topo, com a saudação à vista.
   const ultima = estado.mensagens[estado.mensagens.length - 1];
   useLayoutEffect(() => {
     const el = corpo.current;
     if (!el) return;
+    if (estado.tela !== 'conversa') return;
     if (pertoDoFim.current || (ultima && ultima.autor === 'usuario')) el.scrollTop = el.scrollHeight;
   }, [estado.mensagens, estado.digitando, estado.estadoConversa, estado.tela, ultima]);
+
+  // Ao voltar às boas-vindas ("Nova conversa"), começa do topo, não da rolagem da conversa anterior.
+  useLayoutEffect(() => {
+    if (estado.tela === 'boas_vindas' && corpo.current) corpo.current.scrollTop = 0;
+  }, [estado.tela]);
 
   useEffect(() => {
     if (!visivel) return;
     const el = corpo.current;
     if (el && estado.tela === 'conversa') el.scrollTop = el.scrollHeight;
+    if (!focarAoAbrir) return;
     const t = setTimeout(() => composer.current?.focar(), 30);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -441,6 +473,7 @@ export function Painel({ controlador, modo, contextoPagina, aoFechar, aoMinimiza
         <Cabecalho
           nome={inicio.config.nome}
           estado={estado.estadoConversa}
+          semConexao={!estado.online || estado.conexao === 'instavel' || estado.conexao === 'reconectando'}
           aoNovaConversa={temConversa ? () => controlador.novaConversa() : undefined}
           aoMinimizar={aoMinimizar}
           aoFechar={aoFechar}

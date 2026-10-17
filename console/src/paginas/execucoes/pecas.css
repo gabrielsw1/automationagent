@@ -3,9 +3,6 @@
 .cb-pagina { display: flex; flex-direction: column; gap: var(--s-6); min-width: 0; }
 .cb-spinner-sm { width: 12px; height: 12px; }
 
-/* Faixa de sem conexão */
-.cb-faixa-offline { padding: 10px 14px; background: var(--ink-900); color: var(--white); gap: var(--s-2); border-radius: var(--r-md); position: sticky; top: 0; z-index: 30; }
-
 /* Esqueleto */
 .cb-esqueleto { overflow: hidden; }
 .cb-esqueleto-cab { padding: 10px 14px; background: var(--surface); border-bottom: 1px solid var(--line); }
@@ -95,6 +92,8 @@
 .cb-previa-caixa { width: 100%; max-width: 360px; height: 560px; }
 .cb-previa-launcher { max-width: 360px; }
 .cb-aba-desligada { cursor: not-allowed; opacity: .75; }
+/* Selo com texto longo (ex.: "Detectado em <origem> há 3 min"): quebra a linha no celular em vez de vazar. */
+.cb-selo-quebra { white-space: normal; height: auto; min-height: 24px; padding-top: 2px; padding-bottom: 2px; max-width: 100%; overflow-wrap: anywhere; }
 .cb-cor-amostra { width: 20px; height: 20px; border-radius: 6px; border: 1px solid var(--line-strong); display: inline-block; flex: none; }
 @media (max-width: 760px) { .cb-previa { position: static; } .cb-snippet { padding-right: var(--s-4); padding-top: 56px; } }
 

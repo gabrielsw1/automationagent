@@ -42,6 +42,8 @@
 /* ---------- cabeçalho ---------- */
 .widget-head .status.cp-status-espera { color: var(--warning-700); }
 .widget-head .status.cp-status-espera::before { background: var(--warning-500); }
+.widget-head .status.cp-status-sem-rede { color: var(--warning-700); }
+.widget-head .status.cp-status-sem-rede::before { display: none; }
 
 /* ---------- faixas ---------- */
 .cp-faixas { flex: none; display: flex; flex-direction: column; gap: var(--s-2); padding: var(--s-2) var(--s-3); background: var(--surface); border-bottom: 1px solid var(--line); }
@@ -58,7 +60,10 @@
 .cp-ola { gap: 10px; padding-top: var(--s-2); }
 .cp-voltar { margin-left: calc(-1 * var(--s-3)); }
 .cp-recentes { list-style: none; margin: 0; padding: 0; overflow: hidden; }
-.cp-recente { padding: var(--s-3) 14px; }
+.cp-recente { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--s-1) var(--s-3); padding: var(--s-3) 14px; }
+/* Em telas estreitas o selo desce para baixo do título, em vez de passar por cima dele. */
+.cp-recente > .stack-sm { flex: 1 1 120px; overflow-wrap: anywhere; }
+.cp-recente > .badge { flex: none; }
 .cp-recente + .cp-recente { border-top: 1px solid var(--line); }
 
 /* ---------- mensagens ---------- */
@@ -107,8 +112,8 @@
 .cp-cartao .ac-body.cp-gap-12 { gap: var(--s-3); }
 .cp-cartao .ac-body.cp-gap-10 { gap: 10px; }
 .cp-cartao .ac-foot { flex-wrap: wrap; align-items: center; }
-.cp-ac-coluna { flex-direction: column; align-items: stretch; }
-.cp-ac-coluna-esq { flex-direction: column; align-items: flex-start; gap: 6px; }
+.cp-cartao .ac-foot.cp-ac-coluna { flex-direction: column; align-items: stretch; }
+.cp-cartao .ac-foot.cp-ac-coluna-esq { flex-direction: column; align-items: flex-start; gap: 6px; }
 .cp-ac-estado { background: var(--surface); }
 .action-card .ac-head.cp-ac-sucesso { background: var(--success-50); border-bottom-color: var(--line); color: var(--success-700); }
 .action-card .ac-head.cp-ac-erro { background: var(--danger-50); border-bottom-color: var(--line); color: var(--danger-700); }

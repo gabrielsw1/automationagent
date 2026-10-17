@@ -10,7 +10,6 @@ import {
   AvisoErro,
   ErroAcao,
   EsqueletoTabela,
-  FaixaOffline,
   Icone,
   Modal,
   rotuloCanal,
@@ -131,7 +130,6 @@ export default function DetalheExecucao() {
     }
     return (
       <div className="cb-pagina">
-        <FaixaOffline />
         <Link className="cb-voltar" to="/execucoes">
           <Icone nome="anterior" tamanho="sm" />
           Execuções
@@ -170,7 +168,6 @@ export default function DetalheExecucao() {
 
   return (
     <div className="cb-pagina">
-      <FaixaOffline />
       <Link className="cb-voltar" to="/execucoes">
         <Icone nome="anterior" tamanho="sm" />
         Execuções

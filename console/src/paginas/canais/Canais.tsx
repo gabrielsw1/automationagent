@@ -12,7 +12,6 @@ import {
   BotaoCopiar,
   ErroAcao,
   EsqueletoTabela,
-  FaixaOffline,
   Icone,
   Modal,
   useAgora,
@@ -144,7 +143,6 @@ export default function Canais() {
   if (!dados) {
     return (
       <div className="cb-pagina">
-        <FaixaOffline />
         <Cabecalho />
         {erro ? (
           <AvisoErro erro={erro} titulo="Não conseguimos carregar a configuração do widget" aoTentar={() => void recarregar()} />
@@ -295,7 +293,6 @@ function EditorCanais({
 
   return (
     <div className="cb-pagina">
-      <FaixaOffline />
       <Cabecalho>
         {podeEditar ? (
           <div className="row wrap">
@@ -806,12 +803,12 @@ function Instalacao({
 
   return (
     <section className="card" aria-labelledby="t-instal">
-      <div className="card-head">
+      <div className="card-head cb-card-head-wrap">
         <h2 className="h4" id="t-instal">
           Instalação
         </h2>
         {servidor.instalacao ? (
-          <span className="badge badge-success" title={fmt.dataHora(servidor.instalacao.vistoEm)}>
+          <span className="badge badge-success cb-selo-quebra" title={fmt.dataHora(servidor.instalacao.vistoEm)}>
             <Icone nome="check" tamanho="sm" />
             Detectado em {servidor.instalacao.origem} {fmt.haQuanto(servidor.instalacao.vistoEm, new Date(agora))}
           </span>

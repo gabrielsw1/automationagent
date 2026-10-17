@@ -220,12 +220,18 @@ export function SeloStatus({ status }: { status: StatusExecucao }) {
 export function SeloCaminho({ caminho }: { caminho: Caminho | null }) {
   if (caminho === 'api') {
     return (
-      <span className="badge badge-info">API</span>
+      <span className="badge badge-info">
+        <Icone nome="api" tamanho="sm" />
+        API
+      </span>
     );
   }
   if (caminho === 'navegador') {
     return (
-      <span className="badge badge-accent">Navegador</span>
+      <span className="badge badge-accent">
+        <Icone nome="navegador" tamanho="sm" />
+        Navegador
+      </span>
     );
   }
   return <span className="small muted">—</span>;
@@ -278,16 +284,7 @@ export function useDemorou(ativo: boolean, ms = 10_000): boolean {
 
 // ---------- Estados ----------
 
-export function FaixaOffline() {
-  const online = useOnline();
-  if (online) return null;
-  return (
-    <div className="cb-faixa-offline row" role="status">
-      <Icone nome="semConexao" />
-      <span className="small">Você está sem internet. Alterações não salvas ficam guardadas neste navegador.</span>
-    </div>
-  );
-}
+// A faixa "Você está sem internet" é global (layout/Faixas.tsx); as telas só desativam o que grava.
 
 /** Erro ao carregar uma lista ou tela (Estados-Console "Erro ao carregar"). */
 export function AvisoErro({

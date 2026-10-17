@@ -194,7 +194,13 @@ export function ChatDeTeste({
             requestAnimationFrame(() => window.scrollTo({ top: y }));
           }}
         >
-          <ChatCopiloto key={`${token}:${reinicio ?? ''}`} token={token} altura={altura} aoFechar={aoFechar} />
+          <ChatCopiloto
+            key={`${token}:${reinicio ?? ''}`}
+            token={token}
+            altura={altura}
+            aoFechar={aoFechar}
+            focarAoAbrir={focarAoAbrir}
+          />
         </div>
       ) : (
         <div className="card stack-sm ca-chat-carregando" style={{ height: altura }} aria-busy="true">

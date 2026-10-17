@@ -11,8 +11,9 @@
 .estado-erro p.small { max-width: 640px; }
 
 /* ---------- Moldura ---------- */
-.ca-pular { position: absolute; left: var(--s-4); top: -60px; z-index: 100; padding: var(--s-2) var(--s-4); background: var(--white); border-radius: var(--r-md); box-shadow: var(--sh-lg); font-weight: 600; }
-.ca-pular:focus { top: var(--s-2); }
+.ca-pular { position: absolute; left: var(--s-4); top: -60px; z-index: 100; padding: var(--s-2) var(--s-4); background: var(--white); border-radius: var(--r-md); font-weight: 600; }
+/* A sombra só aparece com o foco: escondido acima da tela, ela vazava no topo da barra lateral. */
+.ca-pular:focus { top: var(--s-2); box-shadow: var(--sh-lg); }
 .ca-app { flex-wrap: nowrap; }
 .ca-sidebar { flex: 0 0 248px; position: sticky; top: 0; height: 100vh; overflow-y: auto; }
 .ca-sidebar .brandmark, .ca-marca { color: var(--ink-900); }

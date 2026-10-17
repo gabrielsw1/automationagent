@@ -7,7 +7,6 @@ import { useApi, useEventosConsole } from '../../api/hooks.ts';
 import {
   AvisoErro,
   EsqueletoTabela,
-  FaixaOffline,
   Icone,
   ROTULO_STATUS,
   rotuloCanal,
@@ -145,7 +144,6 @@ export default function ListaExecucoes() {
 
   return (
     <div className="cb-pagina">
-      <FaixaOffline />
       <div className="page-head">
         <div className="stack-sm">
           <h1 className="h1">Execuções</h1>

@@ -18,6 +18,10 @@ const ICONE_SISTEMA: Record<NonNullable<MensagemWidget['icone']>, NomeIcone> = {
 };
 
 const BLOCOS_FORA = new Set(['coleta', 'sugestoes', 'avaliacao']);
+/** Blocos de uma mensagem de continuação depois do recibo ("Quer seguir com a ACME?"). */
+const BLOCOS_CONTINUACAO = new Set(['sugestoes', 'avaliacao']);
+/** No conflito (W6) a pergunta fica embaixo do cartão, como no design; o servidor também a manda no texto. */
+const PERGUNTA_CONFLITO = /\s*Como prefere seguir\?[^\n]*$/;
 
 export function rotuloDia(iso: string, agora = new Date()): string {
   const dia = fmt.data(iso);
@@ -112,11 +116,18 @@ function MensagemBot({
   const comFontes = m.blocos.some((b) => b.tipo === 'fontes');
   const esperandoTexto = m.emAndamento && !m.texto && !coleta;
   const execucaoConflito = m.blocos.find((b) => b.tipo === 'conflito')?.execucaoId;
+  const textoBolha = execucaoConflito && m.texto ? m.texto.replace(PERGUNTA_CONFLITO, '') : m.texto;
+  // A nota não repete o código da execução, o "Pode fechar esta janela" que o cartão de progresso já mostra,
+  // nem o horário do atendimento humano enquanto ele aparece embaixo da caixa de mensagem (W8).
+  const horarioNoRodape =
+    estadoConversa.modo !== 'copiloto' && m.nota === `Atendimento por pessoas: ${inicio.config.atendimentoHumano.horario}`;
+  const nota =
+    m.nota && m.nota !== execucaoConflito && !horarioNoRodape && !m.blocos.some((b) => b.tipo === 'progresso') ? m.nota : null;
   const papel = estadoConversa.modo === 'pessoa' ? estadoConversa.atendente.papel : 'Suporte';
   const nomePessoa = m.autorNome ?? (estadoConversa.modo === 'pessoa' ? estadoConversa.atendente.nome : 'Suporte');
   const iniciais =
     m.autorIniciais ?? (estadoConversa.modo === 'pessoa' && !m.autorNome ? estadoConversa.atendente.iniciais : fmt.iniciais(nomePessoa));
-  const temBolha = Boolean(m.texto) || Boolean(coleta) || esperandoTexto;
+  const temBolha = Boolean(textoBolha) || Boolean(coleta) || esperandoTexto;
   const abrir = (url: string) => {
     const l = acoes.link(url);
     window.open(l.href, l.target ?? '_self', 'noopener');
@@ -135,7 +146,7 @@ function MensagemBot({
           )}
           {temBolha && (
             <div className={`bubble${pessoa ? ' cp-bolha-pessoa' : ''}${coleta ? ' cp-bolha-coleta' : ''}${esperandoTexto ? ' cp-bolha-digitando' : ''}`}>
-              {m.texto ? <Markdown texto={m.texto} citacoes={comFontes} abrir={abrir} /> : null}
+              {textoBolha ? <Markdown texto={textoBolha} citacoes={comFontes} abrir={abrir} /> : null}
               {esperandoTexto && (
                 <>
                   <div className="typing" aria-hidden="true">
@@ -161,7 +172,7 @@ function MensagemBot({
                   <span className="mono">{execucaoConflito}</span>
                 </>
               )}
-              {m.nota && ` · ${m.nota}`}
+              {nota && ` · ${nota}`}
             </div>
           )}
         </div>
@@ -256,9 +267,18 @@ export function ListaMensagens({
     );
   });
 
-  const ultima = mensagens[mensagens.length - 1];
+  // "Novo pedido" (W5): a conversa terminou num recibo, seguido no máximo da continuação com sugestões e avaliação.
+  let iRecibo = mensagens.length - 1;
+  while (iRecibo >= 0 && !mensagens[iRecibo].blocos.some((b) => b.tipo === 'recibo')) iRecibo--;
   const terminouComRecibo =
-    ultima && !ultima.emAndamento && ultima.blocos.some((b) => b.tipo === 'recibo') && !estado.digitando;
+    iRecibo >= 0 &&
+    !estado.digitando &&
+    mensagens
+      .slice(iRecibo)
+      .every(
+        (m, i) =>
+          !m.emAndamento && (i === 0 || (m.autor === 'copiloto' && m.blocos.every((b) => BLOCOS_CONTINUACAO.has(b.tipo)))),
+      );
 
   return (
     <>

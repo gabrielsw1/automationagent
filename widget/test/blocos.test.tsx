@@ -225,6 +225,36 @@ describe('blocos', () => {
     expect(screen.getAllByText('EX-20431').length).toBeGreaterThan(0);
   });
 
+  it('não repete a pergunta do conflito, o código da execução nem o resumo do recibo (W5, W6)', () => {
+    const { container } = renderizar([
+      bot(
+        [
+          {
+            tipo: 'conflito',
+            execucaoId: 'EX-20431',
+            existente: { titulo: 'ACME Log Ltda', codigo: '#3190', campos: [] },
+            acoes: [{ rotulo: 'Falar com uma pessoa', acao: 'humano' }],
+          },
+        ],
+        'Não consegui criar o cadastro. Nada novo foi gravado.\n\nComo prefere seguir?',
+        { nota: 'EX-20431' },
+      ),
+      bot(
+        [{ tipo: 'recibo', execucaoId: 'EX-20432', titulo: 'Cliente criado', campos: [], resumo: 'Feito via API em 4 s · EX-20432' }],
+        undefined,
+      ),
+      bot([{ tipo: 'sugestoes', itens: [{ rotulo: 'Agendar visita', mensagem: 'agenda visita' }] }], 'Quer seguir com a ACME?'),
+    ]);
+    // Sem "atualizar" entre as ações, a pergunta fica curta, e aparece uma vez só (embaixo do cartão).
+    expect(screen.getAllByText(/Como prefere seguir\?/)).toHaveLength(1);
+    expect(screen.queryByText(/Se escolher atualizar/)).toBeNull();
+    expect(container.textContent).not.toContain('EX-20431 · EX-20431');
+    expect(container.textContent).toContain('Feito via API em 4 s · EX-20432');
+    expect(container.textContent).not.toContain('EX-20432 · EX-20432');
+    // O recibo seguido só da continuação ainda oferece "Novo pedido".
+    expect(screen.getByRole('button', { name: /Novo pedido/ })).toBeTruthy();
+  });
+
   it('erro: título, detalhe, código de referência e ações', async () => {
     const executarAcao = vi.fn(async () => {});
     renderizar(

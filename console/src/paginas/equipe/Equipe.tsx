@@ -19,7 +19,6 @@ import {
   BotaoCopiar,
   ErroAcao,
   EsqueletoTabela,
-  FaixaOffline,
   Icone,
   Modal,
   useOnline,
@@ -81,7 +80,6 @@ export default function Equipe() {
 
   return (
     <div className="cb-pagina">
-      <FaixaOffline />
       <div className="page-head">
         <div className="stack-sm">
           <h1 className="h1">Equipe e limites</h1>
@@ -994,6 +992,7 @@ function SemAcesso({ titulo, texto, admins, assunto }: { titulo: string; texto: 
         </p>
         {admin ? (
           <a className="btn btn-primary" href={`mailto:${admin.email}?subject=${encodeURIComponent(assunto)}`}>
+            <Icone nome="enviar" tamanho="sm" />
             Pedir acesso a {nomeDe(admin)}
           </a>
         ) : null}
@@ -1066,7 +1065,14 @@ function SecaoAuditoria({ podeAdministrar, admins }: { podeAdministrar: boolean;
                     <td className="small num cb-nowrap">{fmt.dataHora(r.ts)}</td>
                     <td className="small cb-nowrap">{r.ator}</td>
                     <td className="small">
-                      {r.acao} <span className="strong">{r.alvo}</span>
+                      {r.acao}
+                      {/* "alterou os limites de gasto" já diz o alvo ("Limites de gasto"): não repete. */}
+                      {r.alvo && !r.acao.toLowerCase().includes(r.alvo.toLowerCase()) ? (
+                        <>
+                          {' '}
+                          <span className="strong">{r.alvo}</span>
+                        </>
+                      ) : null}
                     </td>
                     <td className="small muted">{r.detalhe ?? '—'}</td>
                   </tr>

@@ -16,6 +16,11 @@ export interface PropsChatCopiloto {
   apiBase?: string;
   aoFechar?: () => void;
   altura?: number | string;
+  /**
+   * false: não põe o foco na caixa de mensagem ao abrir, para não rolar a página onde o chat está embutido.
+   * Padrão true.
+   */
+  focarAoAbrir?: boolean;
 }
 
 interface Sessao {
@@ -23,7 +28,7 @@ interface Sessao {
   controlador: ControladorChat;
 }
 
-export function ChatCopiloto({ token, apiBase = '', aoFechar, altura = 640 }: PropsChatCopiloto) {
+export function ChatCopiloto({ token, apiBase = '', aoFechar, altura = 640, focarAoAbrir = true }: PropsChatCopiloto) {
   const [sessao, setSessao] = useState<Sessao | null>(null);
   const [erro, setErro] = useState<string | null>(null);
   const [tentativa, setTentativa] = useState(0);
@@ -84,6 +89,7 @@ export function ChatCopiloto({ token, apiBase = '', aoFechar, altura = 640 }: Pr
       controlador={sessao.controlador}
       modo="console"
       aoFechar={aoFechar}
+      focarAoAbrir={focarAoAbrir}
       altura={altura}
       estilo={estiloMarca(sessao.inicio.config.cor)}
     />
