@@ -153,3 +153,8 @@ textarea.textarea { font-family: inherit; }
 .ca-seletor-texto { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ca-seletor-botao .avatar-sm { flex: none; }
 .ca-gaveta-nav .ca-seletor-empresa { padding: 0 var(--s-2); }
+
+/* Nota pequena dentro de telas e diálogos (ex.: e-mail guardado na caixa-de-saida, dica da demonstração) */
+.ca-nota { display: flex; align-items: flex-start; gap: var(--s-2); padding: var(--s-3) var(--s-4); color: var(--ink-700); border-radius: var(--r-md); }
+.ca-nota svg.i { margin-top: 3px; color: var(--brand-700); }
+.ca-nota .mono { white-space: nowrap; }

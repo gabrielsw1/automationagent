@@ -220,12 +220,21 @@ export default function EtapaEmpresa({
       <div className="stack-sm">
         <label className="check">
           <input type="checkbox" checked={termos} onChange={(e) => setTermos(e.target.checked)} />
-          <span className="small">Li e aceito os Termos de uso</span>
+          <span className="small">
+            Li e aceito os{' '}
+            <a href="/termos" target="_blank" rel="noopener noreferrer">
+              Termos de uso
+            </a>
+          </span>
         </label>
         <label className="check">
           <input type="checkbox" checked={dados} onChange={(e) => setDados(e.target.checked)} />
           <span className="small">
-            Li e aceito o Contrato de tratamento de dados (LGPD), que define a Starta como operadora dos dados dos seus clientes
+            Li e aceito o{' '}
+            <a href="/contrato-lgpd" target="_blank" rel="noopener noreferrer">
+              Contrato de tratamento de dados (LGPD)
+            </a>
+            , que define a Starta como operadora dos dados dos seus clientes
           </span>
         </label>
         {mostrar('aceites') ? (

@@ -178,7 +178,7 @@ function SeletorEmpresa({ aoNavegar, idRotulo }: { aoNavegar?: () => void; idRot
           >
             <span className="row ca-seletor-nome">
               <span className="avatar avatar-sm" aria-hidden="true">
-                {fmt.iniciais(eu.empresa.nome)}
+                {fmt.iniciaisEmpresa(eu.empresa.nome)}
               </span>
               <span className="ca-seletor-texto">{eu.empresa.nome}</span>
             </span>
@@ -259,7 +259,8 @@ function MenuPessoa() {
               {eu.empresa.demo ? <SeloDemonstracao /> : null}
             </span>
           </div>
-          <ItensOutrasEmpresas outras={outras} fechar={fechar} idRotulo="ca-menu-trocar" />
+          {/* A escolha da empresa (A2), com o papel e o último acesso em cada uma. */}
+          {outras.length ? <ItemMenu titulo="Trocar de empresa" icone="empresa" para="/entrar/empresa" aoClicar={fechar} /> : null}
           <ItemMenu titulo="Criar outra empresa" icone="mais" para="/criar-conta" aoClicar={fechar} />
           {eu.adminPlataforma ? <ItemMenu titulo="Empresas clientes" icone="empresa" para="/plataforma" aoClicar={fechar} /> : null}
           <ItemMenu titulo="Equipe e limites" icone="equipe" para="/equipe" aoClicar={fechar} />

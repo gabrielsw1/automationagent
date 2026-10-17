@@ -1,0 +1,104 @@
+/* Site do produto (S1 · Site do produto) e páginas dos textos jurídicos. Cores só por var(--token).
+   Conteúdo com até 1200px e respiro lateral clamp(16px, 4vw, 32px), como na prancheta. */
+.st { min-height: 100vh; background: var(--white); color: var(--ink-900); }
+.st-dentro { max-width: 1200px; margin: 0 auto; padding-left: clamp(16px, 4vw, 32px); padding-right: clamp(16px, 4vw, 32px); }
+.st-secao { padding-top: 80px; padding-bottom: 80px; }
+/* O topo fixo não cobre o título quando um link leva à seção. */
+.st [id] { scroll-margin-top: 88px; }
+.st-faixa { background: var(--surface); border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+.st-cabeca { max-width: 680px; }
+.st .eyebrow.st-marcador { color: var(--brand-700); }
+.st-corpo { color: var(--ink-700); }
+.st-lista { list-style: none; margin: 0; padding: 0; }
+
+/* Topo */
+.st-topo { position: sticky; top: 0; z-index: 5; background: var(--white); border-bottom: 1px solid var(--line); }
+.st-topo-dentro { min-height: 72px; padding-top: 12px; padding-bottom: 12px; }
+.st-topo .brandmark, .st-rodape .brandmark { padding: 0; color: var(--ink-900); }
+.st-topo .brandmark:hover { text-decoration: none; }
+.st-nav { gap: var(--s-6); }
+.st-nav a { color: var(--ink-700); font-weight: 600; }
+.st-acoes { gap: var(--s-2); flex: none; }
+
+/* Hero */
+.st-hero { background: var(--surface); border-bottom: 1px solid var(--line); }
+.st-hero-grade { padding-top: 64px; padding-bottom: 64px; align-items: center; gap: 48px; }
+.st-hero .display { font-size: clamp(32px, 4.2vw, 50px); }
+.st-hero-texto { color: var(--ink-700); font-size: var(--fs-18); max-width: 540px; }
+.st-provas { gap: var(--s-2) var(--s-5); color: var(--ink-700); }
+.st-provas li { gap: 6px; }
+
+/* Ilustração do hero: o assistente aberto dentro do sistema de um cliente */
+.st-host { position: relative; height: 580px; border-radius: var(--r-lg); border: 1px solid var(--line); overflow: hidden; box-shadow: var(--sh-md); }
+.st-host-topo { height: 48px; padding: 0 16px; background: var(--white); border-bottom: 1px solid var(--line); }
+.st-host-corpo { padding: 16px; gap: 16px; }
+.st-host-menu { width: 120px; }
+.st-host-toast { position: absolute; left: 24px; top: 72px; max-width: 260px; font-size: var(--fs-13); }
+.st-host-toast svg.i { color: var(--white); }
+.st-host-widget { position: absolute; right: 16px; bottom: 16px; width: 340px; max-width: calc(100% - 32px); height: 500px; }
+.st-host-widget .kv { grid-template-columns: 84px 1fr; }
+.st-host-dica { flex: 1; min-height: 36px; padding: 8px 0; color: var(--ink-400); }
+
+/* Como funciona, Por que é seguro e Quando a tela muda */
+.st-passos { gap: var(--s-6); }
+.st-ilustra { margin-top: auto; padding: var(--s-4); }
+.st-ilustra-lista { margin-top: auto; padding: var(--s-2) var(--s-4); }
+.st-ilustra-lista > div { padding: 8px 0; }
+.st-ilustra-lista > div + div { border-top: 1px solid var(--line); }
+.st-gravando { width: 10px; height: 10px; border-radius: 50%; background: var(--danger-500); }
+.st-feito { background: var(--success-50); color: var(--success-700); }
+.st-icone-seguro { width: 40px; height: 40px; border-radius: 12px; display: grid; place-items: center; background: var(--brand-50); color: var(--brand-700); }
+.st-muda { gap: 48px; align-items: center; }
+.st-porque { padding: var(--s-5); gap: var(--s-4); }
+.st-porque > svg.i { color: var(--brand-700); }
+.st-exemplo .steps { list-style: none; margin: 0; padding: 0; }
+
+/* Planos */
+.st-planos { gap: var(--s-6); grid-template-columns: repeat(auto-fit, minmax(min(300px, 100%), 1fr)); }
+.st-plano-destaque { border: 2px solid var(--brand-600); }
+.st-preco { font-size: 28px; letter-spacing: -0.02em; }
+.st-plano .st-lista svg.i { margin-top: 3px; }
+.st-plano-botao { margin-top: auto; }
+.st-creditos { padding: var(--s-5) var(--s-6); gap: var(--s-4); }
+.st-creditos > svg.i { color: var(--brand-700); }
+.st-creditos-texto { gap: 4px; flex: 1 1 280px; }
+.st-creditos-nota { flex: 1 1 220px; }
+
+/* Perguntas frequentes */
+.st-faq { max-width: 880px; }
+.st-faq details { padding: var(--s-5) var(--s-6); }
+.st-faq details + details { border-top: 1px solid var(--line); }
+.st-faq summary { cursor: pointer; }
+.st-faq details p { margin-top: var(--s-3); }
+
+/* Chamada final */
+.st-cta-secao { padding-bottom: 80px; }
+.st-cta { background: var(--brand-50); border: 1px solid var(--brand-100); border-radius: var(--r-xl); padding: clamp(24px, 4vw, 48px); gap: var(--s-6); }
+.st-cta-texto { flex: 1 1 420px; }
+.st-cta h2 { color: var(--brand-900); }
+.st-cta p { color: var(--ink-700); }
+
+/* Rodapé */
+.st-rodape { border-top: 1px solid var(--line); background: var(--white); }
+.st-rodape-dentro { padding-top: 32px; padding-bottom: 32px; gap: var(--s-4); }
+.st-rodape nav { gap: var(--s-2) var(--s-5); }
+
+/* Pedido de contato (modal) */
+.st-form .textarea { min-height: 96px; }
+
+/* Textos jurídicos */
+.st-legal { padding-top: var(--s-10); padding-bottom: var(--s-16); }
+.st-legal-coluna { max-width: 760px; margin: 0 auto; }
+.st-texto { color: var(--ink-700); font-size: var(--fs-16); line-height: 1.65; }
+.st-texto h1 { color: var(--ink-900); margin-bottom: var(--s-4); }
+.st-texto h2 { color: var(--ink-900); margin: var(--s-8) 0 var(--s-3); }
+.st-texto h3, .st-texto h4 { color: var(--ink-900); margin: var(--s-6) 0 var(--s-2); }
+.st-texto p { margin: 0 0 var(--s-3); }
+.st-texto ul, .st-texto ol { margin: 0 0 var(--s-3); padding-left: var(--s-6); }
+.st-texto li + li { margin-top: var(--s-1); }
+.st-texto strong { color: var(--ink-900); font-weight: 600; }
+
+/* Celular: a marca fica só com o logo para caber "Entrar" e "Agendar demonstração". */
+@media (max-width: 560px) {
+  .st-topo .st-marca-nome { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+}

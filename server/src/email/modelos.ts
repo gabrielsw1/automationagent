@@ -1,6 +1,6 @@
 // Textos dos e-mails. O assunto do código é o que a tela de confirmação cita ("Seu código do
 // Copiloto Starta"), para a pessoa achar na caixa de entrada.
-import { fmt, ROTULO_PERFIL, type PerfilEquipe } from '@copiloto/shared';
+import { fmt, ROTULO_FAIXA_USUARIOS, ROTULO_PERFIL, type ContatoRecebido, type PerfilEquipe } from '@copiloto/shared';
 import type { EmailSaindo } from './index.ts';
 
 const ASSINATURA = 'Equipe Copiloto Starta';
@@ -96,6 +96,33 @@ export function emailRegravar(d: { para: string; empresa: string; tarefa: string
       'Regravar o fluxo com a extensão leva poucos minutos e faz cada execução voltar a gastar 1 crédito. Abra a tarefa no console:',
       d.link,
       ASSINATURA,
+    ].join('\n\n'),
+  };
+}
+
+const ASSUNTO_CONTATO: Record<ContatoRecebido['origem'], string> = {
+  demonstracao: 'Pedido de demonstração',
+  vendas: 'Contato com vendas',
+  piloto: 'Pedido de piloto',
+};
+
+/** Pedido do site para a equipe de vendas (EMAIL_VENDAS). "Responder" vai direto para quem pediu. */
+export function emailContatoVendas(para: string, c: ContatoRecebido): EmailSaindo {
+  return {
+    para,
+    responderPara: c.email,
+    assunto: `${ASSUNTO_CONTATO[c.origem]}: ${c.empresa}`,
+    texto: [
+      `${ASSUNTO_CONTATO[c.origem]} pelo site do Copiloto Starta, recebido em ${fmt.dataHora(c.criadoEm)}.`,
+      [
+        `Nome: ${c.nome}`,
+        `E-mail: ${c.email}`,
+        `Empresa: ${c.empresa}`,
+        `Telefone: ${c.telefone ?? 'não informado'}`,
+        `Usuários do sistema: ${ROTULO_FAIXA_USUARIOS[c.faixa]}`,
+      ].join('\n'),
+      c.mensagem ? `Mensagem:\n${c.mensagem}` : 'Sem mensagem.',
+      'Responda este e-mail para falar direto com quem pediu.',
     ].join('\n\n'),
   };
 }

@@ -14,7 +14,6 @@ import {
   type UsoPlataforma,
   fmt,
 } from '@copiloto/shared';
-import { iniciais } from '../auth/console.ts';
 import { resumoStarta } from '../auth/starta.ts';
 import type { Banco } from '../db/banco.ts';
 import { agoraIso } from '../db/banco.ts';
@@ -81,7 +80,7 @@ export function linhaEmpresa(plataforma: Plataforma, e: Empresa, desde = desde30
   return {
     id: e.id,
     nome: e.nome,
-    iniciais: iniciais(e.nome),
+    iniciais: fmt.iniciaisEmpresa(e.nome),
     demo: e.demo,
     situacao: situacaoDe(e),
     fase: e.fase,

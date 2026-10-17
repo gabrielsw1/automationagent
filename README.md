@@ -199,6 +199,8 @@ Para um sistema com API, dá para escrever um adaptador em `server/src/adaptador
 | `COPILOTO_CHAVE_MESTRA` | Cifra os segredos das empresas no banco. Sem ela, deriva do `SESSAO_SEGREDO`. Guarde-a: sem ela, as senhas das contas de serviço não abrem. |
 | `COPILOTO_ADMINS` | E-mails (separados por vírgula) que veem o painel **Empresas clientes**. |
 | `COPILOTO_CADASTRO` | `fechado` desliga o cadastro de empresas novas pela tela de entrada. |
+| `EMAIL_VENDAS` | Recebe por e-mail os pedidos de **Agendar demonstração** e **Falar com vendas** do site. Sem ela, os pedidos ficam só no banco da plataforma. |
+| `TEXTOS_LEGAIS_DIR` | Pasta com os textos jurídicos aprovados (`termos.md`, `privacidade.md`, `contrato-lgpd.md`). O texto que faltar ali vem da minuta em `docs/legal`, com o aviso de revisão jurídica. |
 | `PUBLIC_URL` e `CONSOLE_URL` | Endereços públicos do servidor e do console (links de arquivos e de convite). |
 
 As outras variáveis estão em `.env.example`.

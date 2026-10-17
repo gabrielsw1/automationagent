@@ -120,6 +120,26 @@ export function renderizar(
   return { ...r, sessao };
 }
 
+/**
+ * Telas de acesso (entrar, escolher a empresa, senha, convite), sem sessão, cada uma na sua rota.
+ * `caminho` pode levar o estado da navegação, como a entrada que segue para a escolha da empresa.
+ */
+export function renderizarRotas(rotas: Record<string, ReactNode>, caminho: string | { pathname: string; search?: string; state?: unknown }) {
+  return render(
+    <ProvedorToast>
+      <MemoryRouter initialEntries={[caminho]}>
+        <Espiao />
+        <Routes>
+          {Object.entries(rotas).map(([rota, elemento]) => (
+            <Route key={rota} path={rota} element={elemento} />
+          ))}
+          <Route path="*" element={<div>outra página</div>} />
+        </Routes>
+      </MemoryRouter>
+    </ProvedorToast>,
+  );
+}
+
 export const USUARIOS = [
   { id: '101', nome: 'Ana Ribeiro', email: 'ana@horizonte.com.br', perfis: ['Comercial'] },
   { id: '102', nome: 'Bruno Costa', email: 'bruno@horizonte.com.br', perfis: ['Financeiro'] },

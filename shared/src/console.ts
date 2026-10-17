@@ -505,6 +505,8 @@ export interface ErroApi {
   restantes?: number;
   /** Pedido repetido cedo demais (429): segundos para esperar. */
   aguardarS?: number;
+  /** Convite vencido (410): o e-mail que recebe o convite novo. */
+  email?: string;
 }
 
 // ---------- Permissões do console ----------
