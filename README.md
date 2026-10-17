@@ -1,6 +1,6 @@
 # automationagent
 
-Copiloto que executa tarefas dentro do sistema da empresa. O código chega pelo PR da branch `claude/copiloto-build`.
+Copiloto que executa tarefas dentro do sistema de cada empresa cliente, vendido como SaaS: cada empresa cria o próprio espaço, com equipe, tarefas, fluxos gravados, base de conhecimento e widget separados das outras.
 
 A pessoa pede no widget, do jeito dela ("cadastra o cliente Pólen Café, CNPJ ..., prazo 30 dias"). O copiloto pergunta o que falta, mostra um cartão para conferir e só grava depois do "Confirmar e executar". Ele grava pela API do sistema e, onde não há API, pelo navegador, usando um fluxo gravado na tela. No fim, devolve um recibo com a opção de desfazer. A equipe configura tudo no console: tarefas, fluxos, base de conhecimento, widget, equipe e limites de gasto.
 
@@ -11,7 +11,6 @@ Requisitos: Node.js 22.13 ou mais novo e Git.
 ```powershell
 git clone https://github.com/gabrielsw1/automationagent
 cd automationagent
-git checkout claude/copiloto-build
 setx ANTHROPIC_API_KEY "sua-chave"   # uma vez; depois FECHE e abra outro terminal
 npm run dev
 ```
@@ -23,7 +22,8 @@ Na primeira vez, o `npm run dev` faz três coisas: instala as dependências, bai
 | O quê | Endereço | Entrar com |
 |---|---|---|
 | Sistema de exemplo (Horizonte) com o widget | http://localhost:4000 | Ana Ribeiro (escolha na tela de login) |
-| Console do copiloto | http://localhost:5173 | `rafael.lima@seusistema.com.br` / `copiloto123` |
+| Console do copiloto (demonstração Horizonte) | http://localhost:5173 | `rafael.lima@seusistema.com.br` / `copiloto123` |
+| Criar o espaço de uma empresa nova | http://localhost:5173/criar-conta | o e-mail de trabalho e a senha que você escolher |
 
 No widget, abra o copiloto pelo botão no canto da tela ou com Ctrl+K.
 
@@ -146,21 +146,62 @@ Com o `npm run dev` rodando e a extensão carregada:
 - A chave vem só da variável `ANTHROPIC_API_KEY` e nunca é gravada.
 - Para trocar o modelo ou o esforço, use `COPILOTO_MODELO`, `COPILOTO_MODELO_RAPIDO` e `COPILOTO_ESFORCO`. As outras variáveis estão em `.env.example`.
 
-## Ligar ao seu sistema de verdade
+## Várias empresas (SaaS)
 
-O copiloto só fala com o sistema da empresa por um **adaptador**, em `server/src/adaptadores/`. O do Horizonte (`exemplo/`) serve de modelo.
+O copiloto atende várias empresas no mesmo servidor. Cada empresa tem um banco só dela, em `data/empresas/<id>/copiloto.db`, com equipe, tarefas, fluxos, execuções, conversas, conhecimento, widget e auditoria. A lista de empresas, as contas e as sessões ficam em `data/plataforma.db`.
 
-1. Copie `server/src/adaptadores/exemplo/` para uma pasta nova, por exemplo `meu-sistema/`.
-2. Implemente a interface `AdaptadorSistema` (`server/src/adaptadores/tipos.ts`):
-   - `buscarUsuario` e `listarUsuarios`: quem usa o widget e com quais perfis.
-   - `chamar`: uma chamada à API sempre em nome de quem pediu, para valerem as permissões dessa pessoa. Nos testes do console, ela roda em modo simulação, sem gravar.
-   - `sessaoNavegador`: cookies que deixam o navegador logado como a pessoa, sem senha.
-   - `descreverApi` (opcional) e `baixarArquivo` (opcional).
-3. Registre a pasta em `server/src/adaptadores/index.ts` e rode com `ADAPTADOR=meu-sistema`, `SISTEMA_NOME`, `SISTEMA_URL`, `SISTEMA_API_URL` e `SISTEMA_CHAVE_SERVICO`.
-4. Coloque o snippet do console (Canais e widget) nas páginas do seu sistema. O `data-assinatura` é um HMAC-SHA256 do ID do usuário com `WIDGET_SEGREDO`, calculado no servidor do seu sistema. O console mostra exemplos em Node, PHP e Python.
-5. Crie as tarefas no console: escreva o que a tarefa faz ou grave o fluxo na tela.
+- **Cadastro:** em `/criar-conta`, uma pessoa cria a conta e o espaço da empresa em 3 etapas, como no design: **Sua conta** (nome, e-mail de trabalho, senha), **Seu sistema** (endereço e como o copiloto entra) e **Sua marca** (nome do assistente, cor e primeira mensagem). Quem cria vira Admin do espaço.
+- **Uma conta, várias empresas:** a mesma pessoa pode estar em mais de uma empresa (por convite ou criando outra). O menu da conta, no topo do console, troca de empresa. Os perfis (Admin, Editor, Operador, Leitor) valem por empresa.
+- **Isolamento:** toda rota do console e do widget abre o banco da empresa da sessão ou da chave do widget. Tokens de convite, de gravação e de widget levam a empresa e não valem em outra. Os domínios liberados de uma empresa não liberam o widget de outra.
+- **Widget por empresa:** cada empresa tem a própria chave pública e o próprio segredo de assinatura (Canais e widget › Segredo, só Admin vê; dá para gerar outro). Para empresas clientes, a assinatura do snippet é sempre obrigatória.
+- **Demonstração:** a empresa Horizonte continua sendo criada pelo seed, com o sistema de exemplo configurado pelas variáveis `SISTEMA_*`. As empresas novas não mexem nela.
+- **Painel da Starta:** quem está em `COPILOTO_ADMINS` vê, no console, a página **Empresas clientes**, com todas as empresas, uso dos últimos 30 dias e o botão de suspender ou reativar. Suspender derruba as sessões da empresa e para o widget dela.
+- **Segredos:** a senha da conta de serviço de cada empresa é cifrada no banco (AES-256-GCM) com `COPILOTO_CHAVE_MESTRA` e nunca volta para o console.
 
-Nada mais muda: agente, motor, console e widget não conhecem o Horizonte.
+## Ligar ao sistema de uma empresa
+
+Empresas novas usam o conector **pela tela**: o copiloto opera as telas do sistema com os fluxos gravados (extensão ou widget), sem precisar de API. A recuperação visual com o Claude entra só quando a tela muda.
+
+### 1. Snippet do widget
+
+Em **Canais e widget**, o console mostra o snippet com a chave da empresa. O servidor do sistema da empresa assina quem está logado com o segredo da empresa:
+
+```html
+<script src="{COPILOTO_URL}/copiloto.js" data-chave="{chave pública}" data-usuario="{id}"
+        data-nome="{nome}" data-email="{email}" data-perfis="{perfil1,perfil2}"
+        data-assinatura="{hmac_sha256_hex(texto, segredo)}" async></script>
+```
+
+O `texto` assinado é só o `id` quando nome, e-mail e perfis ficam vazios. Com eles, é `id`, `nome`, `email` e os perfis separados por vírgula, um por linha (`\n`). O copiloto aprende as pessoas e os perfis por esse snippet; não há API para listar usuários.
+
+### 2. Como o copiloto entra no sistema
+
+Na página **Sistema** do console (ou na etapa 2 do cadastro):
+
+- **Com a sessão de quem pede (recomendado):** antes de cada tarefa, o copiloto pede ao sistema uma sessão da pessoa que pediu. Assim, valem as permissões dela. O sistema precisa de um endereço de sessão:
+  - O copiloto faz `POST {endereço de sessão}` com o corpo `{"usuario": "<id>", "ts": <milissegundos>}` e o cabeçalho `X-Copiloto-Assinatura: hmac_sha256_hex("<id>.<ts>", segredo)`, com o mesmo segredo do widget.
+  - O sistema confere a assinatura, recusa `ts` com mais de 5 minutos de diferença e responde `{"cookies": [{"name": "...", "value": "...", "domain": "...", "path": "/"}]}` ou `{"url": "https://.../entrada?token=uso-unico"}` (um link de entrada que vale uma vez).
+- **Com uma conta de serviço:** o copiloto entra na página de login com o usuário e a senha de uma conta criada para ele. Tudo é feito com as permissões dessa conta.
+- **Sem login:** para sistemas abertos ou de teste.
+
+O botão **Testar acesso** abre o navegador do copiloto e entra como antes de uma tarefa, sem fazer nada no sistema, e diz o que a tela respondeu.
+
+### Conector pela API (avançado)
+
+Para um sistema com API, dá para escrever um adaptador em `server/src/adaptadores/` (o do Horizonte, em `exemplo/`, é o modelo) implementando `AdaptadorSistema` (`server/src/adaptadores/tipos.ts`). Hoje só a demonstração usa esse conector, escolhido pela variável `ADAPTADOR`.
+
+## Configuração do servidor (produção)
+
+| Variável | Para quê |
+|---|---|
+| `ANTHROPIC_API_KEY` | Chave do Claude. Defina como variável de ambiente, nunca em arquivo. |
+| `SESSAO_SEGREDO` | Assina as sessões do console e os tokens do widget. Troque em produção. |
+| `COPILOTO_CHAVE_MESTRA` | Cifra os segredos das empresas no banco. Sem ela, deriva do `SESSAO_SEGREDO`. Guarde-a: sem ela, as senhas das contas de serviço não abrem. |
+| `COPILOTO_ADMINS` | E-mails (separados por vírgula) que veem o painel **Empresas clientes**. |
+| `COPILOTO_CADASTRO` | `fechado` desliga o cadastro de empresas novas pela tela de entrada. |
+| `PUBLIC_URL` e `CONSOLE_URL` | Endereços públicos do servidor e do console (links de arquivos e de convite). |
+
+As outras variáveis estão em `.env.example`.
 
 ## O que acontece quando algo falha
 

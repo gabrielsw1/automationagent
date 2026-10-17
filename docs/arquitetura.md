@@ -14,8 +14,37 @@ Documento de referência para quem mexe no código. Os tipos citados estão em `
 | Sistema de exemplo "Horizonte" | `sample-system/` | 4000 | Sistema fictício com API REST e telas HTML, para demonstrar tudo sem o sistema real |
 | Contratos | `shared/` | — | Tipos TypeScript, validação de campos, formatação pt-BR, `styles/tokens.css` (único arquivo de cores) e `styles/base.css` |
 
-Banco: `node:sqlite` (embutido no Node 22.13+), arquivo `DATA_DIR/copiloto.db` (padrão `data/`).
-Prints e arquivos gerados ficam em `DATA_DIR/prints/` e `DATA_DIR/arquivos/<execucaoId>/`.
+Banco: `node:sqlite` (embutido no Node 22.13+), um arquivo por empresa em `DATA_DIR/empresas/<empresaId>/copiloto.db`
+e o da plataforma em `DATA_DIR/plataforma.db` (padrão `data/`). Prints, anexos e arquivos gerados ficam dentro da pasta da empresa.
+
+## Várias empresas (`server/src/plataforma/`)
+
+O banco da plataforma (`plataforma/esquema.ts`) guarda o que é de todas as empresas; o resto fica no banco de cada uma.
+
+| Tabela | O que guarda |
+|---|---|
+| `empresas` | id, nome, CNPJ, faixa de usuários, `demo`, `status` (`ativa`/`suspensa`), chave pública do widget, segredo do widget e senha da conta de serviço (cifrados com `COPILOTO_CHAVE_MESTRA`, AES-256-GCM, formato `v1.iv.tag.corpo`), sistema (`SistemaGuardado`: nome, endereço, conector, modo de acesso, perfis) e domínios liberados |
+| `contas` | Uma por e-mail, com senha em scrypt. A mesma conta pode estar em várias empresas |
+| `vinculos` | Índice conta ↔ empresa, para o login e a troca de empresa. Perfil e status da pessoa ficam na tabela `equipe` do banco da empresa, que manda |
+| `sessoes` | Sessão do console (cookie `copiloto_sessao`, 7 dias): conta e empresa aberta |
+
+Regras:
+
+- Toda rota pega as peças da empresa com `ctxDe(request)` (o `Contexto` de `server/src/contexto.ts`). O console resolve a
+  empresa pela sessão; o widget, pela chave pública (`POST /iniciar`) e depois pelo token (`{e, u, t?, exp}`, HMAC com `SESSAO_SEGREDO`);
+  a gravação e o convite, pelo prefixo do token (`<empresaId>.<aleatório>`, `tokenDaEmpresa`/`empresaDoToken`); os links de
+  arquivos, por `?e=<empresaId>&chave=`. Nada lê o banco de uma empresa a partir de um pedido de outra.
+- `Plataforma.contexto(id)` abre (e guarda aberto) o contexto de uma empresa, com `configDaEmpresa`: pasta de dados, sistema e segredo do widget dela.
+- CORS: `plataforma.dominioLiberado` olha a união dos domínios publicados de todas as empresas; o widget confere de novo o domínio da empresa dele.
+- A empresa de demonstração (`demo = 1`) é a Horizonte do seed: conector `api` com o adaptador `ADAPTADOR` e as variáveis `SISTEMA_*`,
+  sistema não editável no console. As outras usam o conector `tela` (`adaptadores/tela.ts`): pessoas e perfis aprendidos pelo
+  snippet assinado (tabela `usuarios_sistema`), sem `chamar` (501 `sem_api`); as tarefas rodam por fluxos gravados.
+- Assinatura do snippet: sempre obrigatória fora da demonstração. Texto assinado: `textoAssinado(id, {nome, email, perfis})` de `shared/src/widget.ts`.
+- Acesso do navegador ao sistema da empresa (`SistemaGuardado.acesso.modo`):
+  `sessao` (antes do fluxo, `POST urlSessao` com `{usuario, ts}` e `X-Copiloto-Assinatura: hmac_sha256_hex("<usuario>.<ts>", segredo do widget)`;
+  resposta `{cookies:[{name, value, domain?, path?}]}` ou `{url}` de entrada única), `conta` (login com Playwright na `urlLogin`,
+  `entrarComConta` em `navegador/executor.ts`) ou `nenhum`. Falhas viram `ErroAcessoSistema` com mensagem para pessoas, e nada roda no sistema.
+- Painel da plataforma: `Eu.adminPlataforma` vem de `COPILOTO_ADMINS`.
 
 ## Regras que valem para todo o código
 
@@ -253,9 +282,15 @@ gravação" com a página preenchida e, no modal, diz se a extensão está insta
 
 Tipos em `shared/src/console.ts`. Todas exigem sessão; a coluna "Permissão" é o mínimo.
 
-Núcleo (coordenação): `POST /auth/entrar {email, senha}` → `Eu`; `POST /auth/sair`; `GET /auth/eu`;
-`GET /auth/primeiro-acesso` → `{ precisaCriarAdmin, demo }`; `POST /auth/primeiro-admin {nome, email, senha}`;
-`GET/POST /auth/convite/:token`; `GET /resumo` → `ResumoConsole`; `GET /eventos` (SSE de `EventoConsole`, ver `server/src/eventos.ts`);
+Núcleo (coordenação): `POST /auth/entrar {email, senha}` → `Eu` (403 `sem_empresa` quando a conta não está em nenhuma empresa ativa);
+`POST /auth/sair`; `GET /auth/eu`; `POST /auth/empresa {empresaId}` → `Eu` (troca a empresa aberta);
+`GET /auth/primeiro-acesso` → `PrimeiroAcesso`; `POST /auth/cadastro` `CadastroEmpresaPedido` → `Eu` (cria a empresa e, sem sessão,
+a conta; com sessão, `pessoa` é opcional e a empresa nova entra na conta); `GET /auth/convite/:token` → `ConviteAberto`;
+`POST /auth/convite/:token` (`{nome, senha}` para conta nova, `{senha}` para conta que já existe) → `Eu`;
+`GET /sistema/config` → `SistemaEmpresa`; `PUT /sistema/config` `SistemaEmpresaPedido` (administrar; 409 `sistema_fixo` na demonstração);
+`POST /sistema/verificar {url}` → `VerificacaoSistema`; `POST /sistema/testar-acesso {usuarioId?}` → `VerificacaoSistema`;
+`GET /canais/segredo` · `POST /canais/segredo/novo` → `SegredoWidget` (administrar);
+`GET /plataforma/empresas` → `EmpresaPlataforma[]` e `PUT /plataforma/empresas/:id/status {status}` (só `COPILOTO_ADMINS`); `GET /resumo` → `ResumoConsole`; `GET /eventos` (SSE de `EventoConsole`, ver `server/src/eventos.ts`);
 `GET /sistema/usuarios` → `UsuarioSistema[]`; `GET /sistema/perfis`; `GET /sistema/rotas` → `RotaApi[]`; `GET /sistema/conexao`;
 `POST /teste/token {usuarioId}` → `{ token, usuario }` (token de widget em modo de teste para o `ChatCopiloto`).
 
