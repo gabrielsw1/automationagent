@@ -304,4 +304,10 @@ export const MIGRACOES: string[] = [
     criado_em TEXT NOT NULL
   );
   `,
+  // 2: notas para o agente (o que mudou fora da conversa), dados internos da execução e candidato da recuperação visual.
+  `
+  ALTER TABLE conversas ADD COLUMN notas TEXT NOT NULL DEFAULT '[]';
+  ALTER TABLE execucoes ADD COLUMN interno TEXT NOT NULL DEFAULT '{}';
+  ALTER TABLE execucao_eventos ADD COLUMN candidato TEXT;
+  `,
 ];

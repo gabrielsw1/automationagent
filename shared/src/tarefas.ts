@@ -104,6 +104,8 @@ export interface TarefaDefinicao {
   tituloRecibo: string;
   /** Título do cartão de confirmação. Ex.: "Confirme o cadastro". */
   tituloConfirmacao: string;
+  /** Título do progresso, no gerúndio. Aceita {campo}. Ex.: "Cadastrando {nome_empresa}". Padrão: o nome da tarefa. */
+  tituloProgresso?: string;
   /** Próximos passos sugeridos depois do recibo. Aceita {campo}. */
   proximosPassos: string[];
   /** Páginas do sistema onde a tarefa é sugerida. Ex.: ["Clientes"]. */

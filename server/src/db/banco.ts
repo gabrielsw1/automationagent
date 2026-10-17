@@ -56,8 +56,20 @@ export class Banco {
     return this.executar(sql, ...cols.map((c) => paraSql(dados[c])), id);
   }
 
+  private profundidade = 0;
+
+  /** Transação síncrona. Chamadas aninhadas usam a transação de fora. */
   transacao<T>(fn: () => T): T {
+    if (this.profundidade > 0) {
+      this.profundidade++;
+      try {
+        return fn();
+      } finally {
+        this.profundidade--;
+      }
+    }
     this.db.exec('BEGIN');
+    this.profundidade = 1;
     try {
       const r = fn();
       this.db.exec('COMMIT');
@@ -65,6 +77,8 @@ export class Banco {
     } catch (e) {
       this.db.exec('ROLLBACK');
       throw e;
+    } finally {
+      this.profundidade = 0;
     }
   }
 

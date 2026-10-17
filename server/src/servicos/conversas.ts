@@ -180,6 +180,30 @@ export class Conversas {
     this.eventos.emitirConsole({ tipo: 'conversa', conversaId, estado: estado.modo });
   }
 
+  /**
+   * Nota para o agente sobre algo que aconteceu fora da conversa com o Claude (ex.: a pessoa confirmou
+   * o cartão, a execução terminou, alguém do suporte respondeu). Entra no começo da próxima mensagem.
+   */
+  anotar(conversaId: string, nota: string) {
+    this.banco.transacao(() => {
+      const atual = this.banco.um<{ notas: string }>('SELECT notas FROM conversas WHERE id = ?', conversaId);
+      if (!atual) return;
+      const notas = json<string[]>(atual.notas, []);
+      notas.push(nota);
+      this.banco.atualizar('conversas', conversaId, { notas: notas.slice(-20) });
+    });
+  }
+
+  /** Devolve e limpa as notas pendentes. */
+  retirarNotas(conversaId: string): string[] {
+    return this.banco.transacao(() => {
+      const atual = this.banco.um<{ notas: string }>('SELECT notas FROM conversas WHERE id = ?', conversaId);
+      const notas = json<string[]>(atual?.notas, []);
+      if (notas.length) this.banco.atualizar('conversas', conversaId, { notas: [] });
+      return notas;
+    });
+  }
+
   transcricao(conversaId: string): MensagemLlm[] {
     return this.banco
       .todos<{ papel: 'user' | 'assistant'; conteudo: string }>(

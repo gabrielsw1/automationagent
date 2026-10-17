@@ -73,7 +73,7 @@ export function quando(iso: string, agora = new Date()): string {
 
 /** "4 s", "52 s", "1 min 12 s". */
 export function duracao(ms: number): string {
-  const s = Math.max(0, Math.round(ms / 1000));
+  const s = Math.max(1, Math.round(ms / 1000));
   if (s < 60) return `${s} s`;
   const min = Math.floor(s / 60);
   const resto = s % 60;

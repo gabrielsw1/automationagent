@@ -118,6 +118,8 @@ export type Bloco =
       /** Lista do que o agente já entendeu e do que falta (W2). */
       tipo: 'coleta';
       itens: { rotulo: string; valor?: string; ok: boolean }[];
+      /** Pergunta do dado que falta, mostrada abaixo da lista. Ex.: "Para qual e-mail devo mandar os boletos da ACME?" */
+      pergunta?: string;
     }
   | {
       /** Cartão de confirmação: nada grava sem ele (W3). */
