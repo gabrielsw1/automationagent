@@ -18,7 +18,7 @@ const TrocarEmpresa = z.object({ empresaId: z.string().min(1) });
 
 /** Regras de senha da conta (as mesmas que a tela de cadastro mostra). Devolve o problema ou null. */
 export function problemaSenha(senha: string, empresa?: string): string | null {
-  if (senha.length < 10) return 'A senha precisa de pelo menos 10 caracteres.';
+  if (senha.length < 8) return 'A senha precisa de pelo menos 8 caracteres.';
   if (senha.length > 200) return 'A senha pode ter até 200 caracteres.';
   if (!/\p{L}/u.test(senha) || !/\d/.test(senha)) return 'Use letras e números na senha.';
   const simples = (t: string) => t.toLowerCase().replace(/[^\p{L}\d]/gu, '');

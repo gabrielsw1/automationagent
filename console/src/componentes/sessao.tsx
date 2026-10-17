@@ -29,3 +29,14 @@ export function useSessaoOpcional(): Sessao | null {
 export function usePode(permissao: Permissao): boolean {
   return pode(useSessao().resumo.eu.perfil, permissao);
 }
+
+/**
+ * Abre o console de novo, do zero, em `destino`. Usado ao trocar de empresa: tudo o que está na
+ * tela e nos caches é da empresa anterior. É um objeto (e não uma função solta) para os testes
+ * poderem trocar a navegação de verdade por um espião.
+ */
+export const recarregar = {
+  console(destino: string) {
+    window.location.assign(destino);
+  },
+};

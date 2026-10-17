@@ -29,6 +29,11 @@ export function usuariosDoSistema(): Promise<UsuarioSistema[]> {
   return cacheUsuarios;
 }
 
+/** Esquece os usuários guardados (outra sessão ou outra empresa: os usuários são de outro sistema). */
+export function esquecerUsuariosDoSistema() {
+  cacheUsuarios = null;
+}
+
 export function useUsuariosDoSistema() {
   const [usuarios, setUsuarios] = useState<UsuarioSistema[] | null>(null);
   const [erro, setErro] = useState<ErroApiCliente | null>(null);

@@ -8,9 +8,16 @@ export interface ItemNav {
   contador?: 'execucoes';
 }
 
-export const GRUPOS_NAV: { rotulo: string; itens: ItemNav[] }[] = [
+export const GRUPOS_NAV: {
+  rotulo: string;
+  itens: ItemNav[];
+  /** O rótulo fica só para leitores de tela (o primeiro grupo, como no design). */
+  rotuloOculto?: boolean;
+  soAdminPlataforma?: boolean;
+}[] = [
   {
     rotulo: 'Copiloto',
+    rotuloOculto: true,
     itens: [
       { para: '/painel', rotulo: 'Painel', icone: 'painel' },
       { para: '/execucoes', rotulo: 'Execuções', icone: 'execucoes', contador: 'execucoes' },
@@ -23,11 +30,19 @@ export const GRUPOS_NAV: { rotulo: string; itens: ItemNav[] }[] = [
       { para: '/aprender', rotulo: 'Aprender fluxo', icone: 'aprender' },
       { para: '/conhecimento', rotulo: 'Conhecimento', icone: 'conhecimento' },
       { para: '/canais', rotulo: 'Canais e widget', icone: 'canais' },
+      // Fora do design, mas necessário: editar o endereço e o acesso depois do cadastro.
+      { para: '/sistema', rotulo: 'Sistema', icone: 'navegador' },
     ],
   },
   {
     rotulo: 'Conta',
     itens: [{ para: '/equipe', rotulo: 'Equipe e limites', icone: 'equipe' }],
+  },
+  {
+    // Só para quem administra a plataforma (COPILOTO_ADMINS): todas as empresas clientes.
+    rotulo: 'Plataforma',
+    soAdminPlataforma: true,
+    itens: [{ para: '/plataforma', rotulo: 'Empresas clientes', icone: 'empresa' }],
   },
 ];
 
@@ -39,7 +54,9 @@ const TITULOS: Record<string, string> = {
   aprender: 'Aprender fluxo',
   conhecimento: 'Conhecimento',
   canais: 'Canais e widget',
+  sistema: 'Sistema',
   equipe: 'Equipe e limites',
+  plataforma: 'Empresas clientes',
 };
 
 /** Trilha padrão: "Copiloto > Painel"; em subpáginas, "Execuções > EX-20417". */

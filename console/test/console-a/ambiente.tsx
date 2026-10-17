@@ -4,7 +4,7 @@ import type { ReactNode } from 'react';
 import { render } from '@testing-library/react';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { vi } from 'vitest';
-import type { PerfilEquipe, ResumoConsole, TarefaDefinicao, TarefaDetalhe } from '@copiloto/shared';
+import type { EmpresaResumo, Eu, PerfilEquipe, ResumoConsole, TarefaDefinicao, TarefaDetalhe } from '@copiloto/shared';
 import { ProvedorSessao } from '../../src/componentes/sessao.tsx';
 import { ProvedorToast } from '../../src/componentes/Toast.tsx';
 
@@ -56,9 +56,22 @@ export function instalarEventSource() {
   vi.stubGlobal('EventSource', EventSourceFalso);
 }
 
-export function resumo(perfil: PerfilEquipe = 'admin', extra: Partial<ResumoConsole> = {}): ResumoConsole {
+/** Empresa de demonstração aberta nos testes. */
+export const HORIZONTE: EmpresaResumo = { id: 'emp-horizonte', nome: 'Horizonte', demo: true };
+
+export function resumo(perfil: PerfilEquipe = 'admin', extra: Partial<ResumoConsole> = {}, eu: Partial<Eu> = {}): ResumoConsole {
   return {
-    eu: { id: 'mem-1', nome: 'Rafael Lima', email: 'rafael.lima@seusistema.com.br', perfil, iniciais: 'RL' },
+    eu: {
+      id: 'mem-1',
+      nome: 'Rafael Lima',
+      email: 'rafael.lima@seusistema.com.br',
+      perfil,
+      iniciais: 'RL',
+      empresa: HORIZONTE,
+      empresas: [HORIZONTE],
+      adminPlataforma: false,
+      ...eu,
+    },
     execucoesAtencao: 3,
     aprovacoesPendentes: 1,
     guia: { feitos: 3, total: 5 },
@@ -85,9 +98,10 @@ export function renderizar(
     caminho = '/',
     rota = '*',
     extra = {},
-  }: { perfil?: PerfilEquipe; caminho?: string; rota?: string; extra?: Partial<ResumoConsole> } = {},
+    eu = {},
+  }: { perfil?: PerfilEquipe; caminho?: string; rota?: string; extra?: Partial<ResumoConsole>; eu?: Partial<Eu> } = {},
 ) {
-  const sessao = { resumo: resumo(perfil, extra), recarregarResumo: vi.fn(async () => {}), sair: vi.fn(async () => {}) };
+  const sessao = { resumo: resumo(perfil, extra, eu), recarregarResumo: vi.fn(async () => {}), sair: vi.fn(async () => {}) };
   const r = render(
     <ProvedorSessao valor={sessao}>
       <ProvedorToast>

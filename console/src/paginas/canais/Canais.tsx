@@ -1,7 +1,9 @@
 // C8 · Canais e widget: como o copiloto aparece no sistema, com rascunho, publicação,
-// pré-visualização ao vivo e o trecho de instalação.
+// pré-visualização ao vivo, o trecho de instalação (com os dados assinados de quem está logado),
+// o endereço de sessão (sistemas ligados pelas telas) e o segredo do widget (só Admin).
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { fmt, type Canais as DadosCanais, type ConfigWidget, type UsuarioSistema } from '@copiloto/shared';
+import { fmt, type Canais as DadosCanais, type ConfigWidget, type SegredoWidget, type UsuarioSistema } from '@copiloto/shared';
+import { Link } from 'react-router-dom';
 import { PreviaWidget } from '@copiloto/widget/chat';
 import '@copiloto/widget/chat.css';
 import { api, ErroApiCliente } from '../../api/cliente.ts';
@@ -18,19 +20,15 @@ import {
   useOnline,
   useToast,
 } from '../execucoes/pecas.tsx';
+import { EXEMPLO_ASSINADO, exemplosAssinatura, exemplosSessao, trechoInstalacao } from './instalacao.ts';
+import { contrasteComBranco, useCoresSugeridas } from './marca.ts';
 
-const CHAVE_LOCAL = 'copiloto.console.canais.rascunho';
+export { contrasteComBranco };
+
+/** Rascunho guardado neste navegador sem conexão, um por empresa (a mesma pessoa pode estar em várias). */
+const chaveLocal = (empresaId: string) => `copiloto.console.canais.rascunho.${empresaId}`;
 const LIMITE_BOAS_VINDAS = 280;
 const MAX_SUGESTOES = 4;
-
-/** Cores sugeridas: lidas dos tokens da marca (tokens.css), nunca escritas aqui. */
-const CORES_SUGERIDAS: { token: string; rotulo: string }[] = [
-  { token: '--brand-600', rotulo: 'Rosa da marca' },
-  { token: '--brand-btn', rotulo: 'Rosa escuro' },
-  { token: '--accent-500', rotulo: 'Vinho' },
-  { token: '--success-700', rotulo: 'Verde' },
-  { token: '--ink-900', rotulo: 'Grafite' },
-];
 
 // ---------- Regras (as mesmas do servidor) ----------
 
@@ -62,15 +60,6 @@ export function validarConfig(c: ConfigWidget): ErrosConfig {
   const ruim = c.dominios.find((d) => !dominioValido(d));
   if (ruim) e.dominios = `“${ruim}” não parece um domínio. Use, por exemplo, app.suaempresa.com.br.`;
   return e;
-}
-
-/** Contraste do texto branco sobre a cor (1 a 21). null se a cor não for válida. */
-export function contrasteComBranco(hex: string): number | null {
-  const m = hex.match(/^#([0-9a-f]{6})$/i);
-  if (!m) return null;
-  const v = [0, 2, 4].map((i) => parseInt(m[1].slice(i, i + 2), 16) / 255);
-  const [r, g, b] = v.map((c) => (c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4));
-  return 1.05 / (0.2126 * r + 0.7152 * g + 0.0722 * b + 0.05);
 }
 
 const CAMPOS: (keyof ConfigWidget)[] = [
@@ -106,19 +95,19 @@ export function normalizarConfig(c: ConfigWidget): ConfigWidget {
   };
 }
 
-function lerLocal(): ConfigWidget | null {
+function lerLocal(empresaId: string): ConfigWidget | null {
   try {
-    const t = localStorage.getItem(CHAVE_LOCAL);
+    const t = localStorage.getItem(chaveLocal(empresaId));
     return t ? (JSON.parse(t) as ConfigWidget) : null;
   } catch {
     return null;
   }
 }
 
-function gravarLocal(c: ConfigWidget | null) {
+function gravarLocal(empresaId: string, c: ConfigWidget | null) {
   try {
-    if (c) localStorage.setItem(CHAVE_LOCAL, JSON.stringify(c));
-    else localStorage.removeItem(CHAVE_LOCAL);
+    if (c) localStorage.setItem(chaveLocal(empresaId), JSON.stringify(c));
+    else localStorage.removeItem(chaveLocal(empresaId));
   } catch {
     /* sem armazenamento local: segue sem guardar */
   }
@@ -175,13 +164,15 @@ function EditorCanais({
   definirServidor: (c: DadosCanais) => void;
 }) {
   const podeEditar = usePode('editar');
+  const podeAdministrar = usePode('administrar');
   const { resumo } = useSessao();
+  const empresaId = resumo.eu.empresa.id;
   const online = useOnline();
   const toast = useToast();
 
   // Rascunho local: começa no do servidor, ou no que ficou guardado neste navegador sem conexão.
   const [rascunho, setRascunho] = useState<ConfigWidget>(() => {
-    const local = podeEditar ? lerLocal() : null;
+    const local = podeEditar ? lerLocal(empresaId) : null;
     return local && !mesmaConfig(normalizarConfig(local), servidor.rascunho) ? local : servidor.rascunho;
   });
   const [estado, setEstado] = useState<EstadoSalvar>('salvo');
@@ -204,20 +195,20 @@ function EditorCanais({
       try {
         const r = await p;
         definirServidor(r);
-        gravarLocal(null);
+        gravarLocal(empresaId, null);
         setEstado('salvo');
         return r;
       } catch (e) {
         const ex = e as ErroApiCliente;
         setErroSalvar(ex);
         setEstado('erro');
-        if (ex.offline) gravarLocal(c);
+        if (ex.offline) gravarLocal(empresaId, c);
         return null;
       } finally {
         emVoo.current = null;
       }
     },
-    [definirServidor],
+    [definirServidor, empresaId],
   );
 
   useEffect(() => {
@@ -228,12 +219,12 @@ function EditorCanais({
     }
     setEstado('pendente');
     if (!online) {
-      gravarLocal(rascunho);
+      gravarLocal(empresaId, rascunho);
       return;
     }
     const id = setTimeout(() => void salvar(rascunho), 800);
     return () => clearTimeout(id);
-  }, [rascunho, pendente, valido, online, podeEditar, salvar]);
+  }, [rascunho, pendente, valido, online, podeEditar, salvar, empresaId]);
 
   // Instalação: enquanto não detectar, confere de novo a cada 30 s.
   useEffect(() => {
@@ -254,7 +245,7 @@ function EditorCanais({
     // Garante que o que está na tela é o que vai ser publicado.
     const salvo = await api.put<DadosCanais>('/canais/rascunho', { config: rascunho });
     definirServidor(salvo);
-    gravarLocal(null);
+    gravarLocal(empresaId, null);
     return api.post<DadosCanais>('/canais/publicar');
   });
   const descartar = useAcao(() => api.post<DadosCanais>('/canais/descartar'));
@@ -379,6 +370,8 @@ function EditorCanais({
             erros={erros}
             mudar={mudar}
             travado={!podeEditar}
+            podeAdministrar={podeAdministrar}
+            demo={resumo.eu.empresa.demo}
           />
         </div>
 
@@ -429,7 +422,7 @@ function EditorCanais({
                   if (emVoo.current) await emVoo.current.catch(() => undefined);
                   const r = await descartar.executar();
                   if (r) {
-                    gravarLocal(null);
+                    gravarLocal(empresaId, null);
                     definirServidor(r);
                     setRascunho(r.rascunho);
                     setDescartando(false);
@@ -465,20 +458,7 @@ function Aparencia({
   travado: boolean;
 }) {
   const [novaSugestao, setNovaSugestao] = useState<string | null>(null);
-  const [cores, setCores] = useState<{ rotulo: string; valor: string }[]>([]);
-  useEffect(() => {
-    const estilo = getComputedStyle(document.documentElement);
-    const vistos = new Set<string>();
-    const lista: { rotulo: string; valor: string }[] = [];
-    for (const c of CORES_SUGERIDAS) {
-      const v = estilo.getPropertyValue(c.token).trim().toUpperCase();
-      if (/^#[0-9A-F]{6}$/.test(v) && !vistos.has(v)) {
-        vistos.add(v);
-        lista.push({ rotulo: c.rotulo, valor: v });
-      }
-    }
-    setCores(lista);
-  }, []);
+  const cores = useCoresSugeridas();
   const [corDigitada, setCorDigitada] = useState(config.cor);
   useEffect(() => setCorDigitada(config.cor), [config.cor]);
   const contraste = contrasteComBranco(config.cor);
@@ -776,18 +756,23 @@ function Instalacao({
   erros,
   mudar,
   travado,
+  podeAdministrar,
+  demo,
 }: {
   servidor: DadosCanais;
   config: ConfigWidget;
   erros: ErrosConfig;
   mudar: (p: Partial<ConfigWidget>) => void;
   travado: boolean;
+  podeAdministrar: boolean;
+  /** Empresa de demonstração: o segredo vem do servidor (WIDGET_SEGREDO). */
+  demo: boolean;
 }) {
   const agora = useAgora(30_000);
   const [novo, setNovo] = useState('');
   const [erroNovo, setErroNovo] = useState<string | null>(null);
-  const trecho = (chave: string) =>
-    `<script src="${servidor.urlScript}"\n  data-chave="${chave}"\n  data-usuario="ID_DO_USUARIO_LOGADO"\n  data-assinatura="HMAC_DO_ID_DO_USUARIO"\n  async></script>`;
+  const tela = servidor.conector === 'tela';
+  const trecho = (chave: string) => trechoInstalacao(servidor.urlScript, chave, servidor.conector);
   const adicionar = () => {
     const d = normalizarDominio(novo);
     if (!d) return;
@@ -800,9 +785,14 @@ function Instalacao({
     setNovo('');
   };
   const publicados = servidor.publicada.dominios;
+  const ondeEstaOSegredo = demo
+    ? 'O segredo é o mesmo da variável WIDGET_SEGREDO do servidor do copiloto.'
+    : podeAdministrar
+      ? 'Use o segredo do widget, mais abaixo. Guarde-o numa variável de ambiente do seu sistema, como WIDGET_SEGREDO.'
+      : 'Um Admin da sua equipe vê o segredo do widget nesta tela.';
 
   return (
-    <section className="card" aria-labelledby="t-instal">
+    <section className="card" aria-labelledby="t-instal" id="instalacao">
       <div className="card-head cb-card-head-wrap">
         <h2 className="h4" id="t-instal">
           Instalação
@@ -820,10 +810,18 @@ function Instalacao({
         )}
       </div>
       <div className="card-body stack">
-        <p className="small">
-          Cole este trecho antes de <span className="mono">&lt;/body&gt;</span> nas páginas onde o copiloto deve aparecer. Passe o ID do
-          usuário logado: é assim que o copiloto age com as permissões de quem pede.
-        </p>
+        {tela ? (
+          <p className="small">
+            Cole este trecho antes de <span className="mono">&lt;/body&gt;</span> nas páginas onde o copiloto deve aparecer. Preencha com
+            os dados de quem está logado: ID, nome, e-mail e perfis de acesso. O copiloto usa os perfis para saber quem pode pedir cada
+            tarefa.
+          </p>
+        ) : (
+          <p className="small">
+            Cole este trecho antes de <span className="mono">&lt;/body&gt;</span> nas páginas onde o copiloto deve aparecer. Passe o ID do
+            usuário logado: é assim que o copiloto age com as permissões de quem pede.
+          </p>
+        )}
         <div style={{ position: 'relative' }}>
           <pre className="mono cb-snippet" aria-label="Trecho de instalação">
             {trecho(mascararChave(servidor.chavePublica))}
@@ -840,33 +838,34 @@ function Instalacao({
           <p className="small strong">
             O que é o <span className="mono">data-assinatura</span>
           </p>
+          {tela ? (
+            <>
+              <p className="small">
+                Prova que os dados do trecho são mesmo de quem está logado, para ninguém agir como outra pessoa trocando o HTML. O seu
+                sistema calcula, no servidor, o HMAC-SHA256 do texto abaixo com o segredo do widget e escreve o resultado em hexadecimal
+                (64 caracteres). O texto tem o ID, o nome, o e-mail e os perfis, um por linha, com os perfis separados só por vírgula. Se a
+                página não mandar nome, e-mail nem perfis, assine só o ID.
+              </p>
+              <pre className="mono cb-codigo" aria-label="Exemplo do texto assinado">
+                {EXEMPLO_ASSINADO}
+              </pre>
+            </>
+          ) : (
+            <p className="small">
+              Prova que o ID em <span className="mono">data-usuario</span> é mesmo de quem está logado, para ninguém agir como outra pessoa
+              trocando o ID no HTML. O seu sistema calcula, no servidor, o HMAC-SHA256 do ID do usuário com o segredo do widget e escreve o
+              resultado em hexadecimal (64 caracteres).
+            </p>
+          )}
           <p className="small">
-            Prova que o ID em <span className="mono">data-usuario</span> é mesmo de quem está logado, para ninguém agir como outra pessoa
-            trocando o ID no HTML. O seu sistema calcula, no servidor, o HMAC-SHA256 do ID do usuário com o segredo do widget e escreve o
-            resultado em hexadecimal (64 caracteres). O segredo é o mesmo da variável <span className="mono">WIDGET_SEGREDO</span> do
-            servidor do copiloto.
+            {ondeEstaOSegredo} Nunca calcule a assinatura no navegador nem coloque o segredo na página. Sem assinatura válida, o copiloto
+            não abre.
           </p>
-          <p className="small">Nunca calcule a assinatura no navegador nem coloque o segredo na página. Sem assinatura válida, o copiloto não abre.</p>
-          <details>
-            <summary className="small strong" style={{ cursor: 'pointer' }}>
-              Ver exemplos de código
-            </summary>
-            <div className="stack-sm" style={{ marginTop: 'var(--s-3)' }}>
-              <span className="tiny strong">Node.js</span>
-              <pre className="mono cb-codigo">{`const crypto = require('node:crypto');
-const assinatura = crypto
-  .createHmac('sha256', process.env.WIDGET_SEGREDO)
-  .update(String(usuario.id))
-  .digest('hex');`}</pre>
-              <span className="tiny strong">PHP</span>
-              <pre className="mono cb-codigo">{`$assinatura = hash_hmac('sha256', (string) $usuario->id, getenv('WIDGET_SEGREDO'));`}</pre>
-              <span className="tiny strong">Python</span>
-              <pre className="mono cb-codigo">{`import hmac, hashlib, os
-assinatura = hmac.new(os.environ["WIDGET_SEGREDO"].encode(),
-                      str(usuario.id).encode(), hashlib.sha256).hexdigest()`}</pre>
-            </div>
-          </details>
+          <ExemplosCodigo exemplos={exemplosAssinatura(servidor.conector)} />
         </div>
+
+        {tela ? <EnderecoDeSessao /> : null}
+        {podeAdministrar ? <SegredoDoWidget demo={demo} /> : null}
 
         <div className="field">
           <span className="label" id="lbl-dominios">
@@ -931,5 +930,166 @@ assinatura = hmac.new(os.environ["WIDGET_SEGREDO"].encode(),
         </p>
       </div>
     </section>
+  );
+}
+
+function ExemplosCodigo({ exemplos, rotulo = 'Ver exemplos de código' }: { exemplos: { linguagem: string; codigo: string }[]; rotulo?: string }) {
+  return (
+    <details>
+      <summary className="small strong" style={{ cursor: 'pointer' }}>
+        {rotulo}
+      </summary>
+      <div className="stack-sm" style={{ marginTop: 'var(--s-3)' }}>
+        {exemplos.map((e) => (
+          <div key={e.linguagem} className="stack-sm">
+            <span className="tiny strong">{e.linguagem}</span>
+            <pre className="mono cb-codigo">{e.codigo}</pre>
+          </div>
+        ))}
+      </div>
+    </details>
+  );
+}
+
+// ---------- Endereço de sessão (sistemas ligados pelas telas) ----------
+
+const PEDIDO_SESSAO = `POST https://erp.suaempresa.com.br/copiloto/sessao
+Content-Type: application/json
+X-Copiloto-Assinatura: <HMAC-SHA256 em hexadecimal de "101.1760700000000">
+
+{"usuario":"101","ts":1760700000000}`;
+
+function EnderecoDeSessao() {
+  return (
+    <div className="card-flat stack-sm" style={{ padding: 'var(--s-4)' }}>
+      <p className="small strong">Endereço de sessão: para o copiloto entrar com a sessão de quem pede</p>
+      <p className="small">
+        Quando o copiloto entra no sistema com a sessão de quem pediu (escolha em <Link to="/sistema">Sistema</Link>), ele chama o
+        endereço de sessão do seu sistema antes de cada tarefa. Manda o ID da pessoa e a hora em milissegundos (
+        <span className="mono">ts</span>), assinados com o segredo do widget:
+      </p>
+      <pre className="mono cb-codigo" aria-label="Pedido de sessão">
+        {PEDIDO_SESSAO}
+      </pre>
+      <p className="small">
+        A assinatura é o HMAC-SHA256 de <span className="mono">usuario.ts</span> (o ID, um ponto e a hora). O seu sistema confere a
+        assinatura e se a hora é de no máximo 5 minutos atrás. Se estiver tudo certo, responde com os cookies da sessão dessa pessoa:
+      </p>
+      <pre className="mono cb-codigo" aria-label="Resposta com cookies">{`{"cookies":[{"name":"sessao","value":"..."}]}`}</pre>
+      <p className="small">ou com um link de entrada única, que já abre o sistema logado:</p>
+      <pre className="mono cb-codigo" aria-label="Resposta com link">{`{"url":"https://erp.suaempresa.com.br/entrada-unica?token=..."}`}</pre>
+      <p className="small">Se a assinatura não conferir, responda com o status 401. O copiloto avisa a pessoa e não faz nada no sistema.</p>
+      <ExemplosCodigo exemplos={exemplosSessao()} rotulo="Ver exemplos do endereço de sessão" />
+    </div>
+  );
+}
+
+// ---------- Segredo do widget (só Admin) ----------
+
+function SegredoDoWidget({ demo }: { demo: boolean }) {
+  const toast = useToast();
+  const [segredo, setSegredo] = useState<string | null>(null);
+  const [confirmando, setConfirmando] = useState(false);
+  const mostrar = useAcao(() => api.get<SegredoWidget>('/canais/segredo'));
+  const gerar = useAcao(() => api.post<SegredoWidget>('/canais/segredo/novo'));
+  // 409 segredo_do_ambiente: esta empresa usa o segredo do servidor (como a demonstração).
+  const doAmbiente = [mostrar.erro, gerar.erro].find((e) => e?.erro === 'segredo_do_ambiente')?.message ?? null;
+
+  if (demo || doAmbiente) {
+    return (
+      <div className="card-flat stack-sm" style={{ padding: 'var(--s-4)' }}>
+        <p className="small strong">Segredo do widget</p>
+        <p className="small">
+          {doAmbiente ??
+            'Na demonstração, o segredo vem da variável WIDGET_SEGREDO do servidor do copiloto, a mesma que o Horizonte usa. Por isso ele não aparece aqui e não dá para gerar outro.'}
+        </p>
+        <p className="tiny muted">Cada empresa criada no copiloto ganha um segredo próprio, que o Admin vê e troca nesta tela.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="card-flat stack-sm" style={{ padding: 'var(--s-4)' }}>
+      <p className="small strong">Segredo do widget</p>
+      <p className="small">
+        Assina quem está logado no trecho e os pedidos de sessão. Fica só no servidor do seu sistema: nunca no navegador nem no código da página. Só Admin vê.
+      </p>
+      {segredo ? (
+        <div className="row wrap" style={{ gap: 'var(--s-2)' }}>
+          <label className="sr-only" htmlFor="segredo-widget">
+            Segredo do widget
+          </label>
+          <input id="segredo-widget" className="input mono" readOnly value={segredo} style={{ flex: '1 1 280px' }} onFocus={(e) => e.target.select()} />
+          <BotaoCopiar texto={segredo} />
+          <button className="btn btn-ghost btn-sm" type="button" onClick={() => setSegredo(null)}>
+            Esconder
+          </button>
+        </div>
+      ) : null}
+      <div className="row wrap" style={{ gap: 'var(--s-2)' }}>
+        {!segredo ? (
+          <button
+            className={`btn btn-secondary btn-sm${mostrar.enviando ? ' is-loading' : ''}`}
+            type="button"
+            disabled={mostrar.enviando}
+            onClick={async () => {
+              const r = await mostrar.executar();
+              if (r) setSegredo(r.segredo);
+            }}
+          >
+            <Icone nome="cadeado" tamanho="sm" />
+            Mostrar segredo
+          </button>
+        ) : null}
+        <button
+          className="btn btn-ghost btn-sm"
+          type="button"
+          onClick={() => {
+            gerar.limparErro();
+            setConfirmando(true);
+          }}
+        >
+          <Icone nome="reexecutar" tamanho="sm" />
+          Gerar novo segredo
+        </button>
+      </div>
+      <ErroAcao erro={mostrar.erro} />
+
+      {confirmando ? (
+        <Modal
+          titulo="Gerar um segredo novo?"
+          aoFechar={() => setConfirmando(false)}
+          rodape={
+            <>
+              <button className="btn btn-secondary" type="button" onClick={() => setConfirmando(false)}>
+                Cancelar
+              </button>
+              <button
+                className={`btn btn-danger${gerar.enviando ? ' is-loading' : ''}`}
+                type="button"
+                disabled={gerar.enviando}
+                onClick={async () => {
+                  const r = await gerar.executar();
+                  if (r) {
+                    setSegredo(r.segredo);
+                    setConfirmando(false);
+                    toast.mostrar('Segredo novo gerado. Atualize o seu sistema para assinar com ele.');
+                  }
+                }}
+              >
+                Gerar segredo novo
+              </button>
+            </>
+          }
+        >
+          <p className="small muted">
+            O segredo atual para de valer na hora. Até o seu sistema assinar com o novo, o assistente não abre para ninguém e o copiloto não
+            consegue pedir sessões. Combine com o time técnico antes.
+          </p>
+          <ErroAcao erro={gerar.erro} />
+        </Modal>
+      ) : null}
+      {toast.elemento}
+    </div>
   );
 }

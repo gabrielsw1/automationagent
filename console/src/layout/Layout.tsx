@@ -1,16 +1,18 @@
-// Moldura do console (C0–C9): menu lateral com contadores, topo com trilha, busca, "Produção",
-// "Testar copiloto" e menu da pessoa, faixas globais e o conteúdo da página.
+// Moldura do console (C0–C9): menu lateral com o seletor de empresa e contadores, topo com trilha,
+// busca, "<empresa> · Produção", "Testar copiloto" e menu da pessoa, faixas globais e o conteúdo.
 // No celular (até 760 px) o menu vira uma gaveta aberta pelo botão do topo.
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { Link, NavLink, useLocation } from 'react-router-dom';
-import { ROTULO_PERFIL } from '@copiloto/shared';
+import { fmt, ROTULO_PERFIL, type EmpresaResumo, type Eu } from '@copiloto/shared';
+import { api, type ErroApiCliente } from '../api/cliente.ts';
 import { useEventosConsole } from '../api/hooks.ts';
 import { ChatDeTeste } from '../componentes/ChatDeTeste.tsx';
 import { Gaveta } from '../componentes/Gaveta.tsx';
 import { Icone } from '../componentes/icones.tsx';
 import { ItemMenu, Menu } from '../componentes/Menu.tsx';
 import { ProvedorMigalhas, type Migalha } from '../componentes/pagina.tsx';
-import { useSessao } from '../componentes/sessao.tsx';
+import { recarregar, useSessao } from '../componentes/sessao.tsx';
+import { useToast } from '../componentes/Toast.tsx';
 import BuscaGlobal from './BuscaGlobal.tsx';
 import { FaixasDoResumo, FaixaSemInternet } from './Faixas.tsx';
 import { GRUPOS_NAV, migalhasPadrao } from './navegacao.ts';
@@ -19,11 +21,12 @@ function Navegacao({ aoNavegar }: { aoNavegar?: () => void }) {
   const { resumo } = useSessao();
   const { guia } = resumo;
   const guiaCompleto = guia.feitos >= guia.total;
+  const grupos = GRUPOS_NAV.filter((g) => !g.soAdminPlataforma || resumo.eu.adminPlataforma);
   return (
     <>
-      {GRUPOS_NAV.map((g) => (
+      {grupos.map((g) => (
         <div key={g.rotulo} className="ca-nav-grupo" role="group" aria-label={g.rotulo}>
-          <div className="nav-label">{g.rotulo}</div>
+          {g.rotuloOculto ? null : <div className="nav-label">{g.rotulo}</div>}
           {g.itens.map((item) => (
             <NavLink
               key={item.para}
@@ -108,14 +111,133 @@ function Trilha({ migalhas }: { migalhas: Migalha[] }) {
   );
 }
 
+function SeloDemonstracao() {
+  return <span className="badge badge-accent ca-selo-demo">Demonstração</span>;
+}
+
+/** Troca a empresa aberta. Tudo na tela é dela: depois de trocar, o console abre de novo do zero. */
+function useTrocarEmpresa() {
+  const toast = useToast();
+  return async (e: EmpresaResumo) => {
+    toast.mostrar({ texto: `Abrindo ${e.nome}…`, tipo: 'info' });
+    try {
+      await api.post<Eu>('/auth/empresa', { empresaId: e.id });
+      recarregar.console('/');
+    } catch (ex) {
+      toast.erro(`Não consegui abrir ${e.nome}. ${(ex as ErroApiCliente).message}`);
+    }
+  };
+}
+
+/** Itens das outras empresas da conta, com o selo "Demonstração". */
+function ItensOutrasEmpresas({ outras, fechar, idRotulo }: { outras: EmpresaResumo[]; fechar: () => void; idRotulo: string }) {
+  const trocar = useTrocarEmpresa();
+  if (!outras.length) return null;
+  return (
+    <div className="ca-menu-grupo" role="group" aria-labelledby={idRotulo}>
+      <span className="tiny muted ca-menu-rotulo" id={idRotulo}>
+        Trocar de empresa
+      </span>
+      {outras.map((e) => (
+        <ItemMenu
+          key={e.id}
+          titulo={
+            <span className="row wrap" style={{ gap: 'var(--s-2)' }}>
+              {e.nome}
+              {e.demo ? <SeloDemonstracao /> : null}
+            </span>
+          }
+          icone="empresa"
+          aoClicar={() => {
+            fechar();
+            void trocar(e);
+          }}
+        />
+      ))}
+    </div>
+  );
+}
+
+/** Seletor de empresa no topo do menu lateral (abaixo da marca, acima de "Painel"). */
+function SeletorEmpresa({ aoNavegar, idRotulo }: { aoNavegar?: () => void; idRotulo: string }) {
+  const { resumo } = useSessao();
+  const { eu } = resumo;
+  const outras = eu.empresas.filter((e) => e.id !== eu.empresa.id);
+  return (
+    <div className="ca-seletor-empresa">
+      <Menu
+        largura={264}
+        alinhar="esquerda"
+        botao={(p) => (
+          <button
+            type="button"
+            className="btn btn-secondary btn-sm ca-seletor-botao"
+            aria-label={`Trocar de empresa. Empresa atual: ${eu.empresa.nome}`}
+            {...p}
+          >
+            <span className="row ca-seletor-nome">
+              <span className="avatar avatar-sm" aria-hidden="true">
+                {fmt.iniciais(eu.empresa.nome)}
+              </span>
+              <span className="ca-seletor-texto">{eu.empresa.nome}</span>
+            </span>
+            <Icone nome="seta-baixo" tamanho="sm" />
+          </button>
+        )}
+      >
+        {(fechar) => (
+          <>
+            <div className="ca-menu-empresa">
+              <span className="tiny muted">Empresa aberta</span>
+              <span className="row wrap" style={{ gap: 'var(--s-2)' }}>
+                <span className="strong">{eu.empresa.nome}</span>
+                {eu.empresa.demo ? <SeloDemonstracao /> : null}
+              </span>
+            </div>
+            <ItensOutrasEmpresas outras={outras} fechar={fechar} idRotulo={idRotulo} />
+            <ItemMenu
+              titulo="Criar outra empresa"
+              icone="mais"
+              para="/criar-conta"
+              aoClicar={() => {
+                fechar();
+                aoNavegar?.();
+              }}
+            />
+            {eu.adminPlataforma ? (
+              <ItemMenu
+                titulo="Empresas clientes"
+                icone="empresa"
+                para="/plataforma"
+                aoClicar={() => {
+                  fechar();
+                  aoNavegar?.();
+                }}
+              />
+            ) : null}
+          </>
+        )}
+      </Menu>
+    </div>
+  );
+}
+
 function MenuPessoa() {
   const { resumo, sair } = useSessao();
   const { eu } = resumo;
+  const outras = eu.empresas.filter((e) => e.id !== eu.empresa.id);
+
   return (
     <Menu
-      largura={260}
+      largura={280}
       botao={(p) => (
-        <button type="button" className="ca-avatar-botao" aria-label={`${eu.nome}, ${ROTULO_PERFIL[eu.perfil]}. Abrir menu da conta`} {...p}>
+        <button
+          type="button"
+          className="ca-avatar-botao"
+          aria-label={`${eu.nome}, ${ROTULO_PERFIL[eu.perfil]}. Abrir menu da conta`}
+          title={eu.empresa.nome}
+          {...p}
+        >
           <span className="avatar">{eu.iniciais}</span>
         </button>
       )}
@@ -129,6 +251,16 @@ function MenuPessoa() {
               {ROTULO_PERFIL[eu.perfil]}
             </span>
           </div>
+          <div className="ca-menu-empresa">
+            <span className="tiny muted">Empresa aberta</span>
+            <span className="row wrap" style={{ gap: 'var(--s-2)' }}>
+              <span className="strong">{eu.empresa.nome}</span>
+              {eu.empresa.demo ? <SeloDemonstracao /> : null}
+            </span>
+          </div>
+          <ItensOutrasEmpresas outras={outras} fechar={fechar} idRotulo="ca-menu-trocar" />
+          <ItemMenu titulo="Criar outra empresa" icone="mais" para="/criar-conta" aoClicar={fechar} />
+          {eu.adminPlataforma ? <ItemMenu titulo="Empresas clientes" icone="empresa" para="/plataforma" aoClicar={fechar} /> : null}
           <ItemMenu titulo="Equipe e limites" icone="equipe" para="/equipe" aoClicar={fechar} />
           <ItemMenu titulo="Guia de início" icone="guia" para="/guia" aoClicar={fechar} />
           <ItemMenu
@@ -187,6 +319,7 @@ export default function Layout({ children }: { children: ReactNode }) {
       <div className="app ca-app">
         <nav className="sidebar ca-sidebar" aria-label="Menu principal">
           <Marca />
+          <SeletorEmpresa idRotulo="ca-seletor-trocar" />
           <Navegacao />
         </nav>
 
@@ -209,8 +342,15 @@ export default function Layout({ children }: { children: ReactNode }) {
             <div className="hide-sm ca-busca-topo">
               <BuscaGlobal />
             </div>
-            <span className="badge badge-outline hide-sm" title={`Conectado ao ${resumo.nomeSistema} de produção`}>
-              Produção
+            <span
+              className="badge badge-outline hide-sm"
+              title={
+                resumo.eu.empresa.demo
+                  ? `Empresa de demonstração, com dados de exemplo do ${resumo.nomeSistema}`
+                  : `Conectado ao ${resumo.nomeSistema} de produção`
+              }
+            >
+              {resumo.eu.empresa.nome} · {resumo.eu.empresa.demo ? 'Demonstração' : 'Produção'}
             </span>
             <button type="button" className="btn btn-secondary btn-sm" aria-label="Testar copiloto" onClick={() => setTestando(true)}>
               <Icone nome="chat" tamanho="sm" />
@@ -232,6 +372,7 @@ export default function Layout({ children }: { children: ReactNode }) {
           <div className="ca-gaveta-busca">
             <BuscaGlobal atalho={false} aoEscolher={() => setMenuAberto(false)} />
           </div>
+          <SeletorEmpresa idRotulo="ca-gaveta-trocar" aoNavegar={() => setMenuAberto(false)} />
           <Navegacao aoNavegar={() => setMenuAberto(false)} />
         </div>
       </Gaveta>

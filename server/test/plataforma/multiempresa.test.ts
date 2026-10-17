@@ -129,7 +129,7 @@ describe('cadastro de empresa', () => {
       expect(r.statusCode).toBe(400);
       return r.json().mensagem as string;
     };
-    expect(await erro({ pessoa: { ...CADASTRO.pessoa, senha: 'curta1' } })).toBe('A senha precisa de pelo menos 10 caracteres.');
+    expect(await erro({ pessoa: { ...CADASTRO.pessoa, senha: 'curta1' } })).toBe('A senha precisa de pelo menos 8 caracteres.');
     expect(await erro({ pessoa: { ...CADASTRO.pessoa, senha: 'so-letras-aqui' } })).toBe('Use letras e números na senha.');
     expect(await erro({ pessoa: { ...CADASTRO.pessoa, senha: 'Pedra Branca Distribuidora 1' } })).toBe('A senha precisa ser diferente do nome da empresa.');
     expect(await erro({ pessoa: { ...CADASTRO.pessoa, email: 'luana@gmail.com' } })).toBe('Use o e-mail da empresa, por exemplo nome@suaempresa.com.br.');
