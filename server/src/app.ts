@@ -32,6 +32,22 @@ export async function criarApp(ctx: Contexto, opcoes: OpcoesApp = {}): Promise<F
     trustProxy: true,
   });
   app.decorate('ctx', ctx);
+  // Ao fechar: para vigias de "sistema voltou" e execuções em segundo plano.
+  app.addHook('onClose', async () => {
+    ctx.motor.parar();
+  });
+
+  // JSON vazio vira {} (ex.: POST /confirmar com content-type e sem corpo).
+  app.removeContentTypeParser('application/json');
+  app.addContentTypeParser('application/json', { parseAs: 'string' }, (_req, corpo, pronto) => {
+    const texto = String(corpo ?? '').trim();
+    if (!texto) return pronto(null, {});
+    try {
+      pronto(null, JSON.parse(texto));
+    } catch {
+      pronto(new ErroHttp(400, 'json_invalido', 'O corpo da requisição não é um JSON válido.'), undefined);
+    }
+  });
 
   await app.register(cookie);
   await app.register(multipart, { limits: { fileSize: 25 * 1024 * 1024, files: 5 } });

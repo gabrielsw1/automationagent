@@ -120,6 +120,21 @@ export class AdaptadorFalso implements AdaptadorSistema {
       this.clientes.push(novo);
       return r(201, novo);
     }
+    if (c.metodo === 'POST' && caminho === '/v1/planos/alteracoes') {
+      const p = (c.corpo ?? {}) as Record<string, unknown>;
+      if (!usuario?.perfis.some((x) => ['Gestor financeiro', 'Administradores'].includes(x))) {
+        return r(403, { erro: 'sem_permissao', mensagem: 'Sem permissão', perfil_necessario: 'Gestor financeiro' });
+      }
+      const alvo = somenteDigitos(String(p.cliente ?? ''));
+      const nome = String(p.cliente ?? '').toLowerCase();
+      const cli = this.clientes.find((x) => (alvo.length === 14 && x.cnpj === alvo) || x.razao_social.toLowerCase().includes(nome));
+      if (!cli) return r(404, { erro: 'cliente_nao_encontrado', mensagem: 'Cliente não encontrado' });
+      if (cli.plano === p.plano) return r(409, { erro: 'mesmo_plano', mensagem: `O cliente já está no plano ${cli.plano}` });
+      const alteracao = { id: String(this.proximo++), cliente_id: cli.id, cliente_nome: cli.razao_social, plano_anterior: cli.plano, plano: String(p.plano) };
+      if (!c.simulacao) cli.plano = String(p.plano);
+      return r(201, alteracao);
+    }
+    if (c.metodo === 'DELETE' && /^\/v1\/planos\/alteracoes\/\d+$/.test(caminho)) return r(204, '');
     return r(404, { erro: 'nao_encontrado', mensagem: `Rota falsa não implementada: ${c.metodo} ${caminho}` });
   }
 }
