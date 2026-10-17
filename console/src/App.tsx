@@ -28,6 +28,8 @@ function AreaLogada() {
 
   // Depois de entrar, volta para onde a pessoa ia (ex.: /aprender?gravar=..., aberto pela extensão).
   const irParaEntrar = useCallback(() => {
+    // Vários 401 chegam juntos (e o StrictMode carrega duas vezes): só o primeiro leva à entrada.
+    if (window.location.pathname === '/entrar') return;
     const aqui = `${window.location.pathname}${window.location.search}`;
     navegar(aqui === '/' ? '/entrar' : `/entrar?voltar=${encodeURIComponent(aqui)}`, { replace: true });
   }, [navegar]);
