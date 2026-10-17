@@ -80,15 +80,16 @@ describe('gravador de fluxos (/api/gravacao)', () => {
     const a = await ambiente();
     const sem = await a.pedir('POST', '/api/console/fluxos', { nome: 'X', urlInicial: '/a' }, a.leitor.cookie);
     expect(sem.statusCode).toBe(403);
-    const fora = await a.pedir('POST', '/api/console/fluxos', { nome: 'Fluxo', urlInicial: 'https://outro.site/x' });
-    expect(fora.statusCode).toBe(400);
-    expect(fora.json().mensagem).toMatch(/endereço do Horizonte/);
+    const invalido = await a.pedir('POST', '/api/console/fluxos', { nome: 'Fluxo', urlInicial: 'javascript:alert(1)' });
+    expect(invalido.statusCode).toBe(400);
+    expect(invalido.json().mensagem).toMatch(/endereço do Horizonte/);
 
     const r = await a.pedir('POST', '/api/console/fluxos', { nome: 'Segunda via de boleto', urlInicial: 'http://horizonte.teste/financeiro/segunda-via' });
     expect(r.statusCode).toBe(200);
     const { fluxo, token, urlGravacao } = r.json() as { fluxo: Fluxo; token: string; urlGravacao: string };
     expect(fluxo).toMatchObject({ status: 'gravando', etapa: 'gravar', urlInicial: '/financeiro/segunda-via', gravadoPor: 'Júlia Martins' });
-    expect(urlGravacao).toBe(`http://horizonte.teste/financeiro/segunda-via?copiloto_gravacao=${token}`);
+    // copiloto_api diz à extensão do navegador com qual servidor do copiloto falar.
+    expect(urlGravacao).toBe(`http://horizonte.teste/financeiro/segunda-via?copiloto_gravacao=${token}&copiloto_api=${encodeURIComponent(a.config.urlPublica)}`);
     expect(JSON.stringify(fluxo)).not.toContain(token);
 
     const estado = await a.app.inject({ method: 'GET', url: `/api/gravacao/${token}` });
@@ -127,6 +128,26 @@ describe('gravador de fluxos (/api/gravacao)', () => {
 
     const nada = await a.app.inject({ method: 'GET', url: '/api/gravacao/token-que-nao-existe' });
     expect(nada.statusCode).toBe(404);
+  });
+
+  it('outro site (gravação pela extensão): guarda o endereço completo e tira os parâmetros do gravador dos passos', async () => {
+    const a = await ambiente();
+    a.config.urlPublica = 'https://copiloto.empresa.com.br/';
+    const r = await a.pedir('POST', '/api/console/fluxos', {
+      nome: 'Pedido no portal',
+      urlInicial: 'https://portal.fornecedor.com.br/app/pedidos?aba=2&copiloto_gravacao=velho&copiloto_api=x#/novo',
+    });
+    expect(r.statusCode).toBe(200);
+    const { fluxo, token, urlGravacao } = r.json() as { fluxo: Fluxo; token: string; urlGravacao: string };
+    expect(fluxo.urlInicial).toBe('https://portal.fornecedor.com.br/app/pedidos?aba=2#/novo');
+    expect(urlGravacao).toBe(
+      `https://portal.fornecedor.com.br/app/pedidos?aba=2&copiloto_gravacao=${token}&copiloto_api=${encodeURIComponent('https://copiloto.empresa.com.br')}#/novo`,
+    );
+    const url = `https://portal.fornecedor.com.br/app/pedidos?aba=2&copiloto_gravacao=${token}&copiloto_api=x`;
+    const ev = await a.app.inject({ method: 'POST', url: `/api/gravacao/${token}/eventos`, payload: { eventos: [{ tipo: 'navegar', ts: 1, url, tituloPagina: 'Pedidos' }] } });
+    expect(ev.json()).toEqual({ passos: 1 });
+    const f = (await a.pedir('GET', `/api/console/fluxos/${fluxo.id}`)).json<Fluxo>();
+    expect(f.passos[0].url).toBe('/app/pedidos?aba=2');
   });
 
   it('cancelar a gravação descarta os eventos', async () => {

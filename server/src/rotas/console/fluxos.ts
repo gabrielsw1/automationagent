@@ -97,22 +97,36 @@ export interface RespostaTesteFluxo {
   eventos: EventoNavegador[];
 }
 
-/** Endereço que o console abre numa aba nova: a tela inicial com o token do gravador. */
-export function urlDeGravacao(urlBase: string, urlInicial: string, token: string): string {
-  const base = urlBase.replace(/\/+$/, '');
-  const caminho = urlInicial.startsWith('/') ? urlInicial : `/${urlInicial}`;
-  return `${base}${caminho}${caminho.includes('?') ? '&' : '?'}copiloto_gravacao=${encodeURIComponent(token)}`;
+/**
+ * Endereço que o console abre numa aba nova: a tela inicial com o token do gravador e o endereço
+ * do servidor do copiloto (a extensão do navegador lê o `copiloto_api` para saber com quem falar).
+ * `urlInicial` é um caminho do sistema ou, para outro site, o endereço completo.
+ */
+export function urlDeGravacao(urlBase: string, urlInicial: string, token: string, urlApi: string): string {
+  const inicio = /^https?:\/\//i.test(urlInicial)
+    ? urlInicial
+    : `${urlBase.replace(/\/+$/, '')}${urlInicial.startsWith('/') ? urlInicial : `/${urlInicial}`}`;
+  // Os parâmetros vão antes do #, para valerem também em sistemas com rotas no hash.
+  const corte = inicio.indexOf('#');
+  const semHash = corte < 0 ? inicio : inicio.slice(0, corte);
+  const hash = corte < 0 ? '' : inicio.slice(corte);
+  const parametros = `copiloto_gravacao=${encodeURIComponent(token)}&copiloto_api=${encodeURIComponent(urlApi.replace(/\/+$/, ''))}`;
+  return `${semHash}${semHash.includes('?') ? '&' : '?'}${parametros}${hash}`;
 }
 
-/** Aceita "/caminho" ou um endereço completo do próprio sistema; devolve o caminho. */
+/**
+ * Aceita "/caminho" ou um endereço completo. Do próprio sistema, devolve o caminho; de outro site
+ * (a extensão grava em qualquer site), devolve o endereço completo, sempre sem os parâmetros do gravador.
+ */
 function caminhoInicial(urlBase: string, entrada: string, nomeSistema: string): string {
   const t = entrada.trim();
   if (t.startsWith('/')) return t;
   try {
     const u = new URL(t);
-    const base = new URL(urlBase);
-    if (u.host !== base.host) throw new Error('outro host');
+    if (u.protocol !== 'http:' && u.protocol !== 'https:') throw new Error('protocolo');
     u.searchParams.delete('copiloto_gravacao');
+    u.searchParams.delete('copiloto_api');
+    if (u.host !== new URL(urlBase).host) return u.toString();
     const busca = u.searchParams.toString();
     return u.pathname + (busca ? `?${busca}` : '');
   } catch {
@@ -174,7 +188,7 @@ const rotas: FastifyPluginAsync = async (app) => {
   const respostaGravacao = (f: LinhaFluxo): RespostaGravacao => ({
     fluxo: publico(f),
     token: f.tokenGravacao!,
-    urlGravacao: urlDeGravacao(adaptador.urlBase, f.urlInicial ?? '/', f.tokenGravacao!),
+    urlGravacao: urlDeGravacao(adaptador.urlBase, f.urlInicial ?? '/', f.tokenGravacao!, ctx.config.urlPublica),
   });
   const tarefaExiste = (id: string | null | undefined) => {
     if (id && !catalogo.obter(id)) throw pedidoInvalido('A tarefa escolhida não existe mais. Escolha outra.');
