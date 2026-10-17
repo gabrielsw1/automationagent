@@ -1,0 +1,63 @@
+/* Copiloto · tokens de design
+   ESTE É O ÚNICO ARQUIVO DE CORES DA MARCA. Console e widget leem tudo daqui.
+   Identidade Starta (starta.site, out/2026): primária rosa #FA276B, secundária vinho #CB0F4B,
+   textos #181C20 / #2C2D2D / #565757, fundo sutil #F2F2F2, borda #D4D5D5, erro #D84949,
+   fonte Open Sans, botões em pílula e cartões com raio 20px. Para trocar a marca, mude só
+   os valores --brand-*, --accent-* e --ink-*; todo o resto deriva deles.
+   O rosa exato #FA276B tem só 3,8:1 com texto branco: fica em peças sem texto (botão flutuante,
+   logo, barras, gráficos, anel de foco). Botões com texto branco usam --brand-btn (#E12360, 4,55:1)
+   e links/texto usam --brand-700 (#CD1F57, 5,3:1). Caminho navegador e falhas nos gráficos usam
+   o vinho --accent-500 (#961740).
+   `:host` faz os tokens valerem também dentro do widget, que roda num Shadow DOM. */
+
+:root,
+:host {
+  /* Marca Starta */
+  --brand-900: #961740;
+  --brand-700: #CD1F57;   /* texto e links sobre claro (5,3:1) */
+  --brand-btn: #E12360;   /* fundo de botão com texto branco (4,55:1) */
+  --brand-600: #FA276B;   /* primária exata: peças sem texto, foco, gráficos */
+  --brand-200: #FC93B5;
+  --brand-100: #FED3E1;
+  --brand-50:  #FEF2F6;
+  --accent-700: #961740;  /* secundária vinho: texto */
+  --accent-500: #961740;  /* secundária vinho: navegador, falhas em gráficos, preenchimento com texto branco */
+  --accent-50:  #FBF0F4;
+
+  /* Neutros da marca */
+  --ink-900: #181C20;     /* títulos e texto principal */
+  --ink-700: #2C2D2D;     /* corpo */
+  --ink-500: #565757;     /* texto secundário */
+  --ink-400: #8C8D8D;     /* só ícones, placeholder, desabilitado */
+  --line-strong: #D4D5D5;
+  --line: #E6E7E7;
+  --surface-2: #F2F2F2;
+  --surface: #F8F8F8;     /* fundo do app */
+  --white: #FFFFFF;
+
+  /* Semânticas (o site usa o rosa também para sucesso; o app usa um verde próprio) */
+  --success-700: #0B6B40; --success-500: #12A061; --success-50: #E8F6EF;
+  --warning-700: #8A5300; --warning-500: #F2A900; --warning-50: #FFF6DE;
+  --danger-700: #A83232;  --danger-500: #D84949;  --danger-50: #FCEDED;
+
+  /* Tipografia */
+  --font-sans: "Open Sans", "Segoe UI", system-ui, -apple-system, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+  --fs-12: 12px; --fs-13: 13px; --fs-14: 14px; --fs-16: 16px; --fs-18: 18px;
+  --fs-20: 20px; --fs-24: 24px; --fs-32: 32px; --fs-40: 40px;
+
+  /* Espaço (base 4) */
+  --s-1: 4px; --s-2: 8px; --s-3: 12px; --s-4: 16px; --s-5: 20px; --s-6: 24px;
+  --s-8: 32px; --s-10: 40px; --s-12: 48px; --s-16: 64px;
+
+  /* Raios */
+  --r-sm: 6px; --r-md: 10px; --r-lg: 14px; --r-xl: 20px; --r-pill: 999px;
+  --r-btn: var(--r-pill);   /* botões em pílula, como no site */
+  --r-card: var(--r-xl);    /* cartões com raio 20px */
+
+  /* Sombras (a média é a sombra dos cartões do site) */
+  --sh-sm: 0 1px 2px rgba(24, 28, 32, .06), 0 1px 1px rgba(24, 28, 32, .04);
+  --sh-md: 0 0 12px rgba(24, 28, 32, .06), 0 4px 48px rgba(24, 28, 32, .03);
+  --sh-lg: 0 16px 40px rgba(24, 28, 32, .14), 0 4px 12px rgba(24, 28, 32, .08);
+  --ring: 0 0 0 3px var(--brand-100), 0 0 0 1px var(--brand-600);
+}

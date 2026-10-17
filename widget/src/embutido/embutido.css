@@ -1,0 +1,61 @@
+/* Widget embutido no sistema anfitrião (Shadow DOM). Só var(--token).
+   :host isola o widget do CSS da página (all: initial não mexe nas variáveis --*). */
+:host { all: initial; }
+.cp-raiz {
+  font-family: var(--font-sans); font-size: var(--fs-14); line-height: 1.5; color: var(--ink-900);
+  -webkit-font-smoothing: antialiased; text-align: left;
+}
+.cp-raiz [hidden] { display: none !important; }
+
+/* botão flutuante e dica do atalho */
+.cp-lancador-linha {
+  position: fixed; bottom: var(--s-6); right: var(--s-6); z-index: 2147483000;
+  display: flex; align-items: center; gap: var(--s-3);
+}
+.cp-esquerda .cp-lancador-linha { right: auto; left: var(--s-6); flex-direction: row-reverse; }
+.cp-lancador-linha .cp-dica-atalho { margin: 0; }
+.cp-nao-lidas {
+  position: absolute; top: 2px; right: 2px; width: 14px; height: 14px; border-radius: 50%;
+  background: var(--danger-500); border: 2px solid var(--white);
+}
+
+/* painel */
+.cp-painel {
+  position: fixed; bottom: 100px; right: var(--s-6); z-index: 2147483001;
+  width: 400px; max-width: calc(100vw - 48px);
+  height: 720px; max-height: calc(100vh - 124px); max-height: calc(100dvh - 124px);
+  display: flex; animation: cp-subir .16s ease-out;
+}
+.cp-esquerda .cp-painel { right: auto; left: var(--s-6); }
+.cp-painel > .widget { height: 100%; }
+
+/* cartões flutuantes (sugestão proativa e aviso de mensagem nova) */
+.cp-flutuante {
+  position: fixed; bottom: 100px; right: var(--s-6); z-index: 2147483000;
+  width: 312px; max-width: calc(100vw - 48px);
+  padding: var(--s-4); box-shadow: var(--sh-lg);
+  display: flex; flex-direction: column; gap: 14px;
+  animation: cp-subir .2s ease-out;
+}
+.cp-esquerda .cp-flutuante { right: auto; left: var(--s-6); }
+.cp-aviso { gap: 10px; }
+.cp-aviso .btn-icon { margin: -6px -6px 0 0; }
+
+@keyframes cp-subir { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+
+/* telas estreitas: o painel ocupa a tela toda */
+@media (max-width: 480px) {
+  .cp-painel, .cp-esquerda .cp-painel {
+    inset: 0; width: 100%; max-width: none; height: 100%; max-height: none;
+  }
+  .cp-painel > .widget { border-radius: 0; border: 0; box-shadow: none; }
+  .cp-aberto .cp-lancador-linha { display: none; }
+  .cp-lancador-linha, .cp-esquerda .cp-lancador-linha { bottom: var(--s-4); right: var(--s-4); }
+  .cp-esquerda .cp-lancador-linha { right: auto; left: var(--s-4); }
+  .cp-flutuante, .cp-esquerda .cp-flutuante { left: var(--s-4); right: var(--s-4); width: auto; max-width: none; bottom: 92px; }
+  .cp-lancador-linha .cp-dica-atalho { display: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cp-painel, .cp-flutuante { animation: none; }
+}

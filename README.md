@@ -1,3 +1,110 @@
 # automationagent
 
 Copiloto que executa tarefas dentro do sistema da empresa. O código chega pelo PR da branch `claude/copiloto-build`.
+
+A pessoa pede no widget, do jeito dela ("cadastra o cliente Pólen Café, CNPJ ..., prazo 30 dias"). O copiloto pergunta o que falta, mostra um cartão para conferir e só grava depois do "Confirmar e executar". Ele grava pela API do sistema e, onde não há API, pelo navegador, usando um fluxo gravado na tela. No fim, devolve um recibo com a opção de desfazer. A equipe configura tudo no console: tarefas, fluxos, base de conhecimento, widget, equipe e limites de gasto.
+
+## Rodar (Windows, PowerShell)
+
+Requisitos: Node.js 22.13 ou mais novo e Git.
+
+```powershell
+git clone https://github.com/gabrielsw1/automationagent
+cd automationagent
+git checkout claude/copiloto-build
+setx ANTHROPIC_API_KEY "sua-chave"   # uma vez; depois FECHE e abra outro terminal
+npm run dev
+```
+
+O `setx` só vale para terminais abertos depois dele. Para conferir se a chave chegou, rode `echo $env:ANTHROPIC_API_KEY` num terminal novo. Para usar só no terminal atual, rode `$env:ANTHROPIC_API_KEY = "sua-chave"`.
+
+Na primeira vez, o `npm run dev` faz três coisas: instala as dependências, baixa o Chromium usado nas tarefas pelo navegador (cerca de 150 MB) e grava os dados de exemplo. Depois disso, abra:
+
+| O quê | Endereço | Entrar com |
+|---|---|---|
+| Sistema de exemplo (Horizonte) com o widget | http://localhost:4000 | Ana Ribeiro (escolha na tela de login) |
+| Console do copiloto | http://localhost:5173 | `rafael.lima@seusistema.com.br` / `copiloto123` |
+
+No widget, abra o copiloto pelo botão no canto da tela ou com Ctrl+K.
+
+Sem `ANTHROPIC_API_KEY`, tudo funciona em **modo simulado**: as respostas seguem regras fixas, e o widget e o console mostram um aviso. É o modo usado nos testes.
+
+### Com Docker
+
+```powershell
+docker compose up --build
+```
+
+O Docker sobe o mesmo conjunto, já compilado: o console fica em http://localhost:3000 e o Horizonte em http://localhost:4000. A chave vem da variável `ANTHROPIC_API_KEY` do terminal (aqui também vale a regra do `setx` só funcionar em terminal novo).
+
+### Outros comandos
+
+| Comando | O que faz |
+|---|---|
+| `npm test` | Roda os testes de todos os pacotes. |
+| `npm run lint` | Roda o ESLint e o typecheck de todos os pacotes. |
+| `npm run seed` | Recria o banco local com os dados de exemplo (apaga `data/`). |
+| `npm start` | Compila e sobe sem recarga (console em http://localhost:3000). |
+| `npm run setup` | Baixa o Chromium, caso o download automático tenha falhado. |
+
+## Frases para testar no widget
+
+| Peça como Ana Ribeiro | O que acontece |
+|---|---|
+| `cadastra o cliente Pólen Café, CNPJ 11.222.333/0001-81, prazo 30 dias` | Pergunta o e-mail, mostra o cartão e grava pela API. Devolve o recibo (#4821) com Desfazer por 5 minutos. |
+| `cadastra a ACME, CNPJ 12.345.678/0001-95, prazo 30 dias, cobrança financeiro@acme.com.br` | O CNPJ já existe: nada é gravado. Oferece abrir o cadastro existente ou atualizar. |
+| `muda o plano da ACME para Premium` | Ana não tem o perfil necessário. O copiloto oferece pedir aprovação a Rafael Lima, e quem aprova é o console (Execuções › Aguardando aprovação). |
+| `agenda visita técnica na Padaria Estrela segunda às 10h` | Executa pelo navegador, com o fluxo gravado. |
+| `como emitir a segunda via de um boleto vencido?` | Responde pela base de conhecimento, citando a fonte. |
+| `quero falar com uma pessoa` | Passa a conversa para o suporte com um resumo. No console, Execuções mostra a conversa e o botão Assumir. |
+
+Como Paula Nunes, peça `relatório de vendas de setembro por vendedor em pdf`. O recibo traz o link do PDF. Como Marcos Teixeira, peça uma segunda via de boleto (essa tarefa ainda está em teste, liberada só para algumas pessoas).
+
+Para ver as falhas acontecerem, abra http://localhost:4000/_demo. Lá você pode deixar a API instável ou mudar a tela de agendamento. Com a API instável, o copiloto tenta de novo e, se não der, passa a usar o fluxo gravado. Com a tela mudada, ele tenta a recuperação visual e transfere para uma pessoa quando não tem certeza.
+
+## Claude
+
+- O código usa o SDK oficial `@anthropic-ai/sdk` e nenhuma camada compatível com OpenAI.
+- O agente roda no `claude-opus-5-5`, com thinking adaptativo e streaming. O `claude-haiku-5-5` só classifica os pedidos, que é a parte barata.
+- A chave vem só da variável `ANTHROPIC_API_KEY` e nunca é gravada.
+- Para trocar o modelo ou o esforço, use `COPILOTO_MODELO`, `COPILOTO_MODELO_RAPIDO` e `COPILOTO_ESFORCO`. As outras variáveis estão em `.env.example`.
+
+## Ligar ao seu sistema de verdade
+
+O copiloto só fala com o sistema da empresa por um **adaptador**, em `server/src/adaptadores/`. O do Horizonte (`exemplo/`) serve de modelo.
+
+1. Copie `server/src/adaptadores/exemplo/` para uma pasta nova, por exemplo `meu-sistema/`.
+2. Implemente a interface `AdaptadorSistema` (`server/src/adaptadores/tipos.ts`):
+   - `buscarUsuario` e `listarUsuarios`: quem usa o widget e com quais perfis.
+   - `chamar`: uma chamada à API sempre em nome de quem pediu, para valerem as permissões dessa pessoa. Nos testes do console, ela roda em modo simulação, sem gravar.
+   - `sessaoNavegador`: cookies que deixam o navegador logado como a pessoa, sem senha.
+   - `descreverApi` (opcional) e `baixarArquivo` (opcional).
+3. Registre a pasta em `server/src/adaptadores/index.ts` e rode com `ADAPTADOR=meu-sistema`, `SISTEMA_NOME`, `SISTEMA_URL`, `SISTEMA_API_URL` e `SISTEMA_CHAVE_SERVICO`.
+4. Coloque o snippet do console (Canais e widget) nas páginas do seu sistema. O `data-assinatura` é um HMAC-SHA256 do ID do usuário com `WIDGET_SEGREDO`, calculado no servidor do seu sistema. O console mostra exemplos em Node, PHP e Python.
+5. Crie as tarefas no console: escreva o que a tarefa faz ou grave o fluxo na tela.
+
+Nada mais muda: agente, motor, console e widget não conhecem o Horizonte.
+
+## O que acontece quando algo falha
+
+- **Sistema fora do ar:**
+  - O copiloto tenta mais 2 vezes (depois de 1 s e de 3 s).
+  - Se ainda falhar e a tarefa tiver um fluxo gravado, segue pelo navegador.
+  - Se não tiver, avisa a pessoa sem gravar nada, oferece tentar de novo e manda uma mensagem quando o sistema volta.
+- **Regra de negócio** (CNPJ duplicado, cliente já no plano, sem permissão): o copiloto explica em português e oferece o próximo passo (abrir, atualizar, pedir aprovação).
+- **Tela mudou:** a recuperação visual procura o campo ou botão parecido. Só age sozinha acima da confiança mínima da tarefa (85% no padrão). Abaixo disso, transfere para o suporte com os prints.
+- **Limite de gasto:** ao atingir o limite, pausa as tarefas pelo navegador (ou tudo, conforme Equipe e limites) e avisa no widget.
+- **Sem chave do Claude:** roda em modo simulado.
+
+## Estrutura
+
+| Pasta | O que tem |
+|---|---|
+| `server/` | API do widget e do console, agente (Claude), motor de execução, navegador (Playwright), base de conhecimento, banco SQLite (`node:sqlite`), seed |
+| `console/` | Console da equipe (React + Vite) |
+| `widget/` | `copiloto.js`, o widget embutido no sistema, e o gravador de fluxos |
+| `sample-system/` | Horizonte, o sistema de exemplo com API e telas |
+| `shared/` | Tipos, validação e formatação usados por todos, e as cores da marca (`shared/styles/tokens.css`) |
+| `docs/arquitetura.md` | Contratos entre as partes e decisões de arquitetura |
+
+As cores ficam todas em `shared/styles/tokens.css`. Para trocar a paleta, basta editar esse arquivo.

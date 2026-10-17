@@ -1,0 +1,174 @@
+/* Copiloto · CSS do chat que não está em shared/styles/base.css.
+   Usado pelo widget (dentro do Shadow DOM) e pelo console (@copiloto/widget/chat.css).
+   Só var(--token) de tokens.css: nenhuma cor solta aqui. */
+
+/* ---------- moldura ---------- */
+.cp-chat { font-family: var(--font-sans); font-size: var(--fs-14); line-height: 1.5; color: var(--ink-900); text-align: left; min-height: 0; }
+.cp-chat button { font-family: inherit; }
+.cp-chat .widget-head { flex: none; }
+.cp-chat .widget-foot { flex: none; }
+.cp-corpo { min-height: 0; overscroll-behavior: contain; scroll-behavior: smooth; }
+.cp-corpo-ola { gap: var(--s-5); }
+.cp-chat .composer textarea { overflow-y: auto; }
+.cp-chat .composer .btn-icon.btn-sm { flex: none; }
+.cp-chat .composer .btn-primary.btn-icon { flex: none; }
+.cp-chat .composer-hint { margin: 0; }
+
+/* utilitários com prefixo (para não colidir com o sistema anfitrião nem com o console) */
+.cp-min0 { min-width: 0; }
+.cp-truncar { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cp-h { margin: 0; }
+.cp-centro { justify-content: center; }
+.cp-fim { align-items: flex-end; }
+.cp-texto-centro { text-align: center; }
+.cp-recuo { padding-left: 32px; }
+.cp-recuo-4 { padding: 0 var(--s-1); }
+.cp-peso-normal { font-weight: 500; }
+.cp-gap-0 { gap: 0; }
+.cp-gap-2 { gap: 2px; }
+.cp-gap-4 { gap: var(--s-1); }
+.cp-gap-6 { gap: 6px; }
+.cp-gap-8 { gap: var(--s-2); }
+.cp-gap-10 { gap: 10px; }
+.cp-gap-12 { gap: var(--s-3); }
+.cp-spinner-sm { width: 14px; height: 14px; }
+.cp-selo { height: 20px; padding: 0 var(--s-2); }
+.cp-avatar-lg { width: 40px; height: 40px; }
+.cp-avatar-pessoa { background: var(--accent-50); color: var(--accent-700); }
+.cp-link { border: 0; background: none; padding: 0; font: inherit; font-weight: 600; color: var(--brand-700); text-decoration: underline; cursor: pointer; }
+.cp-link:hover { color: var(--brand-900); }
+.cp-link-neutro { color: var(--ink-500); }
+
+/* ---------- cabeçalho ---------- */
+.widget-head .status.cp-status-espera { color: var(--warning-700); }
+.widget-head .status.cp-status-espera::before { background: var(--warning-500); }
+.widget-head .status.cp-status-sem-rede { color: var(--warning-700); }
+.widget-head .status.cp-status-sem-rede::before { display: none; }
+
+/* ---------- faixas ---------- */
+.cp-faixas { flex: none; display: flex; flex-direction: column; gap: var(--s-2); padding: var(--s-2) var(--s-3); background: var(--surface); border-bottom: 1px solid var(--line); }
+.cp-faixa { display: flex; align-items: center; gap: 6px; padding: 6px 10px; border-radius: var(--r-md); font-size: var(--fs-12); line-height: 1.4; }
+.cp-faixa-teste { background: var(--warning-50); color: var(--warning-700); }
+.cp-faixa-simulado { background: var(--surface-2); color: var(--ink-500); }
+.cp-faixa-reconectando { background: var(--white); color: var(--ink-700); border: 1px solid var(--line); }
+.cp-alerta { padding: 10px var(--s-3); align-items: flex-start; }
+.cp-alerta .small { line-height: 1.45; }
+.cp-alerta-fechar { margin: -6px -6px -6px 0; }
+
+/* ---------- boas-vindas (W1) ---------- */
+.cp-boas-vindas { gap: var(--s-5); }
+.cp-ola { gap: 10px; padding-top: var(--s-2); }
+.cp-voltar { margin-left: calc(-1 * var(--s-3)); }
+.cp-recentes { list-style: none; margin: 0; padding: 0; overflow: hidden; }
+.cp-recente { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--s-1) var(--s-3); padding: var(--s-3) 14px; }
+/* Em telas estreitas o selo desce para baixo do título, em vez de passar por cima dele. */
+.cp-recente > .stack-sm { flex: 1 1 120px; overflow-wrap: anywhere; }
+.cp-recente > .badge { flex: none; }
+.cp-recente + .cp-recente { border-top: 1px solid var(--line); }
+
+/* ---------- mensagens ---------- */
+.cp-chat .msg { min-width: 0; }
+.cp-chat .msg .bubble { overflow-wrap: anywhere; min-width: 0; }
+.cp-chat .msg-bot.cp-msg-larga { max-width: 100%; width: 100%; }
+.cp-texto-usuario { white-space: pre-wrap; }
+.cp-chat .msg-user .msg-meta { text-align: right; }
+.cp-chat .msg-bot .bubble.cp-bolha-pessoa { background: var(--accent-50); border-color: var(--accent-50); }
+.cp-chat .msg .bubble.cp-bolha-digitando { padding: 0; }
+.cp-bolha-coleta { display: flex; flex-direction: column; gap: 10px; }
+.cp-chat .msg-user.cp-msg-falhou .bubble { background: var(--danger-50); color: var(--ink-900); border: 1px solid var(--danger-500); }
+.cp-meta-falhou { display: flex; flex-direction: column; align-items: flex-end; gap: var(--s-1); }
+.cp-etiqueta { max-width: 100%; text-align: center; border-radius: var(--r-lg); line-height: 1.45; }
+.cp-etiqueta svg { flex: none; }
+.cp-novo-pedido { padding-top: var(--s-1); }
+
+/* markdown simples */
+.cp-md { display: flex; flex-direction: column; gap: var(--s-2); }
+.cp-md p { margin: 0; }
+.cp-md ul, .cp-md ol { margin: 0; padding-left: 20px; }
+.cp-md li + li { margin-top: 2px; }
+.cp-md code { background: var(--surface-2); padding: 1px 5px; border-radius: 5px; }
+.cp-md strong { font-weight: 700; }
+.cp-cita { display: inline-block; min-width: 16px; margin-left: 2px; padding: 0 4px; border-radius: var(--r-pill); background: var(--brand-50); color: var(--brand-700); font-size: 10px; font-weight: 700; line-height: 16px; text-align: center; vertical-align: super; }
+
+/* anexos */
+.cp-anexos { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px; }
+.cp-anexos-msg { justify-content: flex-end; }
+.cp-anexo { display: inline-flex; align-items: center; gap: 6px; max-width: 100%; min-height: 28px; padding: 2px 4px 2px 10px; border: 1px solid var(--line-strong); border-radius: var(--r-pill); background: var(--white); font-size: var(--fs-12); color: var(--ink-700); }
+.cp-anexos-msg .cp-anexo { padding-right: 10px; }
+.cp-anexo-nome { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 180px; }
+.cp-anexo-erro { border-color: var(--danger-500); background: var(--danger-50); }
+.cp-anexo-msg { color: var(--danger-700); font-weight: 600; }
+.cp-anexo-tirar { display: grid; place-items: center; width: 22px; height: 22px; padding: 0; border: 0; border-radius: 50%; background: transparent; color: var(--ink-500); cursor: pointer; }
+.cp-anexo-tirar:hover { background: var(--surface-2); color: var(--ink-900); }
+.cp-chat .btn.cp-ouvindo { background: var(--danger-50); color: var(--danger-700); }
+
+/* ---------- cartões (W2–W8) ---------- */
+.cp-coleta { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--s-1); }
+.cp-coleta li { display: flex; align-items: flex-start; gap: var(--s-2); }
+.cp-coleta li svg { margin-top: 3px; }
+
+.cp-ac-titulo { margin: 0; font-size: inherit; font-weight: inherit; color: inherit; line-height: 1.35; min-width: 0; }
+.cp-ac-tarefa { font-weight: 600; white-space: nowrap; }
+.cp-cartao .ac-body.cp-gap-12 { gap: var(--s-3); }
+.cp-cartao .ac-body.cp-gap-10 { gap: 10px; }
+.cp-cartao .ac-foot { flex-wrap: wrap; align-items: center; }
+.cp-cartao .ac-foot.cp-ac-coluna { flex-direction: column; align-items: stretch; }
+.cp-cartao .ac-foot.cp-ac-coluna-esq { flex-direction: column; align-items: flex-start; gap: 6px; }
+.cp-ac-estado { background: var(--surface); }
+.action-card .ac-head.cp-ac-sucesso { background: var(--success-50); border-bottom-color: var(--line); color: var(--success-700); }
+.action-card .ac-head.cp-ac-erro { background: var(--danger-50); border-bottom-color: var(--line); color: var(--danger-700); }
+.cp-recibo-desfeito .ac-head.cp-ac-sucesso,
+.cp-inativo .ac-head { background: var(--surface-2); border-bottom-color: var(--line); color: var(--ink-700); }
+.cp-inativo .kv dd { color: var(--ink-700); font-weight: 500; }
+.cp-kv { margin: 0; }
+.cp-kv.cp-kv-104 { grid-template-columns: 104px 1fr; }
+.cp-kv.cp-kv-84 { grid-template-columns: 84px 1fr; }
+.cp-trocar { margin-left: var(--s-2); border: 0; background: none; padding: 0; font: inherit; font-size: var(--fs-12); font-weight: 600; color: var(--brand-700); text-decoration: underline; cursor: pointer; }
+.cp-erro-acao { display: flex; align-items: center; gap: 6px; margin: 0; padding: 0 var(--s-1); font-size: var(--fs-12); font-weight: 600; color: var(--danger-700); }
+.action-card > .cp-erro-acao { padding: var(--s-2) 14px; border-top: 1px solid var(--line); }
+
+/* progresso (W4) */
+.cp-progresso { padding: 14px; display: flex; flex-direction: column; gap: 14px; }
+.cp-progresso-falhou .progress > span { background: var(--danger-500); }
+.cp-progresso .progress > span { transition: width .4s ease; }
+.cp-etapas { list-style: none; margin: 0; padding: 0; }
+.cp-etapas .step:last-child { padding-bottom: 0; }
+
+/* conflito, erro e botões de ação (W6) */
+.cp-acoes { gap: var(--s-2); }
+.cp-chat .btn.cp-btn-entre { justify-content: space-between; }
+.cp-chat .btn.cp-btn-inicio { justify-content: flex-start; }
+.cp-chat .btn.cp-btn-apagado { opacity: .55; cursor: default; }
+.cp-conflito { padding: var(--s-3) 14px; display: flex; flex-direction: column; gap: 10px; }
+.cp-link-externo { display: inline-flex; align-items: center; gap: var(--s-1); align-self: flex-start; }
+.cp-erro .ac-foot .cp-acoes { width: 100%; }
+
+/* fontes, resumo para a pessoa (W8), avaliação */
+.cp-fontes { padding: var(--s-3) 14px; display: flex; flex-direction: column; gap: var(--s-2); }
+.cp-fontes-lista { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.cp-fontes-lista li { display: flex; align-items: flex-start; gap: var(--s-2); }
+.cp-fonte-n { flex: none; width: 20px; height: 20px; margin-top: 1px; border-radius: 50%; display: grid; place-items: center; background: var(--brand-50); color: var(--brand-700); font-size: 11px; font-weight: 700; }
+.cp-resumo { padding: var(--s-3) 14px; display: flex; flex-direction: column; gap: var(--s-2); }
+.cp-avaliacao-texto { margin-right: var(--s-1); }
+.cp-avaliacao .btn[aria-pressed="true"] { background: var(--brand-50); color: var(--brand-700); }
+
+/* carregando e vazio */
+.cp-carregando { padding: var(--s-2) 0; }
+.cp-skel-60 { display: block; height: 14px; width: 60%; }
+.cp-skel-90 { display: block; height: 14px; width: 90%; }
+.cp-skel-75 { display: block; height: 14px; width: 75%; }
+.cp-vazio { padding: var(--s-8) var(--s-4); }
+
+/* ---------- botão flutuante e prévia (C8) ---------- */
+.launcher.cp-lancador { color: var(--cp-sobre-marca, var(--white)); position: relative; transition: transform .12s ease; }
+.launcher.cp-lancador:hover { transform: scale(1.04); }
+.launcher.cp-lancador:focus-visible { outline: none; box-shadow: var(--ring), var(--sh-lg); }
+.cp-dica-atalho { display: inline-flex; align-items: center; gap: 6px; padding: 6px var(--s-3); background: var(--white); border: 1px solid var(--line); border-radius: var(--r-pill); box-shadow: var(--sh-sm); font-size: var(--fs-12); color: var(--ink-500); white-space: nowrap; }
+.cp-previa { display: flex; flex-direction: column; gap: var(--s-3); height: 100%; min-height: 480px; }
+.cp-previa > .widget { flex: 1 1 auto; height: auto; min-height: 0; }
+.cp-previa-lancador { display: flex; align-items: center; justify-content: flex-end; gap: var(--s-3); }
+.cp-previa-esquerda .cp-previa-lancador { flex-direction: row-reverse; }
+
+@media (prefers-reduced-motion: reduce) {
+  .cp-chat *, .cp-chat *::before, .cp-chat *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; scroll-behavior: auto !important; }
+}

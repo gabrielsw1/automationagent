@@ -1,0 +1,18 @@
+/* Guia de início (C0). Cores só por var(--token). */
+.cg-intro { max-width: 640px; }
+.cg-progresso { min-width: 240px; }
+.cg-passos { list-style: none; margin: 0; padding: 0; }
+.cg-passo { padding-bottom: var(--s-2); min-width: 0; }
+.step.active .cg-passo { padding-bottom: var(--s-4); }
+.cg-widget { padding: var(--s-5); }
+.cg-fieldset { border: 0; margin: 0; padding: 0; min-width: 0; }
+.cg-grade { gap: var(--s-4); align-items: start; grid-template-columns: repeat(auto-fit, minmax(min(240px, 100%), 1fr)); }
+.cg-codigo { margin: 0; padding: var(--s-4); background: var(--white); border: 1px solid var(--line-strong); border-radius: var(--r-md); color: var(--ink-900); font-size: var(--fs-13); line-height: 1.7; overflow-x: auto; white-space: pre; }
+.cg-teste { padding: var(--s-4); }
+.cg-teste .widget { box-shadow: none; border-radius: var(--r-lg); }
+.cg-teste .ca-chat-teste-pilula { margin-bottom: var(--s-2); }
+@media (max-width: 760px) {
+  .cg-progresso { min-width: 0; width: 100%; }
+  .cg-widget { padding: var(--s-4); }
+}
+.split > .cg-lateral { flex: 1 1 380px; }

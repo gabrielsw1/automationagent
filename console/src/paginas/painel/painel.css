@@ -1,0 +1,27 @@
+/* Painel (C1). Cores só por var(--token). */
+.ca-peso-normal { font-weight: 500; }
+.ca-tinta, .cp-tinta { color: var(--ink-900); }
+.cp-atualizando .grid-kpi, .cp-atualizando .split { opacity: .6; transition: opacity .15s; }
+.cp-atencao { list-style: none; margin: 0; padding: var(--s-4) var(--s-6) var(--s-6); }
+.cp-atencao-icone { width: 32px; height: 32px; padding: 0; justify-content: center; flex: none; }
+.cp-atencao-vazia { padding: var(--s-8) var(--s-6); gap: var(--s-2); }
+.ca-icone-ok { background: var(--success-50) !important; color: var(--success-700) !important; }
+.cp-legenda { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
+.cp-legenda-ok { background: var(--brand-600); }
+.cp-legenda-falha { background: var(--accent-500); }
+.cp-grafico { position: relative; width: 100%; }
+.cp-grafico-svg { display: block; overflow: visible; }
+.cp-grade { stroke: var(--line); stroke-dasharray: 3 3; }
+.cp-eixo { stroke: var(--line-strong); }
+.cp-texto-eixo { fill: var(--ink-500); font-size: 11px; font-variant-numeric: tabular-nums; }
+.cp-barra-ok { fill: var(--brand-600); }
+.cp-barra-falha { fill: var(--accent-500); }
+.cp-barra-zero { fill: var(--line-strong); }
+.cp-alvo { fill: transparent; }
+.cp-dia { cursor: default; outline: none; }
+.cp-dia.ativo .cp-alvo { fill: var(--brand-50); }
+.cp-dia:focus-visible .cp-alvo { stroke: var(--brand-600); stroke-width: 2; }
+.cp-dica { position: absolute; transform: translate(-50%, -100%); background: var(--ink-900); color: var(--white); font-size: var(--fs-12); font-weight: 600; padding: 6px 10px; border-radius: var(--r-sm); white-space: nowrap; pointer-events: none; box-shadow: var(--sh-md); }
+.cp-grafico-vazio { min-height: 180px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: var(--s-2); text-align: center; padding: var(--s-6); border: 1px dashed var(--line-strong); border-radius: var(--r-lg); }
+.cp-grafico-vazio p.small { max-width: 420px; }
+.card-head.wrap { flex-wrap: wrap; }
