@@ -44,7 +44,10 @@ Regras:
   `sessao` (antes do fluxo, `POST urlSessao` com `{usuario, ts}` e `X-Copiloto-Assinatura: hmac_sha256_hex("<usuario>.<ts>", segredo do widget)`;
   resposta `{cookies:[{name, value, domain?, path?}]}` ou `{url}` de entrada única), `conta` (login com Playwright na `urlLogin`,
   `entrarComConta` em `navegador/executor.ts`) ou `nenhum`. Falhas viram `ErroAcessoSistema` com mensagem para pessoas, e nada roda no sistema.
-- Painel da plataforma: `Eu.adminPlataforma` vem de `COPILOTO_ADMINS`.
+- Plataforma Starta: contas próprias (`pessoas_starta`, `plataforma/starta.ts`), com senha e TOTP (`auth/totp.ts`), códigos de recuperação,
+  aparelho confiável e sessão em duas etapas (`sessoes_starta.etapa`). `COPILOTO_ADMINS` só cria as primeiras contas e manda o link de
+  ativação; `Eu.adminPlataforma` diz se o e-mail da conta tem acesso ativo à Plataforma. Modo suporte: cookie do console `sup.<token>`
+  (`acessos_suporte`), perfil `suporte` por 60 minutos, auditoria e e-mail aos Admins da empresa.
 
 ## Regras que valem para todo o código
 
