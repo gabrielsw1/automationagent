@@ -2,6 +2,7 @@
 import { lerConfig } from './config.ts';
 import { criarContexto } from './contexto.ts';
 import { criarApp } from './app.ts';
+import { bancoVazio, semear, SENHA_PADRAO } from './seed/index.ts';
 
 process.removeAllListeners('warning');
 process.on('warning', (w) => {
@@ -11,6 +12,11 @@ process.on('warning', (w) => {
 
 const config = lerConfig();
 const ctx = criarContexto(config);
+if (bancoVazio(ctx.banco) && process.env.COPILOTO_SEED !== '0') {
+  const r = semear(ctx);
+  console.log(`Primeiro início: dados de exemplo gravados (${r.tarefas} tarefas, ${r.execucoes} execuções).`);
+  console.log(`Console: entre com rafael.lima@seusistema.com.br e a senha ${SENHA_PADRAO}.`);
+}
 const app = await criarApp(ctx, { logger: process.env.LOG === '1' });
 
 await app.listen({ port: config.porta, host: config.host });
