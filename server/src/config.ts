@@ -62,12 +62,61 @@ export interface Config {
   emailVendas: string;
   /** Pasta com os textos jurídicos aprovados (TEXTOS_LEGAIS_DIR). Sem ela, o site mostra as minutas de docs/legal. */
   textosLegaisDir: string | null;
+  /** Cobrança pelo Asaas. Sem ASAAS_API_KEY, a cobrança é manual: a equipe Starta envia por e-mail e marca as faturas como pagas. */
+  asaas: ConfigAsaas;
   /** Exige a assinatura do usuário no snippet do widget. */
   exigirAssinatura: boolean;
   /** Mostra o navegador do Playwright (só para depurar fluxos). */
   navegadorVisivel: boolean;
   /** Caminho de um Chromium já instalado (opcional). */
   chromiumPath: string | undefined;
+}
+
+export interface ConfigAsaas {
+  /** ASAAS_API_KEY ($aact_prod_... ou $aact_hmlg_...). Vazio: cobrança manual. */
+  chave: string;
+  /** ASAAS_AMBIENTE: sandbox (padrão) ou producao. */
+  ambiente: 'sandbox' | 'producao';
+  /** ASAAS_WEBHOOK_TOKEN: o Asaas manda no cabeçalho asaas-access-token de cada aviso de pagamento. */
+  tokenWebhook: string;
+  /**
+   * Nota fiscal de serviço pelo Asaas a cada fatura paga (ASAAS_NOTA_FISCAL=1, com os dados fiscais e a
+   * prefeitura já configurados na conta do Asaas). null: desligada.
+   */
+  notaFiscal: null | {
+    /** ASAAS_NF_SERVICO_ID (id do serviço municipal no Asaas) ou ASAAS_NF_SERVICO_CODIGO (código da prefeitura). */
+    servicoId: string;
+    servicoCodigo: string;
+    /** ASAAS_NF_SERVICO_NOME: descrição do serviço municipal. */
+    servicoNome: string;
+    /** ASAAS_NF_IMPOSTOS, ex.: "iss=2,pis=0.65,cofins=3,reterIss=0" (percentuais; o que faltar é zero). */
+    impostos: { retainIss: boolean; iss: number; pis: number; cofins: number; csll: number; inss: number; ir: number };
+  };
+}
+
+/** "iss=2,pis=0.65,reterIss=1" → impostos da nota fiscal (percentuais; o que faltar é zero). */
+export function lerImpostos(texto: string): NonNullable<ConfigAsaas['notaFiscal']>['impostos'] {
+  const v: Record<string, number> = {};
+  for (const par of texto.split(/[,;]/)) {
+    const [k, n] = par.split('=').map((s) => s.trim());
+    const num = Number(n?.replace(',', '.'));
+    if (k && Number.isFinite(num)) v[k.toLowerCase()] = num;
+  }
+  return { retainIss: (v.reteriss ?? v.retainiss ?? 0) > 0, iss: v.iss ?? 0, pis: v.pis ?? 0, cofins: v.cofins ?? 0, csll: v.csll ?? 0, inss: v.inss ?? 0, ir: v.ir ?? 0 };
+}
+
+function lerAsaas(): ConfigAsaas {
+  const chave = env('ASAAS_API_KEY', '').trim();
+  const servicoId = env('ASAAS_NF_SERVICO_ID', '').trim();
+  const servicoCodigo = env('ASAAS_NF_SERVICO_CODIGO', '').trim();
+  const servicoNome = env('ASAAS_NF_SERVICO_NOME', '').trim();
+  const nf = env('ASAAS_NOTA_FISCAL', '0') === '1' && chave !== '' && (servicoId !== '' || servicoCodigo !== '') && servicoNome !== '';
+  return {
+    chave,
+    ambiente: env('ASAAS_AMBIENTE', 'sandbox').trim().toLowerCase() === 'producao' ? 'producao' : 'sandbox',
+    tokenWebhook: env('ASAAS_WEBHOOK_TOKEN', '').trim(),
+    notaFiscal: nf ? { servicoId, servicoCodigo, servicoNome, impostos: lerImpostos(env('ASAAS_NF_IMPOSTOS', '')) } : null,
+  };
 }
 
 export function lerConfig(): Config {
@@ -107,6 +156,7 @@ export function lerConfig(): Config {
     emailRemetente: env('EMAIL_REMETENTE', 'Copiloto Starta <nao-responda@starta.site>'),
     emailVendas: env('EMAIL_VENDAS', '').trim(),
     textosLegaisDir: process.env.TEXTOS_LEGAIS_DIR ? path.resolve(RAIZ_REPO, process.env.TEXTOS_LEGAIS_DIR) : null,
+    asaas: lerAsaas(),
     exigirAssinatura: env('WIDGET_EXIGIR_ASSINATURA', '1') !== '0',
     navegadorVisivel: env('NAVEGADOR_VISIVEL', '0') === '1',
     chromiumPath: process.env.CHROMIUM_PATH || undefined,

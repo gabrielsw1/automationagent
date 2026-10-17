@@ -87,6 +87,8 @@ export interface PlanoStarta {
   usuariosMin: number;
   usuariosMax: number | null;
   creditosIncluidos: number | null;
+  /** Créditos do pacote avulso que a empresa compra em Plano e créditos. */
+  pacoteCreditos: number;
   precoMensalCentavos: number | null;
   taxaImplantacaoCentavos: number | null;
   precoCreditoExtraCentavos: number | null;
@@ -95,12 +97,14 @@ export interface PlanoStarta {
 
 export type PrecosPlanoStarta = Pick<PlanoStarta, 'precoMensalCentavos' | 'taxaImplantacaoCentavos' | 'precoCreditoExtraCentavos'>;
 
-export type OrigemContato = 'demonstracao' | 'vendas' | 'piloto';
+/** `mudanca_plano`: o Admin de uma empresa cliente pediu outro plano em Plano e créditos. */
+export type OrigemContato = 'demonstracao' | 'vendas' | 'piloto' | 'mudanca_plano';
 
 export const ROTULO_ORIGEM: Record<OrigemContato, string> = {
   demonstracao: 'Agendar demonstração',
   vendas: 'Falar com vendas',
   piloto: 'Começar piloto',
+  mudanca_plano: 'Mudar de plano',
 };
 
 /** Pedido de contato vindo do site do produto. */
@@ -110,7 +114,8 @@ export interface ContatoSite {
   email: string;
   empresa: string;
   telefone: string | null;
-  faixa: FaixaUsuarios;
+  /** null num pedido de mudança de plano de empresa que não informou a faixa. */
+  faixa: FaixaUsuarios | null;
   mensagem: string | null;
   origem: OrigemContato;
   criadoEm: string;

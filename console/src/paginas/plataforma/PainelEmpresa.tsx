@@ -12,6 +12,7 @@ import { Icone } from '../../componentes/icones.tsx';
 import { ItemMenu, Menu } from '../../componentes/Menu.tsx';
 import { Confirmar } from '../../componentes/Modal.tsx';
 import { useToast } from '../../componentes/Toast.tsx';
+import { FaturasEmpresa } from './FaturasEmpresa.tsx';
 import { ModalAcompanhamento, ModalRegravar, ModalSuporte } from './ModaisEmpresa.tsx';
 import { Etapas, plural, ROTULO_ACESSO, SeloDemo } from './pecas.tsx';
 
@@ -128,6 +129,8 @@ function Conteudo({ d }: { d: DetalheEmpresaStarta }) {
           <p className="small muted">Nenhum fluxo precisou de conserto visual nos últimos 30 dias.</p>
         )}
       </section>
+
+      <FaturasEmpresa empresaId={d.id} />
 
       <hr className="divider" />
 

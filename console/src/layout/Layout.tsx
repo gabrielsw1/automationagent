@@ -22,7 +22,11 @@ function Navegacao({ aoNavegar }: { aoNavegar?: () => void }) {
   const { resumo } = useSessao();
   const { guia } = resumo;
   const guiaCompleto = guia.feitos >= guia.total;
-  const grupos = GRUPOS_NAV.filter((g) => !g.soAdminPlataforma || resumo.eu.adminPlataforma);
+  const verAdmin = resumo.eu.perfil === 'admin' || !!resumo.eu.modoSuporte;
+  const grupos = GRUPOS_NAV.filter((g) => !g.soAdminPlataforma || resumo.eu.adminPlataforma).map((g) => ({
+    ...g,
+    itens: g.itens.filter((i) => !i.soAdmin || verAdmin),
+  }));
   return (
     <>
       {grupos.map((g) => (

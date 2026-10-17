@@ -1535,6 +1535,10 @@ export class Motor {
     });
     this.avisarConsole(e, 'concluida');
     registrarEvento(this.ctx.banco, e.id, { tipo: 'conclusao', titulo: 'Concluída', detalhe: `${titulo}. ${resumo}`, estado: 'ok' });
+    // Gastou crédito: a recarga automática confere se é hora de comprar um pacote (sem segurar a conclusão).
+    if (creditosDaExecucao(r) > 0) {
+      this.ctx.creditos.aposExecucao().catch((err) => console.error('[cobrança] Recarga automática falhou:', err instanceof Error ? err.message : err));
+    }
 
     this.postar(e.conversaId, {
       autor: 'copiloto',

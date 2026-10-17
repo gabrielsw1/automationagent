@@ -363,11 +363,16 @@ function CartaoPlano({ plano, aoSalvar }: { plano: PlanoStarta; aoSalvar: (p: Pl
   const inicial = Object.fromEntries(CAMPOS_PRECO.map((c) => [c.chave, centavosParaCampo(plano[c.chave])])) as Record<keyof PrecosPlanoStarta, string>;
   const [v, setV] = useState(inicial);
   const [erros, setErros] = useState<Partial<Record<keyof PrecosPlanoStarta, string>>>({});
-  const salvar = useAcao((corpo: Partial<PrecosPlanoStarta>) => apiPlataforma.put<PlanoStarta>(`/planos/${encodeURIComponent(plano.id)}`, corpo));
-  const mudou = CAMPOS_PRECO.some((c) => v[c.chave] !== inicial[c.chave]);
+  // Créditos do pacote avulso de Plano e créditos (ao preço do crédito extra).
+  const [pacote, setPacote] = useState(String(plano.pacoteCreditos));
+  const [erroPacote, setErroPacote] = useState<string | null>(null);
+  const salvar = useAcao((corpo: Partial<PrecosPlanoStarta> & { pacoteCreditos?: number }) =>
+    apiPlataforma.put<PlanoStarta>(`/planos/${encodeURIComponent(plano.id)}`, corpo),
+  );
+  const mudou = CAMPOS_PRECO.some((c) => v[c.chave] !== inicial[c.chave]) || pacote !== String(plano.pacoteCreditos);
 
   const enviar = async () => {
-    const corpo: Partial<PrecosPlanoStarta> = {};
+    const corpo: Partial<PrecosPlanoStarta> & { pacoteCreditos?: number } = {};
     const e: typeof erros = {};
     for (const c of CAMPOS_PRECO) {
       if (v[c.chave] === inicial[c.chave]) continue;
@@ -376,7 +381,11 @@ function CartaoPlano({ plano, aoSalvar }: { plano: PlanoStarta; aoSalvar: (p: Pl
       else corpo[c.chave] = centavos;
     }
     setErros(e);
-    if (Object.keys(e).length) return;
+    const creditos = Number(pacote.replace(/\./g, '').trim());
+    const pacoteInvalido = pacote !== String(plano.pacoteCreditos) && !(Number.isInteger(creditos) && creditos >= 1);
+    setErroPacote(pacoteInvalido ? 'Use um número inteiro de créditos, a partir de 1.' : null);
+    if (Object.keys(e).length || pacoteInvalido) return;
+    if (pacote !== String(plano.pacoteCreditos)) corpo.pacoteCreditos = creditos;
     const r = await salvar.executar(corpo);
     if (!r) return;
     aoSalvar(r);
@@ -420,6 +429,11 @@ function CartaoPlano({ plano, aoSalvar }: { plano: PlanoStarta; aoSalvar: (p: Pl
             </Campo>
           ))}
         </div>
+        <Campo rotulo="Créditos por pacote" erro={erroPacote} ajuda="O pacote que a empresa compra em Plano e créditos, ao preço do crédito extra.">
+          {(p) => (
+            <input {...p} className={`${p.className} num`} inputMode="numeric" style={{ maxWidth: 200 }} value={pacote} onChange={(e) => setPacote(e.target.value)} />
+          )}
+        </Campo>
         {salvar.erro ? (
           <p className="error-text" role="alert">
             <Icone nome="alerta" tamanho="sm" />
@@ -432,6 +446,8 @@ function CartaoPlano({ plano, aoSalvar }: { plano: PlanoStarta; aoSalvar: (p: Pl
               variante="fantasma"
               onClick={() => {
                 setV(inicial);
+                setPacote(String(plano.pacoteCreditos));
+                setErroPacote(null);
                 setErros({});
                 salvar.limparErro();
               }}
@@ -467,7 +483,7 @@ function PlanosPrecos() {
             .map((p) => (
               <CartaoPlano
                 // Preço salvo muda a chave: o cartão volta com os valores novos, sem efeito para copiar a prop.
-                key={`${p.id}:${CAMPOS_PRECO.map((c) => p[c.chave]).join('|')}`}
+                key={`${p.id}:${CAMPOS_PRECO.map((c) => p[c.chave]).join('|')}:${p.pacoteCreditos}`}
                 plano={p}
                 aoSalvar={(novo) => {
                   planos.definir((l) => l?.map((x) => (x.id === novo.id ? novo : x)));

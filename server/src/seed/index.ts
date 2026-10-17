@@ -5,7 +5,9 @@
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
-import { CREDITOS_POR_ROTEIRO, fmt, type TarefaDefinicao, type CampoExibido, type MensagemWidget } from '@copiloto/shared';
+import { CREDITOS_POR_ROTEIRO, fmt, type ItemFatura, type TarefaDefinicao, type CampoExibido, type MensagemWidget } from '@copiloto/shared';
+import { cicloDe, competenciaDe, deslocarCompetencia, diaDe, somarDias } from '../cobranca/ciclo.ts';
+import { DIAS_VENCIMENTO_MENSAL, ITEM_EXTRAS, ITEM_IMPLANTACAO } from '../cobranca/faturas.ts';
 import type { Banco } from '../db/banco.ts';
 import type { Contexto } from '../contexto.ts';
 import { camposExibidos } from '../execucao/motor.ts';
@@ -1234,5 +1236,62 @@ export function semearPlataforma(
     if (!plataforma.conta(m.email)) plataforma.criarConta({ email: m.email, nome: m.nome, senha: SENHA_PADRAO });
     plataforma.vincular(m.email, empresa.id);
   }
-  return { ...resumo, empresa };
+  semearCobranca(plataforma, empresa, opcoes.agora ?? new Date());
+  return { ...resumo, empresa: plataforma.empresa(empresa.id)! };
+}
+
+/**
+ * Plano e créditos da demonstração: plano Piloto, dados de cobrança e as faturas dos dois meses
+ * anteriores, marcadas como exemplo. Os valores vêm dos preços do plano; preço ainda não definido
+ * fica sem valor ("Sob consulta"), nunca um número inventado. A demonstração não entra no
+ * fechamento do mês nem compra pacotes.
+ */
+function semearCobranca(plataforma: Plataforma, empresa: Empresa, agora: Date) {
+  plataforma.acompanhar(empresa.id, { planoId: 'piloto' });
+  const plano = plataforma.plano('piloto');
+  if (!plano) return;
+  plataforma.banco.atualizar('empresas', empresa.id, {
+    razao_social: `${empresa.nome} Gestão Ltda`,
+    cnpj: '45678912000155',
+    email_cobranca: 'financeiro@seusistema.com.br',
+    metodo_pagamento: 'boleto',
+    cartao_final: '4417',
+    cartao_bandeira: 'Visa',
+    cartao_validade: '08/28',
+    implantacao_faturada: 1,
+  });
+  const creditos = plataforma.contexto(empresa.id).creditos;
+  const total = (itens: ItemFatura[]) => (itens.every((i) => i.totalCentavos !== null) ? itens.reduce((s, i) => s + (i.totalCentavos ?? 0), 0) : null);
+  const item = (descricao: string, quantidade: number, unitario: number | null): ItemFatura => ({
+    descricao,
+    quantidade,
+    unitarioCentavos: unitario,
+    totalCentavos: unitario === null ? null : unitario * quantidade,
+  });
+  for (const meses of [2, 1]) {
+    const competencia = deslocarCompetencia(competenciaDe(agora), -meses);
+    const { fim } = cicloDe(competencia);
+    const itens: ItemFatura[] = [];
+    if (meses === 2) itens.push(item(ITEM_IMPLANTACAO, 1, plano.taxaImplantacaoCentavos));
+    itens.push(item(`Assinatura ${plano.nome}`, 1, plano.precoMensalCentavos));
+    const extras = creditos.ciclo(fim, competencia, plano).extras;
+    if (extras > 0) itens.push(item(ITEM_EXTRAS, extras, plano.precoCreditoExtraCentavos));
+    const criado = new Date(fim.getTime() + 9 * HORA);
+    const vencimento = somarDias(diaDe(criado), DIAS_VENCIMENTO_MENSAL);
+    plataforma.banco.inserir('faturas', {
+      id: novoId('fat'),
+      empresa_id: empresa.id,
+      competencia,
+      tipo: 'mensal',
+      itens,
+      total_centavos: total(itens),
+      status: 'paga',
+      vencimento,
+      criado_em: criado.toISOString(),
+      atualizado_em: criado.toISOString(),
+      pago_em: new Date(Date.parse(`${vencimento}T15:00:00Z`) - 2 * DIA).toISOString(),
+      gateway: 'manual',
+      exemplo: 1,
+    });
+  }
 }
