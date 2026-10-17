@@ -82,26 +82,33 @@ describe('Entrar', () => {
     expect(screen.queryByText(/copiloto123/)).toBeNull();
   });
 
-  it('primeiro acesso cria o Admin e abre o guia', async () => {
-    const { pedidos } = instalarFetch({
-      'GET /auth/primeiro-acesso': { precisaCriarAdmin: true, demo: false },
-      'POST /auth/primeiro-admin': EU,
+  it('primeiro acesso leva ao cadastro da primeira empresa', async () => {
+    const { pedidos } = instalarFetch({ 'GET /auth/primeiro-acesso': { precisaCriarAdmin: true, demo: false, cadastroAberto: false } });
+    renderizar(<Entrar />, { caminho: '/entrar', rota: '/entrar' });
+    await waitFor(() => expect(local()).toBe('/criar-conta'));
+    expect(pedidos.some((p) => p.caminho === '/auth/primeiro-admin')).toBe(false);
+  });
+
+  it('com o cadastro aberto, oferece criar a conta da empresa', async () => {
+    instalarFetch({ 'GET /auth/primeiro-acesso': { precisaCriarAdmin: false, demo: true, cadastroAberto: true } });
+    renderizar(<Entrar />, { caminho: '/entrar', rota: '/entrar' });
+    const link = await screen.findByRole('link', { name: 'Criar a conta da sua empresa' });
+    expect(link.getAttribute('href')).toBe('/criar-conta');
+    expect(screen.getByText(/copiloto123/)).toBeTruthy();
+  });
+
+  it('acesso fora de todas as equipes (403 sem_empresa)', async () => {
+    instalarFetch({
+      'GET /auth/primeiro-acesso': { precisaCriarAdmin: false, demo: false, cadastroAberto: true },
+      'POST /auth/entrar': status(403, { erro: 'sem_empresa', mensagem: 'Seu acesso não está em nenhuma empresa.' }),
     });
     renderizar(<Entrar />, { caminho: '/entrar', rota: '/entrar' });
-    const botao = await screen.findByRole('button', { name: 'Criar acesso e entrar' });
-    fireEvent.change(screen.getByLabelText(/Seu nome/), { target: { value: 'Rafael Lima' } });
-    fireEvent.change(screen.getByLabelText(/E-mail/), { target: { value: 'rafael@horizonte.com.br' } });
-    fireEvent.change(screen.getByLabelText(/^Senha/), { target: { value: 'curta' } });
-    fireEvent.click(botao);
-    expect(pedidos.some((p) => p.caminho === '/auth/primeiro-admin')).toBe(false);
-    fireEvent.change(screen.getByLabelText(/^Senha/), { target: { value: 'uma senha boa' } });
-    fireEvent.click(botao);
-    await waitFor(() => expect(local()).toBe('/guia'));
-    expect(pedidos.find((p) => p.caminho === '/auth/primeiro-admin')?.corpo).toEqual({
-      nome: 'Rafael Lima',
-      email: 'rafael@horizonte.com.br',
-      senha: 'uma senha boa',
-    });
+    fireEvent.change(await screen.findByLabelText('E-mail'), { target: { value: 'ana@acme.com.br' } });
+    fireEvent.change(screen.getByLabelText('Senha'), { target: { value: 'senha1234' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Entrar' }));
+    expect(await screen.findByText('Seu acesso não está em nenhuma equipe agora')).toBeTruthy();
+    expect(screen.getByRole('link', { name: 'crie a conta de uma empresa nova' }).getAttribute('href')).toBe('/criar-conta');
+    expect(local()).toBe('/entrar');
   });
 
   it('servidor fora do ar mostra erro com "Tentar de novo"', async () => {
@@ -115,11 +122,12 @@ describe('Entrar', () => {
 describe('Convite', () => {
   it('cria o acesso com o perfil do convite', async () => {
     const { pedidos } = instalarFetch({
-      'GET /auth/convite/abc': { email: 'julia@horizonte.com.br', perfil: 'editor' },
+      'GET /auth/convite/abc': { email: 'julia@horizonte.com.br', perfil: 'editor', empresa: 'Horizonte', contaExistente: false },
       'POST /auth/convite/abc': EU,
     });
     renderizar(<Convite />, { caminho: '/convite/abc', rota: '/convite/:token' });
     expect(await screen.findByRole('heading', { name: 'Crie o seu acesso' })).toBeTruthy();
+    expect(screen.getByText('Convite para a equipe da Horizonte')).toBeTruthy();
     expect(screen.getByText('Editor de tarefas')).toBeTruthy();
     fireEvent.change(screen.getByLabelText(/Seu nome/), { target: { value: 'Júlia Martins' } });
     fireEvent.change(screen.getByLabelText(/^Senha/), { target: { value: 'senha forte 1' } });
@@ -130,6 +138,47 @@ describe('Convite', () => {
     fireEvent.click(screen.getByRole('button', { name: /Criar/ }));
     await waitFor(() => expect(local()).toBe('/'));
     expect(pedidos.find((p) => p.metodo === 'POST')?.corpo).toEqual({ nome: 'Júlia Martins', senha: 'senha forte 1' });
+  });
+
+  it('e-mail que já tem acesso: entra na equipe só com a senha atual', async () => {
+    const { pedidos } = instalarFetch({
+      'GET /auth/convite/xyz': { email: 'rafael.lima@seusistema.com.br', perfil: 'suporte', empresa: 'Acme Logística', contaExistente: true },
+      'POST /auth/convite/xyz': ({ corpo }: { corpo: unknown }) =>
+        (corpo as { senha: string }).senha === 'copiloto123'
+          ? EU
+          : status(401, { erro: 'credenciais', mensagem: 'Este e-mail já tem acesso ao copiloto. Use a senha que você já usa para entrar.' }),
+    });
+    renderizar(<Convite />, { caminho: '/convite/xyz', rota: '/convite/:token' });
+    expect(await screen.findByRole('heading', { name: 'Entre na equipe' })).toBeTruthy();
+    expect(screen.getByText('Convite para a equipe da Acme Logística')).toBeTruthy();
+    const texto = 'Você já tem acesso ao copiloto com este e-mail. Digite sua senha para entrar também na equipe da Acme Logística.';
+    expect(screen.getByText((_, el) => el?.tagName === 'P' && el.textContent === texto)).toBeTruthy();
+    expect(screen.queryByLabelText(/Seu nome/)).toBeNull();
+    expect(screen.queryByLabelText(/Repita a senha/)).toBeNull();
+
+    fireEvent.change(screen.getByLabelText(/Sua senha/), { target: { value: 'errada' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Entrar na equipe' }));
+    expect(await screen.findByText(/Use a senha que você já usa para entrar/)).toBeTruthy();
+
+    fireEvent.change(screen.getByLabelText(/Sua senha/), { target: { value: 'copiloto123' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Entrar na equipe' }));
+    await waitFor(() => expect(local()).toBe('/'));
+    expect(pedidos.filter((p) => p.metodo === 'POST').at(-1)?.corpo).toEqual({ senha: 'copiloto123' });
+  });
+
+  it('senha nova segue a regra do servidor (8 caracteres, letras e números)', async () => {
+    const { pedidos } = instalarFetch({
+      'GET /auth/convite/abc': { email: 'julia@horizonte.com.br', perfil: 'editor', empresa: 'Horizonte', contaExistente: false },
+    });
+    renderizar(<Convite />, { caminho: '/convite/abc', rota: '/convite/:token' });
+    fireEvent.change(await screen.findByLabelText(/Seu nome/), { target: { value: 'Júlia Martins' } });
+    fireEvent.change(screen.getByLabelText(/^Senha/), { target: { value: 'sónumeros' } });
+    fireEvent.change(screen.getByLabelText(/Repita a senha/), { target: { value: 'sónumeros' } });
+    fireEvent.click(screen.getByRole('button', { name: /Criar/ }));
+    expect(await screen.findByText('Use letras e números na senha.')).toBeTruthy();
+    fireEvent.change(screen.getByLabelText(/^Senha/), { target: { value: 'horizonte1' } });
+    expect(await screen.findByText('A senha precisa ser diferente do nome da empresa.')).toBeTruthy();
+    expect(pedidos.some((p) => p.metodo === 'POST')).toBe(false);
   });
 
   it('convite expirado', async () => {

@@ -49,6 +49,7 @@ const CANAIS: Canais = {
   chavePublica: 'pk_hz_7f3a91',
   urlScript: 'http://localhost:3201/copiloto.js',
   instalacao: null,
+  conector: 'api',
 };
 
 const TAREFAS = {
@@ -69,6 +70,8 @@ describe('C0 · Guia de início', () => {
     expect(textoFaltam(2)).toBe('Faltam dois passos');
     expect(textoFaltam(1)).toBe('Falta um passo');
     expect(codigoInstalacao('https://x/copiloto.js', 'pk_1')).toContain('data-chave="pk_1"');
+    expect(codigoInstalacao('https://x/copiloto.js', 'pk_1')).not.toContain('data-nome');
+    expect(codigoInstalacao('https://x/copiloto.js', 'pk_1', 'tela')).toContain('data-perfis="PERFIS_SEPARADOS_POR_VIRGULA"');
   });
 
   it('mostra o progresso, os passos feitos e instala o widget', async () => {
@@ -135,5 +138,30 @@ describe('C0 · Guia de início', () => {
     renderizar(<Guia />, { caminho: '/guia', rota: '/guia' });
     expect(await screen.findByRole('heading', { level: 1, name: 'O copiloto está no ar' })).toBeTruthy();
     expect(screen.getByRole('link', { name: 'Ir para o painel' }).getAttribute('href')).toBe('/painel');
+  });
+
+  it('sistema pelas telas: o passo do sistema leva à tela Sistema', async () => {
+    const pelasTelas = guia({ sistema: false });
+    pelasTelas.passos[0].resumo = 'Não consegui abrir https://erp.acme.com.br. O endereço está certo e o sistema está no ar?';
+    pelasTelas.sistema = { conectado: false, url: 'https://erp.acme.com.br', nome: 'ERP Acme' };
+    instalarFetch({
+      'GET /guia': pelasTelas,
+      'GET /tarefas': TAREFAS,
+      'GET /canais': { ...CANAIS, conector: 'tela' },
+      'GET /sistema/config': {
+        nome: 'ERP Acme',
+        url: 'https://erp.acme.com.br',
+        conector: 'tela',
+        acesso: { modo: 'sessao', urlSessao: '', urlLogin: '', usuario: '', temSenha: false },
+        perfis: [],
+        editavel: true,
+      },
+      'GET /sistema/usuarios': USUARIOS,
+      'POST /teste/token': { token: 'tok', usuario: USUARIOS[0] },
+    });
+    renderizar(<Guia />, { caminho: '/guia', rota: '/guia' });
+    expect(await screen.findByText('Ainda não conseguimos abrir o ERP Acme')).toBeTruthy();
+    expect(screen.getByRole('link', { name: 'Abrir Sistema' }).getAttribute('href')).toBe('/sistema');
+    expect(screen.queryByText(/endereço da API/)).toBeNull();
   });
 });

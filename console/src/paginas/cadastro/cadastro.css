@@ -1,0 +1,36 @@
+/* Cadastro da empresa em três etapas (conta, sistema, marca). Cores só por var(--token). */
+.cc-tela { min-height: 100vh; background: var(--surface); color: var(--ink-900); }
+.cc-topo { background: var(--white); border-bottom: 1px solid var(--line); }
+.cc-topo-dentro { display: flex; align-items: center; justify-content: space-between; gap: var(--s-4); max-width: 1160px; min-height: 64px; margin: 0 auto; padding: var(--s-3) clamp(16px, 4vw, 32px); }
+.cc-topo .brandmark { padding: 0; color: var(--ink-900); }
+.cc-topo .brandmark:hover { text-decoration: none; }
+.cc-main { max-width: 1160px; margin: 0 auto; padding: var(--s-10) clamp(16px, 4vw, 32px) var(--s-16); display: flex; flex-direction: column; gap: var(--s-6); }
+
+/* Indicador "Sua conta / Seu sistema / Sua marca" */
+.cc-etapas { list-style: none; margin: 0; padding: 0; gap: var(--s-2) var(--s-6); }
+.cc-etapas .step { padding-bottom: 0; align-items: center; }
+
+.cc-fieldset { border: 0; margin: 0; padding: 0; min-width: 0; }
+.cc-fieldset > legend { padding: 0; margin-bottom: var(--s-3); }
+.cc-regras { list-style: none; margin: 0; padding: 0; gap: var(--s-1) var(--s-4); }
+.cc-regras li { display: inline-flex; align-items: center; gap: 4px; }
+
+/* "O que acontece depois" */
+.cc-depois { background: var(--brand-50); border: 1px solid var(--brand-100); border-radius: var(--r-lg); padding: var(--s-6); }
+.cc-depois h2 { color: var(--brand-900); }
+.cc-depois .steps { list-style: none; margin: 0; padding: 0; }
+.cc-depois .step-dot { border-color: var(--brand-200); color: var(--brand-700); }
+.cc-depois .divider { background: var(--brand-100); }
+.cc-depois .small { color: var(--ink-700); }
+.cc-depois svg.i { color: var(--brand-700); margin-top: 2px; flex: none; }
+
+/* Sua marca */
+.cc-cor { width: 36px; height: 36px; border-radius: 50%; border: 0; cursor: pointer; padding: 0; }
+.cc-cor[aria-pressed="true"] { box-shadow: 0 0 0 3px var(--white), 0 0 0 5px var(--ink-900); }
+.cc-cor:focus-visible { outline: none; box-shadow: var(--ring); }
+.cc-previa { width: 100%; max-width: 360px; height: 520px; margin: 0 auto; }
+
+@media (max-width: 760px) {
+  .cc-main { padding-top: var(--s-6); }
+  .cc-topo-dentro .cc-topo-empresa { display: none; }
+}

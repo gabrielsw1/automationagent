@@ -1,0 +1,23 @@
+/* Sistema da empresa e escolha de como o copiloto entra nele (também no cadastro). Cores só por var(--token). */
+
+/* Cartões de escolha do acesso */
+.cs-modos { display: grid; gap: var(--s-4); grid-template-columns: repeat(auto-fit, minmax(min(300px, 100%), 1fr)); align-items: start; }
+.cs-modo { display: flex; flex-direction: column; gap: var(--s-4); padding: var(--s-5); border: 1px solid var(--line-strong); border-radius: var(--r-lg); background: var(--white); min-width: 0; }
+.cs-modo.escolhido { border: 2px solid var(--brand-600); background: var(--brand-50); padding: calc(var(--s-5) - 1px); }
+.cs-modo-topo { display: flex; align-items: flex-start; gap: var(--s-3); cursor: pointer; }
+.cs-modo-topo input { width: 18px; height: 18px; accent-color: var(--brand-600); margin: 3px 0 0; flex: none; }
+.cs-modo-texto { color: var(--ink-700); }
+.cs-modo-lista { list-style: none; margin: 0; padding: var(--s-4); display: flex; flex-direction: column; gap: var(--s-2); }
+.cs-modo.escolhido .cs-modo-lista { background: var(--white); }
+.cs-modo-lista li { display: flex; align-items: flex-start; gap: var(--s-2); }
+.cs-modo-lista svg.i { margin-top: 3px; flex: none; }
+.cs-modo-travado .cs-modo-topo { cursor: default; }
+
+/* Resultado de "Verificar endereço" e "Testar acesso" */
+.cs-resultado { margin-top: var(--s-2); }
+
+/* Perfis do sistema */
+.cs-chip { cursor: default; padding-right: 4px; }
+.cs-chip-x { width: 28px; min-height: 28px; border-radius: var(--r-pill); }
+.cs-fieldset { border: 0; margin: 0; padding: 0; min-width: 0; }
+.cs-acoes { justify-content: flex-end; gap: var(--s-3); }

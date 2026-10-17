@@ -1,0 +1,8 @@
+/* Empresas clientes (painel da plataforma). Cores só por var(--token). */
+/* Muitas colunas: títulos quebram em duas linhas e as células ficam mais justas para caber sem rolar. */
+.cp-empresas .table th { white-space: normal; vertical-align: bottom; }
+.cp-empresas .table th, .cp-empresas .table td { padding-left: 8px; padding-right: 8px; }
+.cp-empresas .table th:first-child, .cp-empresas .table td:first-child { padding-left: 16px; }
+.cp-empresas .table th:last-child, .cp-empresas .table td:last-child { padding-right: 16px; }
+.cp-sem-quebra { white-space: nowrap; }
+.cp-sistema { min-width: 140px; overflow-wrap: anywhere; }

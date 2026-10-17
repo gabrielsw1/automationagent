@@ -1,11 +1,13 @@
-// Aceitar o convite da equipe (/convite/:token): a pessoa diz o nome, cria a senha e entra.
+// Aceitar o convite da equipe de uma empresa (/convite/:token). E-mail novo: a pessoa diz o nome,
+// cria a senha e entra. E-mail que já tem acesso ao copiloto (em outra empresa): só a senha atual.
 import { useEffect, useState, type FormEvent } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { ROTULO_PERFIL, type Eu, type PerfilEquipe } from '@copiloto/shared';
+import { ROTULO_PERFIL, type ConviteAberto, type Eu, type PerfilEquipe } from '@copiloto/shared';
 import { api, ErroApiCliente } from '../../api/cliente.ts';
 import { Botao } from '../../componentes/Botao.tsx';
 import { Carregando } from '../../componentes/estados.tsx';
 import { Aviso, Campo } from '../../componentes/formulario.tsx';
+import { regrasSenha, SENHA_MINIMO } from '../cadastro/regras.ts';
 import TelaDeEntrada from './TelaDeEntrada.tsx';
 
 const O_QUE_FAZ: Record<PerfilEquipe, string> = {
@@ -15,10 +17,19 @@ const O_QUE_FAZ: Record<PerfilEquipe, string> = {
   leitor: 'acompanhar o painel e as execuções, sem alterar nada',
 };
 
+/** A mesma regra do servidor para a senha de uma conta nova. */
+function erroSenhaNova(senha: string, empresa: string): string | null {
+  const [tamanho, letrasENumeros, semEmpresa] = regrasSenha(senha, empresa);
+  if (!tamanho.ok) return `Use pelo menos ${SENHA_MINIMO} caracteres.`;
+  if (!letrasENumeros.ok) return 'Use letras e números na senha.';
+  if (!semEmpresa.ok && empresa) return 'A senha precisa ser diferente do nome da empresa.';
+  return null;
+}
+
 export default function Convite() {
   const { token = '' } = useParams();
   const navegar = useNavigate();
-  const [convite, setConvite] = useState<{ email: string; perfil: PerfilEquipe } | null>(null);
+  const [convite, setConvite] = useState<ConviteAberto | null>(null);
   const [erroConvite, setErroConvite] = useState<ErroApiCliente | null>(null);
   const [nome, setNome] = useState('');
   const [senha, setSenha] = useState('');
@@ -31,7 +42,7 @@ export default function Convite() {
     document.title = 'Convite · Copiloto';
     let vivo = true;
     api
-      .get<{ email: string; perfil: PerfilEquipe }>(`/auth/convite/${encodeURIComponent(token)}`)
+      .get<ConviteAberto>(`/auth/convite/${encodeURIComponent(token)}`)
       .then((c) => vivo && setConvite(c))
       .catch((e: ErroApiCliente) => vivo && setErroConvite(e));
     return () => {
@@ -39,11 +50,14 @@ export default function Convite() {
     };
   }, [token]);
 
-  const erros = {
-    nome: nome.trim().length < 2 ? 'Diga seu nome, como a equipe conhece você.' : null,
-    senha: senha.length < 8 ? 'Use pelo menos 8 caracteres.' : null,
-    repetir: repetir !== senha ? 'As senhas não são iguais. Digite a mesma senha nos dois campos.' : null,
-  };
+  const existente = !!convite?.contaExistente;
+  const erros = existente
+    ? { nome: null, senha: !senha ? 'Digite a sua senha.' : null, repetir: null }
+    : {
+        nome: nome.trim().length < 2 ? 'Diga seu nome, como a equipe conhece você.' : null,
+        senha: erroSenhaNova(senha, convite?.empresa ?? ''),
+        repetir: repetir !== senha ? 'As senhas não são iguais. Digite a mesma senha nos dois campos.' : null,
+      };
   const mostrar = (k: keyof typeof erros) => (tocados[k] ? erros[k] : null);
   const tocar = (k: string) => () => setTocados((t) => ({ ...t, [k]: true }));
 
@@ -54,7 +68,7 @@ export default function Convite() {
     setEnviando(true);
     setErro(null);
     try {
-      await api.post<Eu>(`/auth/convite/${encodeURIComponent(token)}`, { nome: nome.trim(), senha });
+      await api.post<Eu>(`/auth/convite/${encodeURIComponent(token)}`, existente ? { senha } : { nome: nome.trim(), senha });
       navegar('/', { replace: true });
     } catch (ex) {
       setErro((ex as ErroApiCliente).message);
@@ -92,8 +106,14 @@ export default function Convite() {
     <TelaDeEntrada>
       <form className="stack" onSubmit={enviar} noValidate>
         <div className="stack-sm">
-          <span className="eyebrow">Convite para a equipe</span>
-          <h1 className="h2">Crie o seu acesso</h1>
+          <span className="eyebrow">Convite para a equipe da {convite.empresa}</span>
+          <h1 className="h2">{existente ? 'Entre na equipe' : 'Crie o seu acesso'}</h1>
+          {existente ? (
+            <p className="muted">
+              Você já tem acesso ao copiloto com este e-mail. Digite sua senha para entrar também na equipe da{' '}
+              <span className="strong">{convite.empresa}</span>.
+            </p>
+          ) : null}
           <p className="muted">
             Você foi convidado como <span className="strong">{ROTULO_PERFIL[convite.perfil]}</span>: vai poder {O_QUE_FAZ[convite.perfil]}.
           </p>
@@ -104,17 +124,35 @@ export default function Convite() {
           </Aviso>
         ) : null}
         <Campo rotulo="E-mail">{(p) => <input {...p} type="email" value={convite.email} disabled readOnly />}</Campo>
-        <Campo rotulo="Seu nome" obrigatorio erro={mostrar('nome')}>
-          {(p) => <input {...p} autoComplete="name" value={nome} onChange={(e) => setNome(e.target.value)} onBlur={tocar('nome')} autoFocus />}
-        </Campo>
-        <Campo rotulo="Senha" obrigatorio erro={mostrar('senha')} ajuda="Pelo menos 8 caracteres.">
-          {(p) => <input {...p} type="password" autoComplete="new-password" value={senha} onChange={(e) => setSenha(e.target.value)} onBlur={tocar('senha')} />}
-        </Campo>
-        <Campo rotulo="Repita a senha" obrigatorio erro={mostrar('repetir')}>
-          {(p) => <input {...p} type="password" autoComplete="new-password" value={repetir} onChange={(e) => setRepetir(e.target.value)} onBlur={tocar('repetir')} />}
-        </Campo>
+        {existente ? (
+          <Campo rotulo="Sua senha" obrigatorio erro={mostrar('senha')} ajuda="A mesma que você usa para entrar no copiloto.">
+            {(p) => (
+              <input
+                {...p}
+                type="password"
+                autoComplete="current-password"
+                value={senha}
+                onChange={(e) => setSenha(e.target.value)}
+                onBlur={tocar('senha')}
+                autoFocus
+              />
+            )}
+          </Campo>
+        ) : (
+          <>
+            <Campo rotulo="Seu nome" obrigatorio erro={mostrar('nome')}>
+              {(p) => <input {...p} autoComplete="name" value={nome} onChange={(e) => setNome(e.target.value)} onBlur={tocar('nome')} autoFocus />}
+            </Campo>
+            <Campo rotulo="Senha" obrigatorio erro={mostrar('senha')} ajuda="Pelo menos 8 caracteres, com letras e números.">
+              {(p) => <input {...p} type="password" autoComplete="new-password" value={senha} onChange={(e) => setSenha(e.target.value)} onBlur={tocar('senha')} />}
+            </Campo>
+            <Campo rotulo="Repita a senha" obrigatorio erro={mostrar('repetir')}>
+              {(p) => <input {...p} type="password" autoComplete="new-password" value={repetir} onChange={(e) => setRepetir(e.target.value)} onBlur={tocar('repetir')} />}
+            </Campo>
+          </>
+        )}
         <Botao type="submit" variante="primario" tamanho="lg" bloco carregando={enviando}>
-          Criar acesso e entrar
+          {existente ? 'Entrar na equipe' : 'Criar acesso e entrar'}
         </Botao>
       </form>
     </TelaDeEntrada>

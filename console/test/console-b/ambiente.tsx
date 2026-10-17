@@ -3,7 +3,7 @@ import type { ReactNode } from 'react';
 import { render } from '@testing-library/react';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { vi } from 'vitest';
-import type { PerfilEquipe, ResumoConsole } from '@copiloto/shared';
+import type { EmpresaResumo, Eu, PerfilEquipe, ResumoConsole } from '@copiloto/shared';
 import { ProvedorSessao } from '../../src/componentes/sessao.tsx';
 
 export interface Pedido {
@@ -64,9 +64,22 @@ export function instalarEventSource() {
   vi.stubGlobal('EventSource', EventSourceFalso);
 }
 
-export function resumo(perfil: PerfilEquipe = 'admin', nome = 'Rafael Lima', id = 'mem-1'): ResumoConsole {
+/** Empresa de demonstração aberta nos testes. */
+export const HORIZONTE: EmpresaResumo = { id: 'emp-horizonte', nome: 'Horizonte', demo: true };
+
+export function resumo(perfil: PerfilEquipe = 'admin', nome = 'Rafael Lima', id = 'mem-1', eu: Partial<Eu> = {}): ResumoConsole {
   return {
-    eu: { id, nome, email: 'rafael.lima@seusistema.com.br', perfil, iniciais: 'RL' },
+    eu: {
+      id,
+      nome,
+      email: 'rafael.lima@seusistema.com.br',
+      perfil,
+      iniciais: 'RL',
+      empresa: HORIZONTE,
+      empresas: [HORIZONTE],
+      adminPlataforma: false,
+      ...eu,
+    },
     execucoesAtencao: 0,
     aprovacoesPendentes: 0,
     guia: { feitos: 0, total: 6 },
@@ -88,9 +101,9 @@ export const local = () => localAtual;
 
 export function renderizar(
   elemento: ReactNode,
-  { perfil = 'admin', caminho = '/', rota = '*' }: { perfil?: PerfilEquipe; caminho?: string; rota?: string } = {},
+  { perfil = 'admin', caminho = '/', rota = '*', eu = {} }: { perfil?: PerfilEquipe; caminho?: string; rota?: string; eu?: Partial<Eu> } = {},
 ) {
-  const sessao = { resumo: resumo(perfil), recarregarResumo: vi.fn(async () => {}), sair: vi.fn(async () => {}) };
+  const sessao = { resumo: resumo(perfil, undefined, undefined, eu), recarregarResumo: vi.fn(async () => {}), sair: vi.fn(async () => {}) };
   const r = render(
     <ProvedorSessao valor={sessao}>
       <MemoryRouter initialEntries={[caminho]}>
