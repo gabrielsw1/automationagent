@@ -65,16 +65,18 @@ export function descricaoValidacao(c: Campo): string {
   }
 }
 
-/** "Nome da empresa" → "nome_empresa". */
+/** "Nome da empresa" → "nome_empresa"; "E-mail de cobrança" → "email_cobranca". */
 export function chaveDoRotulo(rotulo: string): string {
   const c = rotulo
-    .normalize('NFD')
-    .replace(/[̀-ͯ]/g, '')
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
     .toLowerCase()
-    .replace(/\b(de|da|do|dos|das|e)\b/g, ' ')
-    .replace(/[^a-z0-9]+/g, '_')
-    .replace(/^_+|_+$/g, '')
-    .slice(0, 40);
+    .replace(/([a-z0-9])-([a-z0-9])/g, '$1$2')
+    .split(/[^a-z0-9]+/)
+    .filter((p) => p && !['de', 'da', 'do', 'dos', 'das', 'e'].includes(p))
+    .join('_')
+    .slice(0, 40)
+    .replace(/_+$/, '');
   return /^[a-z]/.test(c) ? c : c ? `campo_${c}` : '';
 }
 

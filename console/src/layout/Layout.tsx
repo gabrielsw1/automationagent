@@ -212,7 +212,7 @@ export default function Layout({ children }: { children: ReactNode }) {
             <span className="badge badge-outline hide-sm" title={`Conectado ao ${resumo.nomeSistema} de produção`}>
               Produção
             </span>
-            <button type="button" className="btn btn-secondary btn-sm" onClick={() => setTestando(true)}>
+            <button type="button" className="btn btn-secondary btn-sm" aria-label="Testar copiloto" onClick={() => setTestando(true)}>
               <Icone nome="chat" tamanho="sm" />
               <span className="ca-texto-botao">Testar copiloto</span>
             </button>

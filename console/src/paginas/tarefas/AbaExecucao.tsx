@@ -299,7 +299,7 @@ function Mapeamento({ def, mudar, podeEditar, rotas }: PropsAba & { rotas: RotaA
       {def.campos.length === 0 ? (
         <p className="small muted">Adicione campos na aba Ficha para mapear o que vai na chamada.</p>
       ) : editando ? (
-        <div style={{ overflowX: 'auto' }}>
+        <div className="ct-rolagem">
           <table className="table ct-tabela-mapa" aria-labelledby={`${id}-titulo`}>
             <thead>
               <tr>
@@ -393,20 +393,22 @@ function Mapeamento({ def, mudar, podeEditar, rotas }: PropsAba & { rotas: RotaA
         </p>
       ) : null}
       {podeEditar ? (
-        <div className="row wrap ct-id-retorno">
-          <label className="small" htmlFor={`${id}-id`}>
-            Do retorno, o copiloto usa
-          </label>
-          <input
-            id={`${id}-id`}
-            className="input mono"
-            value={a.idRetorno ?? ''}
-            placeholder="id"
-            spellCheck={false}
-            onChange={(e) => mudar((d) => ({ ...d, api: { ...(d.api ?? apiPadrao(d)), idRetorno: e.target.value || undefined } }))}
-          />
-          <span className="small">para montar o recibo, por exemplo “Cliente #4821 criado”, com o link para abrir o cadastro.</span>
-        </div>
+        <CampoForm
+          rotulo="Campo do retorno com o código"
+          ajuda="O copiloto usa este campo para montar o recibo, por exemplo “Cliente #4821 criado”, com o link para abrir o cadastro."
+          style={{ maxWidth: 520 }}
+        >
+          {(p) => (
+            <input
+              {...p}
+              className={`${p.className} mono ct-id-retorno`}
+              value={a.idRetorno ?? ''}
+              placeholder="id"
+              spellCheck={false}
+              onChange={(e) => mudar((d) => ({ ...d, api: { ...(d.api ?? apiPadrao(d)), idRetorno: e.target.value || undefined } }))}
+            />
+          )}
+        </CampoForm>
       ) : (
         <p className="help">
           Do retorno, o copiloto usa <span className="mono">{a.idRetorno || 'id'}</span> para montar o recibo, por exemplo “Cliente #4821 criado”, com o link para
@@ -544,9 +546,8 @@ export default function AbaExecucao(props: PropsAbaExecucao) {
                 <span className="strong">Se a API falhar, usar o fluxo gravado</span>
               </label>
               <p className="help" id="fallback-ajuda">
-                {fluxoReserva
-                  ? `${descricaoFluxo(fluxoReserva)}. É mais lento, mas evita que o pedido fique parado. A pessoa vê que o caminho mudou.`
-                  : 'É mais lento, mas evita que o pedido fique parado. A pessoa vê que o caminho mudou.'}
+                {!def.usarFluxoSeApiFalhar && fluxoReserva ? `${descricaoFluxo(fluxoReserva)}. ` : ''}É mais lento, mas evita que o pedido fique parado. A
+                pessoa vê que o caminho mudou.
               </p>
               {def.usarFluxoSeApiFalhar ? (
                 <EscolherFluxo {...props} fluxos={fluxos.dados} erro={fluxos.erro} tarefaId={tarefaId} />

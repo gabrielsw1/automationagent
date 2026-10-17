@@ -96,7 +96,7 @@ export default function BuscaGlobal({ aoEscolher, atalho = true }: { aoEscolher?
 
   const mostrar = aberta && texto.trim().length >= 2;
   return (
-    <div className="search ca-busca" ref={caixa}>
+    <div className={`search ca-busca${atalho ? ' ca-busca-com-atalho' : ''}`} ref={caixa}>
       <label className="sr-only" htmlFor={`${id}-q`}>
         Buscar no console
       </label>

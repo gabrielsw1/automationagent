@@ -215,7 +215,7 @@ export function SemPermissao({ mensagem, area, acao }: { mensagem?: string; area
       <h3 className="h3">{area ? `Você não tem acesso a ${area}` : 'Seu perfil não tem acesso a esta área'}</h3>
       <p>
         {mensagem ?? 'Peça a um Admin para mudar seu perfil em Equipe e limites.'}
-        {perfil && !mensagem ? ` Seu perfil é ${perfil}.` : ''}
+        {perfil && !/Seu perfil é/i.test(mensagem ?? '') ? ` Seu perfil é ${perfil}.` : ''}
       </p>
       {acao}
     </div>

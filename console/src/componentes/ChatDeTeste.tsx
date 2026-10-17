@@ -8,7 +8,7 @@
 //                                    // título à esquerda da pílula; mudar `reinicio` recomeça a conversa
 //
 // Busca os usuários em GET /sistema/usuarios e o token em POST /teste/token.
-import { useEffect, useId, useState, type ReactNode } from 'react';
+import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import type { UsuarioSistema } from '@copiloto/shared';
 import { ChatCopiloto } from '@copiloto/widget/chat';
 import '@copiloto/widget/chat.css';
@@ -54,6 +54,7 @@ export function ChatDeTeste({
   aoFechar,
   titulo,
   reinicio,
+  focarAoAbrir = true,
 }: {
   altura?: number | string;
   seletor?: 'campo' | 'pilula';
@@ -63,12 +64,42 @@ export function ChatDeTeste({
   titulo?: ReactNode;
   /** Quando muda, a conversa recomeça (ex.: depois de salvar o rascunho). */
   reinicio?: string | number;
+  /**
+   * false: o chat não pega o foco (nem rola a página) ao abrir; só quando a pessoa clica ou digita nele.
+   * Use nas pré-visualizações dentro de uma página (ficha, guia). Padrão true (gaveta "Testar copiloto").
+   */
+  focarAoAbrir?: boolean;
 }) {
   const id = useId();
   const { usuarios, erro: erroUsuarios, tentar } = useUsuariosDoSistema();
   const [usuarioId, setUsuarioId] = useState<string>(usuarioInicial ?? guardado.ler<string>(CHAVE_USUARIO) ?? '');
   const [token, setToken] = useState<string | null>(null);
   const [erro, setErro] = useState<string | null>(null);
+  // O chat foca o campo de mensagem quando abre. Embutido numa página, isso rolaria a página até ele:
+  // até a pessoa interagir com o chat, devolvemos o foco e a rolagem para onde estavam.
+  const interagiu = useRef(false);
+  const rolagem = useRef(0);
+  const ultimoTab = useRef(0);
+  useEffect(() => {
+    if (focarAoAbrir) return;
+    const guardar = () => {
+      if (!interagiu.current) rolagem.current = window.scrollY;
+    };
+    // Quem navega pelo teclado e chega ao chat com Tab fica com o foco lá.
+    const tab = (e: KeyboardEvent) => {
+      if (e.key === 'Tab') ultimoTab.current = Date.now();
+    };
+    guardar();
+    window.addEventListener('scroll', guardar, { passive: true });
+    window.addEventListener('keydown', tab, true);
+    return () => {
+      window.removeEventListener('scroll', guardar);
+      window.removeEventListener('keydown', tab, true);
+    };
+  }, [focarAoAbrir]);
+  useEffect(() => {
+    interagiu.current = false;
+  }, [token, reinicio]);
 
   useEffect(() => {
     if (!usuarios || usuarios.length === 0) return;
@@ -147,7 +178,24 @@ export function ChatDeTeste({
           <p className="small">{erro}</p>
         </div>
       ) : token ? (
-        <ChatCopiloto key={`${token}:${reinicio ?? ''}`} token={token} altura={altura} aoFechar={aoFechar} />
+        <div
+          className="ca-chat-moldura"
+          onPointerDownCapture={() => (interagiu.current = true)}
+          onKeyDownCapture={() => (interagiu.current = true)}
+          onFocusCapture={(e) => {
+            if (focarAoAbrir || interagiu.current) return;
+            if (Date.now() - ultimoTab.current < 600) {
+              interagiu.current = true;
+              return;
+            }
+            const y = rolagem.current;
+            (e.target as HTMLElement).blur?.();
+            window.scrollTo({ top: y });
+            requestAnimationFrame(() => window.scrollTo({ top: y }));
+          }}
+        >
+          <ChatCopiloto key={`${token}:${reinicio ?? ''}`} token={token} altura={altura} aoFechar={aoFechar} />
+        </div>
       ) : (
         <div className="card stack-sm ca-chat-carregando" style={{ height: altura }} aria-busy="true">
           <span className="sr-only">Abrindo o chat de teste</span>

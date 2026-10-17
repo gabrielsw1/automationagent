@@ -33,9 +33,14 @@ export function descricaoEsperado(c: CasoDeTeste, def: TarefaDefinicao): string 
   return 'Recusar ou explicar que não dá';
 }
 
-function corDaRodada(r: RodadaTestes): 'badge-success' | 'badge-warning' | 'badge-danger' {
-  if (r.aprovados === r.total) return 'badge-success';
-  return r.aprovados / Math.max(1, r.total) >= 0.7 ? 'badge-warning' : 'badge-danger';
+/** Verde a partir de 90% aprovados, amarelo a partir de 70%, vermelho abaixo. */
+export function corDaRodada(r: RodadaTestes): 'badge-success' | 'badge-warning' | 'badge-danger' {
+  const f = r.aprovados / Math.max(1, r.total);
+  return f >= 0.9 ? 'badge-success' : f >= 0.7 ? 'badge-warning' : 'badge-danger';
+}
+
+function corDaBarra(r: RodadaTestes): string {
+  return { 'badge-success': 'var(--success-500)', 'badge-warning': 'var(--warning-500)', 'badge-danger': 'var(--danger-500)' }[corDaRodada(r)];
 }
 
 export function textoRodada(r: RodadaTestes, versaoRascunho: number | null): string {
@@ -114,7 +119,7 @@ export function ResumoTestes({
                 <Progresso
                   valor={rodada.aprovados / Math.max(1, rodada.total)}
                   rotulo={`${rodada.aprovados} de ${rodada.total} aprovados`}
-                  cor={rodada.aprovados === rodada.total ? 'var(--success-500)' : 'var(--warning-500)'}
+                  cor={corDaBarra(rodada)}
                 />
                 <span className="tiny muted">{textoRodada(rodada, versaoRascunho)}</span>
               </div>
@@ -232,7 +237,7 @@ export default function AbaTestes({
               <Progresso
                 valor={rodada.aprovados / Math.max(1, rodada.total)}
                 rotulo={`${rodada.aprovados} de ${rodada.total} aprovados`}
-                cor={rodada.aprovados === rodada.total ? 'var(--success-500)' : 'var(--warning-500)'}
+                cor={corDaBarra(rodada)}
               />
               <span className="tiny muted">{textoRodada(rodada, versaoRascunho)}</span>
             </div>

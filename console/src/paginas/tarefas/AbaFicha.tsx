@@ -137,7 +137,7 @@ function Campos({ def, mudar, podeEditar }: PropsAba) {
           <p className="small muted">Esta tarefa ainda não tem campos. Adicione os dados que o copiloto precisa coletar antes de executar.</p>
         </div>
       ) : (
-        <div style={{ overflowX: 'auto' }}>
+        <div className="ct-rolagem">
           <table className="table ct-tabela-campos">
             <thead>
               <tr>

@@ -11,7 +11,8 @@
 
 /* ---------- Ficha (C3) ---------- */
 .ct-ficha .page-head { align-items: flex-start; }
-.ct-grade-form { gap: var(--s-4); align-items: start; }
+.ct-grade-form { gap: var(--s-4); align-items: start; grid-template-columns: repeat(auto-fit, minmax(min(260px, 100%), 1fr)); }
+.split > .ct-lateral { flex: 1 1 380px; }
 .ct-checks { padding-top: 22px; gap: 0; }
 .ct-nota { margin: 0; }
 .ct-remover { margin-right: auto; color: var(--danger-700); }
@@ -32,8 +33,7 @@ span.ct-chip { cursor: default; }
 .ct-metodo { width: 112px; flex: none; }
 .ct-kv-mapa { grid-template-columns: minmax(140px, 180px) 1fr; margin: 0; }
 .ct-sans { font-family: var(--font-sans); font-weight: 400; }
-.ct-id-retorno { gap: var(--s-2); }
-.ct-id-retorno .input { width: 120px; min-height: 32px; }
+.ct-id-retorno { max-width: 200px; }
 .ct-tabela-mapa td { padding-top: var(--s-2); padding-bottom: var(--s-2); }
 .ct-tabela-mapa .input, .ct-tabela-mapa .select { min-width: 160px; }
 .ct-detalhes > summary { cursor: pointer; color: var(--brand-700); list-style-position: inside; padding: var(--s-1) 0; }

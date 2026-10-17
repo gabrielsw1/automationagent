@@ -33,7 +33,7 @@ import AbaExecucao from './AbaExecucao.tsx';
 import AbaFicha from './AbaFicha.tsx';
 import AbaHistorico from './AbaHistorico.tsx';
 import AbaPermissoes from './AbaPermissoes.tsx';
-import AbaTestes, { ResumoTestes, type EstadoRodada } from './AbaTestes.tsx';
+import AbaTestes, { corDaRodada, ResumoTestes, type EstadoRodada } from './AbaTestes.tsx';
 import { iguais, minuscula, proximaVersao, quandoAs } from './ficha.ts';
 import './tarefas.css';
 
@@ -669,7 +669,7 @@ export default function FichaTarefa() {
               chave: 'testes',
               rotulo: 'Testes',
               selo: rodada ? (
-                <span className={`badge ${rodada.aprovados === rodada.total ? 'badge-success' : 'badge-warning'}`}>
+                <span className={`badge ${corDaRodada(rodada)}`}>
                   {rodada.aprovados}/{rodada.total}
                 </span>
               ) : d.testes.length ? (
@@ -720,6 +720,7 @@ export default function FichaTarefa() {
             <div className="card-body stack-sm">
               <ChatDeTeste
                 seletor="pilula"
+                focarAoAbrir={false}
                 altura={520}
                 reinicio={d.rascunho?.salvoEm ?? d.publicada?.versao ?? ''}
                 titulo={

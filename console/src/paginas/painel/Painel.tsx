@@ -90,9 +90,13 @@ function Indicadores({ p }: { p: DadosPainel }) {
   );
 }
 
+const ATENCAO_VISIVEIS = 4;
+
 function Atencao({ itens }: { itens: ItemAtencao[] }) {
+  const [todos, setTodos] = useState(false);
+  const visiveis = todos ? itens : itens.slice(0, ATENCAO_VISIVEIS);
   return (
-    <section className="card side-col" aria-labelledby="atencao-titulo">
+    <section className="card" aria-labelledby="atencao-titulo">
       <div className="card-head">
         <h2 className="h4" id="atencao-titulo">
           Precisa da sua atenção
@@ -108,8 +112,8 @@ function Atencao({ itens }: { itens: ItemAtencao[] }) {
           <p className="small">Nenhuma falha hoje, nenhuma aprovação esperando e nenhum pedido sem tarefa.</p>
         </div>
       ) : (
-        <ul className="stack cp-atencao">
-          {itens.map((item, i) => (
+        <ul className="stack cp-atencao" id="atencao-lista">
+          {visiveis.map((item, i) => (
             <li key={`${item.tipo}-${i}`} className="stack">
               {i > 0 ? <div className="divider" aria-hidden="true" /> : null}
               <div className="row-top">
@@ -130,13 +134,21 @@ function Atencao({ itens }: { itens: ItemAtencao[] }) {
           ))}
         </ul>
       )}
+      {itens.length > ATENCAO_VISIVEIS ? (
+        <div className="card-foot">
+          <button type="button" className="btn btn-ghost btn-sm" aria-expanded={todos} aria-controls="atencao-lista" onClick={() => setTodos((t) => !t)}>
+            {todos ? 'Mostrar menos' : `Ver todos (${itens.length})`}
+            <Icone nome={todos ? 'subir' : 'seta-baixo'} tamanho="sm" />
+          </button>
+        </div>
+      ) : null}
     </section>
   );
 }
 
 function MaisUsadas({ p }: { p: DadosPainel }) {
   return (
-    <section className="main-col stack-sm" aria-labelledby="tarefas-titulo">
+    <section className="stack-sm" aria-labelledby="tarefas-titulo">
       <div className="row between">
         <h2 className="h4" id="tarefas-titulo">
           Tarefas mais usadas
@@ -189,7 +201,7 @@ function MaisUsadas({ p }: { p: DadosPainel }) {
 function PorCanal({ p, nomeSistema }: { p: DadosPainel; nomeSistema: string }) {
   const total = p.porCanal.reduce((s, c) => s + c.total, 0);
   return (
-    <section className="card card-pad side-col stack" aria-labelledby="canal-titulo">
+    <section className="card card-pad stack" aria-labelledby="canal-titulo">
       <div className="row between">
         <h2 className="h4" id="canal-titulo">
           Por canal
@@ -294,47 +306,48 @@ export default function Painel() {
       <Indicadores p={p} />
 
       <div className="split">
-        <section className="card main-col" aria-labelledby="grafico-titulo">
-          <div className="card-head wrap">
-            <div className="stack-sm" style={{ gap: 2 }}>
-              <h2 className="h4" id="grafico-titulo">
-                Execuções por dia
-              </h2>
-              <span className="small muted">Passe o mouse sobre uma barra para ver o dia</span>
+        <div className="main-col stack-lg">
+          <section className="card" aria-labelledby="grafico-titulo">
+            <div className="card-head wrap">
+              <div className="stack-sm" style={{ gap: 2 }}>
+                <h2 className="h4" id="grafico-titulo">
+                  Execuções por dia
+                </h2>
+                <span className="small muted">Passe o mouse sobre uma barra para ver o dia</span>
+              </div>
+              <div className="row wrap small" style={{ gap: 'var(--s-4)' }}>
+                <span className="row" style={{ gap: 6 }}>
+                  <span className="cp-legenda cp-legenda-ok" />
+                  Concluídas
+                </span>
+                <span className="row" style={{ gap: 6 }}>
+                  <span className="cp-legenda cp-legenda-falha" />
+                  Com falha
+                </span>
+              </div>
             </div>
-            <div className="row wrap small" style={{ gap: 'var(--s-4)' }}>
-              <span className="row" style={{ gap: 6 }}>
-                <span className="cp-legenda cp-legenda-ok" />
-                Concluídas
-              </span>
-              <span className="row" style={{ gap: 6 }}>
-                <span className="cp-legenda cp-legenda-falha" />
-                Com falha
-              </span>
+            <div className="card-body">
+              <figure className="stack-sm" style={{ margin: 0 }}>
+                <figcaption className="sr-only">{legenda}</figcaption>
+                {p.executadas === 0 ? (
+                  <div className="cp-grafico-vazio">
+                    <p className="strong">Nenhuma execução neste período</p>
+                    <p className="small muted">
+                      Quando as pessoas pedirem tarefas ao copiloto, cada dia aparece aqui. Use “Testar copiloto” no topo para fazer um pedido de teste.
+                    </p>
+                  </div>
+                ) : (
+                  <GraficoDias dias={p.porDia} legenda={legenda} />
+                )}
+              </figure>
             </div>
-          </div>
-          <div className="card-body">
-            <figure className="stack-sm" style={{ margin: 0 }}>
-              <figcaption className="sr-only">{legenda}</figcaption>
-              {p.executadas === 0 ? (
-                <div className="cp-grafico-vazio">
-                  <p className="strong">Nenhuma execução neste período</p>
-                  <p className="small muted">
-                    Quando as pessoas pedirem tarefas ao copiloto, cada dia aparece aqui. Use “Testar copiloto” no topo para fazer um pedido de teste.
-                  </p>
-                </div>
-              ) : (
-                <GraficoDias dias={p.porDia} legenda={legenda} />
-              )}
-            </figure>
-          </div>
-        </section>
-        <Atencao itens={p.atencao} />
-      </div>
-
-      <div className="split">
-        <MaisUsadas p={p} />
-        <PorCanal p={p} nomeSistema={resumo.nomeSistema} />
+          </section>
+          <MaisUsadas p={p} />
+        </div>
+        <div className="side-col stack-lg">
+          <Atencao itens={p.atencao} />
+          <PorCanal p={p} nomeSistema={resumo.nomeSistema} />
+        </div>
       </div>
     </div>
   );
