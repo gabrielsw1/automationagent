@@ -1,7 +1,7 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 
-// Em dev o console roda aqui (5173) e repassa /api e /copiloto.js para o servidor (3000).
+// Em dev o console roda aqui (5173) e repassa /api, /copiloto.js e o ícone da aba para o servidor (3000).
 const servidor = process.env.COPILOTO_SERVIDOR ?? 'http://localhost:3000';
 
 export default defineConfig({
@@ -12,6 +12,7 @@ export default defineConfig({
     proxy: {
       '/api': { target: servidor, changeOrigin: false },
       '/copiloto.js': { target: servidor },
+      '/favicon.ico': { target: servidor },
     },
   },
   build: { outDir: 'dist', emptyOutDir: true },
