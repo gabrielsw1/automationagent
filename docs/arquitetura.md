@@ -62,7 +62,7 @@ Regras:
 - Datas trafegam em ISO (UTC). Mostre com `fmt.*` de `@copiloto/shared` (fuso America/Sao_Paulo).
 - Nada grava no sistema sem o "Confirmar e executar" da pessoa. O copiloto sempre age com as permissões de quem pediu.
 - Claude só pelo SDK oficial `@anthropic-ai/sdk`, via `app.ctx.llm` (`server/src/llm/`). Nunca chame a API por fetch,
-  nunca use outro provedor. Toda chamada nova precisa de uma regra `simulacao` (o servidor roda sem chave e os testes usam o modelo simulado).
+  nunca use outro provedor. Toda chamada nova precisa de uma regra `simulacao` (os testes usam o modelo simulado, `COPILOTO_LLM=simulado`). Sem chave, `LlmSemChave` falha com `SemChaveClaude` (503 `sem_claude` nas rotas, aviso no widget).
   Modelo principal `claude-opus-5-5` (raciocínio, agente, aprender fluxo, recuperação visual, montar ficha, respostas com citação);
   `claude-haiku-5-5` (`modelo: 'rapido'`) só para classificação e roteamento baratos.
 - A chave vem só de `ANTHROPIC_API_KEY`. Nunca grave chave em arquivo nem em log.

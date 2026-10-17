@@ -1,6 +1,6 @@
-// Interface do modelo de linguagem usada pelo resto do servidor. Há duas implementações:
-// anthropic.ts (Claude de verdade, pelo SDK oficial) e simulado.ts (regras fixas, para testes
-// e para rodar sem ANTHROPIC_API_KEY). Os formatos de mensagem são os do SDK da Anthropic.
+// Interface do modelo de linguagem usada pelo resto do servidor. Implementações: anthropic.ts
+// (Claude de verdade, pelo SDK oficial), simulado.ts (regras fixas, só com COPILOTO_LLM=simulado,
+// para testes) e sem-chave.ts (servidor sem ANTHROPIC_API_KEY: recusa tudo e diz o que falta). Os formatos de mensagem são os do SDK da Anthropic.
 import type Anthropic from '@anthropic-ai/sdk';
 import type { z } from 'zod';
 
@@ -69,6 +69,8 @@ export interface PedidoEstruturado<T> extends Atribuicao {
 
 export interface Llm {
   readonly simulado: boolean;
+  /** Servidor sem ANTHROPIC_API_KEY: toda chamada falha com SemChaveClaude. */
+  readonly semChave: boolean;
   readonly modeloPrincipal: string;
   turno(pedido: PedidoTurno): Promise<RespostaTurno>;
   estruturado<T>(pedido: PedidoEstruturado<T>): Promise<{ dados: T; uso: UsoLlm }>;
@@ -91,6 +93,14 @@ export class ErroLlm extends Error {
   ) {
     super(mensagem);
     this.name = 'ErroLlm';
+  }
+}
+
+/** O servidor está sem a chave do Claude: nada que dependa da IA roda até alguém configurar. */
+export class SemChaveClaude extends Error {
+  constructor() {
+    super('O copiloto está sem a chave do Claude neste servidor. Quem administra o servidor precisa definir ANTHROPIC_API_KEY.');
+    this.name = 'SemChaveClaude';
   }
 }
 

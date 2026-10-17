@@ -86,7 +86,7 @@ export function Faixas({
   aoPedirHumano,
   aoFecharAviso,
 }: {
-  inicio: Pick<WidgetInicio, 'modoTeste' | 'modoSimulado' | 'pausa'>;
+  inicio: Pick<WidgetInicio, 'modoTeste' | 'modoSimulado' | 'pausa'> & Partial<Pick<WidgetInicio, 'semClaude'>>;
   estado?: EstadoChat;
   naFila?: number;
   aoPedirHumano?: () => void;
@@ -103,6 +103,23 @@ export function Faixas({
         <span>
           <span className="strong">Modo de teste:</span> nada é gravado
         </span>
+      </div>,
+    );
+  if (inicio.semClaude)
+    itens.push(
+      <div key="sem-claude" className="alert alert-warning cp-alerta" role="status">
+        <Icone nome="info" />
+        <div className="small grow">
+          <span className="strong">O assistente ainda não está ligado.</span> A equipe está terminando a configuração.
+          {aoPedirHumano && (
+            <>
+              {' '}
+              <button type="button" className="cp-link" onClick={aoPedirHumano}>
+                Falar com uma pessoa
+              </button>
+            </>
+          )}
+        </div>
       </div>,
     );
   if (inicio.modoSimulado)

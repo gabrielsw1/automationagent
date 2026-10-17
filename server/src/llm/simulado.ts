@@ -1,5 +1,5 @@
-// Modelo simulado: usado nos testes e quando não há ANTHROPIC_API_KEY. Cada chamada traz a
-// própria regra (pedido.simulacao); aqui só embrulhamos no mesmo formato do SDK.
+// Modelo simulado: só nos testes ou com COPILOTO_LLM=simulado, nunca no lugar da chave que falta.
+// Cada chamada traz a própria regra (pedido.simulacao); aqui só embrulhamos no formato do SDK.
 import type { BlocoResposta, Llm, PedidoEstruturado, PedidoTurno, RegistrarUso, RespostaTurno, UsoLlm } from './tipos.ts';
 
 const USO_ZERO = (modelo: string): UsoLlm => ({
@@ -13,6 +13,7 @@ const USO_ZERO = (modelo: string): UsoLlm => ({
 
 export class LlmSimulado implements Llm {
   readonly simulado = true;
+  readonly semChave = false;
   readonly modeloPrincipal = 'simulado';
 
   constructor(

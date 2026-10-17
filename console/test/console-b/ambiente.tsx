@@ -71,6 +71,7 @@ export function resumo(perfil: PerfilEquipe = 'admin', nome = 'Rafael Lima', id 
     aprovacoesPendentes: 0,
     guia: { feitos: 0, total: 6 },
     modoSimulado: false,
+    semClaude: false,
     alertaGasto: null,
     nomeSistema: 'Horizonte',
   };

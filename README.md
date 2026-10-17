@@ -27,7 +27,7 @@ Na primeira vez, o `npm run dev` faz três coisas: instala as dependências, bai
 
 No widget, abra o copiloto pelo botão no canto da tela ou com Ctrl+K.
 
-Sem `ANTHROPIC_API_KEY`, tudo funciona em **modo simulado**: as respostas seguem regras fixas, e o widget e o console mostram um aviso. É o modo usado nos testes.
+Sem `ANTHROPIC_API_KEY`, o copiloto não finge responder: o widget avisa que o assistente ainda não está ligado e oferece falar com uma pessoa, e o console mostra uma faixa vermelha dizendo o que falta. Os testes usam respostas por regras com `COPILOTO_LLM=simulado`; esse modo nunca liga sozinho.
 
 ### Com Docker
 
@@ -212,7 +212,7 @@ As outras variáveis estão em `.env.example`.
 - **Regra de negócio** (CNPJ duplicado, cliente já no plano, sem permissão): o copiloto explica em português e oferece o próximo passo (abrir, atualizar, pedir aprovação).
 - **Tela mudou:** a recuperação visual procura o campo ou botão parecido. Só age sozinha acima da confiança mínima da tarefa (85% no padrão). Abaixo disso, transfere para o suporte com os prints.
 - **Limite de gasto:** ao atingir o limite, pausa as tarefas pelo navegador (ou tudo, conforme Equipe e limites) e avisa no widget.
-- **Sem chave do Claude:** roda em modo simulado.
+- **Sem chave do Claude:** o assistente avisa que não está ligado e oferece uma pessoa; o console mostra a faixa com o que falta. As rotas que dependem do Claude (montar ficha, aprender fluxo) respondem 503 `sem_claude`.
 
 ## Estrutura
 

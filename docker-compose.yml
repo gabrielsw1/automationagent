@@ -1,5 +1,5 @@
 # Sobe o copiloto (http://localhost:3000, console) e o sistema de exemplo com o widget (http://localhost:4000).
-# A chave do Claude vem do terminal: ANTHROPIC_API_KEY. Sem ela, o copiloto roda em modo simulado.
+# A chave do Claude vem do terminal: ANTHROPIC_API_KEY. Sem ela, o assistente avisa que não está ligado.
 services:
   copiloto:
     build: .

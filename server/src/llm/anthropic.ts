@@ -40,6 +40,7 @@ export interface OpcoesClaude {
 
 export class LlmClaude implements Llm {
   readonly simulado = false;
+  readonly semChave = false;
   readonly modeloPrincipal: string;
   private readonly client: Anthropic;
 

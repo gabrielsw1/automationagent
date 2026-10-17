@@ -181,7 +181,10 @@ export interface ResumoConsole {
   execucoesAtencao: number;
   aprovacoesPendentes: number;
   guia: { feitos: number; total: number };
+  /** COPILOTO_LLM=simulado: respostas por regras, só para testes. */
   modoSimulado: boolean;
+  /** Servidor sem ANTHROPIC_API_KEY: faixa vermelha dizendo o que falta. */
+  semClaude: boolean;
   /** Faixa "Você usou 80% do limite". */
   alertaGasto: null | { usado: number; limite: number; percentual: number };
   nomeSistema: string;

@@ -28,6 +28,7 @@ const rotas: FastifyPluginAsync = async (app) => {
       aprovacoesPendentes: aprovacoes,
       guia: { feitos: guia.feitos, total: guia.total },
       modoSimulado: llm.simulado,
+      semClaude: llm.semChave,
       alertaGasto:
         limites.alerta80 && percentual >= 0.8
           ? { usado: limites.usoMes, limite: limites.mensal, percentual }

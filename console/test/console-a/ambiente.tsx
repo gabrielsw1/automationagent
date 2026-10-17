@@ -63,6 +63,7 @@ export function resumo(perfil: PerfilEquipe = 'admin', extra: Partial<ResumoCons
     aprovacoesPendentes: 1,
     guia: { feitos: 3, total: 5 },
     modoSimulado: false,
+    semClaude: false,
     alertaGasto: null,
     nomeSistema: 'Horizonte',
     ...extra,

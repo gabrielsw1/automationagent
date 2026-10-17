@@ -24,8 +24,10 @@ export interface Config {
   /** URL do console (em dev, o Vite). Usada em links de convite. */
   urlConsole: string;
   dirDados: string;
-  /** Usa o modelo simulado: sem ANTHROPIC_API_KEY ou com COPILOTO_LLM=simulado. */
+  /** Usa o modelo simulado (respostas por regras): só com COPILOTO_LLM=simulado, para testes. */
   llmSimulado: boolean;
+  /** Há ANTHROPIC_API_KEY. Sem ela (e sem o modo simulado), o assistente avisa que não está ligado. */
+  temChaveClaude: boolean;
   modeloPrincipal: string;
   modeloRapido: string;
   esforco: 'low' | 'medium' | 'high' | 'xhigh' | 'max';
@@ -71,7 +73,8 @@ export function lerConfig(): Config {
     urlPublica: env('PUBLIC_URL', `http://localhost:${porta}`),
     urlConsole: env('CONSOLE_URL', 'http://localhost:5173'),
     dirDados: path.resolve(RAIZ_REPO, env('DATA_DIR', 'data')),
-    llmSimulado: env('COPILOTO_LLM', chave ? 'claude' : 'simulado') === 'simulado',
+    llmSimulado: env('COPILOTO_LLM', 'claude') === 'simulado',
+    temChaveClaude: chave !== '',
     modeloPrincipal: env('COPILOTO_MODELO', 'claude-opus-5-5'),
     modeloRapido: env('COPILOTO_MODELO_RAPIDO', 'claude-haiku-5-5'),
     esforco: env('COPILOTO_ESFORCO', 'medium') as Config['esforco'],

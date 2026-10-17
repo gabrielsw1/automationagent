@@ -91,8 +91,10 @@ export interface WidgetInicio {
   recentes: ItemRecente[];
   /** Conversa em aberto (para retomar), se houver. */
   conversaId: string | null;
-  /** true quando o servidor está sem ANTHROPIC_API_KEY e usa o modelo simulado. */
+  /** true quando o servidor roda com COPILOTO_LLM=simulado (respostas por regras, para testes). */
   modoSimulado: boolean;
+  /** true quando o servidor está sem a chave do Claude: o assistente não responde até alguém configurar. */
+  semClaude: boolean;
   /** true quando o token é de teste do console: nada é gravado no sistema. */
   modoTeste: boolean;
   /** Limite de gasto atingido: tarefas pausadas (todas ou só navegador). */

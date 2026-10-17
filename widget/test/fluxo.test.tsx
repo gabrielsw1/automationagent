@@ -248,6 +248,13 @@ describe('ChatCopiloto: confirmar → progresso → recibo', () => {
     expect(screen.queryByText('Conexão instável.')).toBeNull();
   });
 
+  it('sem a chave do Claude, avisa que o assistente ainda não está ligado', async () => {
+    servidorFalso({ 'GET /api/widget/sessao': () => inicioFalso({ semClaude: true }) });
+    render(<ChatCopiloto token="tk" />);
+    expect(await screen.findByText('O assistente ainda não está ligado.')).toBeTruthy();
+    expect(screen.queryByText(/Modo simulado/)).toBeNull();
+  });
+
   it('abre nas boas-vindas sem conversa, com sugestões e pedidos recentes', async () => {
     const srv = servidorFalso({
       'GET /api/widget/sessao': () =>
@@ -257,6 +264,7 @@ describe('ChatCopiloto: confirmar → progresso → recibo', () => {
             { execucaoId: 'EX-20397', titulo: 'Visita técnica na Transportes Vale Sul', status: 'em_andamento', quando: new Date(Date.now() - 86400000).toISOString() },
           ],
           modoSimulado: true,
+          semClaude: false,
           pausa: { tipo: 'navegador', mensagem: 'Tarefas pela tela estão pausadas até amanhã.' },
         }),
       'POST /api/widget/conversas': () => conversa([], { id: 'c9' }),

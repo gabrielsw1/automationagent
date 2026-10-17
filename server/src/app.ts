@@ -8,6 +8,7 @@ import multipart from '@fastify/multipart';
 import estatico from '@fastify/static';
 import type { ErroApi } from '@copiloto/shared';
 import { RAIZ_REPO } from './config.ts';
+import { SemChaveClaude } from './llm/tipos.ts';
 import type { Plataforma } from './plataforma/index.ts';
 import { ErroHttp } from './util/erros.ts';
 import { codigoRef } from './util/ids.ts';
@@ -64,6 +65,10 @@ export async function criarApp(plataforma: Plataforma, opcoes: OpcoesApp = {}): 
       const corpo: ErroApi = { erro: erro.codigo, mensagem: erro.message };
       return reply.status(erro.status).send(corpo);
     }
+    if (erro instanceof SemChaveClaude) {
+      const corpo: ErroApi = { erro: 'sem_claude', mensagem: erro.message };
+      return reply.status(503).send(corpo);
+    }
     const e = erro as { validation?: unknown; statusCode?: number; message?: string };
     if (e.validation || (e.statusCode && e.statusCode >= 400 && e.statusCode < 500)) {
       const corpo: ErroApi = { erro: 'pedido_invalido', mensagem: 'Os dados enviados estão incompletos ou em formato inválido.' };
@@ -84,6 +89,7 @@ export async function criarApp(plataforma: Plataforma, opcoes: OpcoesApp = {}): 
   app.get('/api/saude', async () => ({
     ok: true,
     modoSimulado: plataforma.config.llmSimulado,
+    claude: plataforma.config.llmSimulado ? 'simulado' : plataforma.config.temChaveClaude ? 'ligado' : 'sem_chave',
     sistema: 'Copiloto',
     urlConsole: plataforma.config.urlConsole,
   }));

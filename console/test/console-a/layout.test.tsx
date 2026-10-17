@@ -43,12 +43,21 @@ describe('Moldura do console', () => {
       caminho: '/painel',
       extra: { modoSimulado: true, alertaGasto: { usado: 1200, limite: 1500, percentual: 0.8 } },
     });
-    const simulado = 'O copiloto está em modo simulado: defina ANTHROPIC_API_KEY no servidor para usar o Claude.';
+    const simulado = 'O copiloto está em modo simulado (COPILOTO_LLM=simulado): as respostas seguem regras de teste, sem o Claude.';
     expect(screen.getByText((_, el) => el?.tagName === 'P' && el.textContent === simulado)).toBeTruthy();
+    expect(screen.queryByText('O copiloto está sem a chave do Claude')).toBeNull();
     expect(screen.getByText('Você usou 80% do limite de gasto deste mês')).toBeTruthy();
     expect(screen.getByRole('link', { name: 'Ajustar limite' }).getAttribute('href')).toBe('/equipe');
     fireEvent.click(screen.getByRole('button', { name: 'Lembrar amanhã' }));
     expect(screen.queryByText('Você usou 80% do limite de gasto deste mês')).toBeNull();
+  });
+
+  it('faixa vermelha quando o servidor está sem a chave do Claude', () => {
+    instalarFetch({});
+    renderizar(pagina, { caminho: '/painel', extra: { semClaude: true } });
+    const faixa = screen.getByRole('alert');
+    expect(faixa.textContent).toContain('O copiloto está sem a chave do Claude');
+    expect(faixa.textContent).toContain('ANTHROPIC_API_KEY');
   });
 
   it('busca no console e abre o resultado', async () => {
