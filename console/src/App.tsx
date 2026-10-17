@@ -26,21 +26,27 @@ function AreaLogada() {
   const [resumo, setResumo] = useState<ResumoConsole | null>(null);
   const [erro, setErro] = useState<ErroApiCliente | null>(null);
 
+  // Depois de entrar, volta para onde a pessoa ia (ex.: /aprender?gravar=..., aberto pela extensão).
+  const irParaEntrar = useCallback(() => {
+    const aqui = `${window.location.pathname}${window.location.search}`;
+    navegar(aqui === '/' ? '/entrar' : `/entrar?voltar=${encodeURIComponent(aqui)}`, { replace: true });
+  }, [navegar]);
+
   const carregar = useCallback(async () => {
     try {
       setResumo(await api.get<ResumoConsole>('/resumo'));
       setErro(null);
     } catch (e) {
       const ex = e as ErroApiCliente;
-      if (ex.status === 401) navegar('/entrar', { replace: true });
+      if (ex.status === 401) irParaEntrar();
       else setErro(ex);
     }
-  }, [navegar]);
+  }, [irParaEntrar]);
 
   useEffect(() => {
-    definirAoSessaoExpirar(() => navegar('/entrar', { replace: true }));
+    definirAoSessaoExpirar(irParaEntrar);
     void carregar();
-  }, [carregar, navegar]);
+  }, [carregar, irParaEntrar]);
 
   if (erro && !resumo) {
     return (

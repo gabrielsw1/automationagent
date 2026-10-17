@@ -1,12 +1,13 @@
 // Lista dos fluxos gravados e o começo de uma gravação nova (C4).
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { fmt, type Fluxo, type ListaTarefas } from '@copiloto/shared';
+import { MARCA_EXTENSAO, fmt, type Fluxo, type ListaTarefas } from '@copiloto/shared';
 import { api, type ErroApiCliente } from '../../api/cliente.ts';
 import { useApi, useEventosConsole } from '../../api/hooks.ts';
 import { Botao } from '../../componentes/Botao.tsx';
 import { Carregando, EstadoErro, EstadoVazio } from '../../componentes/estados.tsx';
 import { Aviso, CabecalhoPagina, Campo } from '../../componentes/formulario.tsx';
+import { Icone } from '../../componentes/icones.tsx';
 import { Modal } from '../../componentes/Modal.tsx';
 import { useMigalhas, useOnline } from '../../componentes/pagina.tsx';
 import { SeloCaminho } from '../../componentes/Selos.tsx';
@@ -45,23 +46,67 @@ function ComoFunciona() {
   );
 }
 
+export const AJUDA_EXTENSAO = 'https://github.com/gabrielsw1/automationagent#extens%C3%A3o-para-gravar-fluxos';
+
+/** A extensão do copiloto marca o <html> de toda página logo no início. */
+export function extensaoInstalada(): boolean {
+  return typeof document !== 'undefined' && document.documentElement.hasAttribute(MARCA_EXTENSAO);
+}
+
+/**
+ * Endereço que chega do "Gravar esta aba" da extensão: vira caminho quando é uma tela do sistema
+ * (mesma origem de urlTelas); de outro site, fica o endereço completo.
+ */
+export function enderecoParaGravar(url: string, urlTelas?: string | null): string {
+  try {
+    const u = new URL(url);
+    if (urlTelas && u.origin === new URL(urlTelas).origin) return `${u.pathname}${u.search}${u.hash}`;
+    return u.toString();
+  } catch {
+    return url;
+  }
+}
+
+function SobreExtensao() {
+  if (extensaoInstalada()) {
+    return (
+      <p className="small text-success row" style={{ gap: 'var(--s-2)' }}>
+        <Icone nome="check" tamanho="sm" />
+        Extensão instalada: a gravação funciona em qualquer site, mesmo sem o widget.
+      </p>
+    );
+  }
+  return (
+    <p className="tiny muted">
+      Para gravar em sites sem o widget do copiloto, instale a extensão do navegador.{' '}
+      <a href={AJUDA_EXTENSAO} target="_blank" rel="noreferrer">
+        Como instalar
+      </a>
+    </p>
+  );
+}
+
 export function ModalNovaGravacao({
   aberto,
   aoFechar,
   tarefaInicial,
+  urlInicialSugerida,
 }: {
   aberto: boolean;
   aoFechar: () => void;
   tarefaInicial?: string | null;
+  /** Endereço completo vindo da extensão ("Gravar esta aba"). */
+  urlInicialSugerida?: string | null;
 }) {
   const navegar = useNavigate();
   const toast = useToast();
   const online = useOnline();
   const { resumo } = useSessao();
   const tarefas = useApi<ListaTarefas>(aberto ? '/tarefas' : null);
+  const conexao = useApi<{ urlTelas: string }>(aberto && urlInicialSugerida ? '/sistema/conexao' : null);
   const [nome, setNome] = useState('');
   const [tarefaId, setTarefaId] = useState<string>(tarefaInicial ?? '');
-  const [urlInicial, setUrlInicial] = useState('');
+  const [urlInicial, setUrlInicial] = useState(urlInicialSugerida ? enderecoParaGravar(urlInicialSugerida) : '');
   const [erros, setErros] = useState<{ nome?: string; url?: string; geral?: string }>({});
   const [enviando, setEnviando] = useState(false);
 
@@ -70,6 +115,13 @@ export function ModalNovaGravacao({
     setErros({});
     setTarefaId(tarefaInicial ?? '');
   }, [aberto, tarefaInicial]);
+
+  // Endereço da extensão: completo até saber o endereço das telas; aí vira caminho, se for do sistema.
+  const urlTelas = conexao.dados?.urlTelas;
+  useEffect(() => {
+    if (!aberto || !urlInicialSugerida) return;
+    setUrlInicial(enderecoParaGravar(urlInicialSugerida, urlTelas));
+  }, [aberto, urlInicialSugerida, urlTelas]);
 
   // Ao escolher a tarefa, sugere o nome do fluxo.
   const tarefa = tarefas.dados?.tarefas.find((t) => t.id === tarefaId);
@@ -171,6 +223,7 @@ export function ModalNovaGravacao({
           )}
         </Campo>
         <p className="tiny muted">Senhas e valores digitados nunca são gravados: o copiloto guarda só o formato (por exemplo, 99.999.999/9999-99).</p>
+        <SobreExtensao />
         <button type="submit" hidden />
       </form>
     </Modal>
@@ -187,7 +240,9 @@ export default function ListaFluxos() {
   const fluxos = useApi<Fluxo[]>('/fluxos');
   const tarefas = useApi<ListaTarefas>('/tarefas');
   const tarefaDaUrl = busca.get('tarefa');
-  const [novo, setNovo] = useState(Boolean(tarefaDaUrl) || busca.get('nova') === '1');
+  // ?gravar=<endereço>: vem do "Gravar esta aba" da extensão do navegador.
+  const gravarDaUrl = busca.get('gravar');
+  const [novo, setNovo] = useState(Boolean(tarefaDaUrl || gravarDaUrl) || busca.get('nova') === '1');
 
   useEventosConsole((e) => {
     if (e.tipo === 'fluxo') void fluxos.recarregar();
@@ -219,10 +274,11 @@ export default function ListaFluxos() {
 
   const fecharNovo = () => {
     setNovo(false);
-    if (busca.has('tarefa') || busca.has('nova')) {
+    if (busca.has('tarefa') || busca.has('nova') || busca.has('gravar')) {
       const b = new URLSearchParams(busca);
       b.delete('tarefa');
       b.delete('nova');
+      b.delete('gravar');
       setBusca(b, { replace: true });
     }
   };
@@ -321,7 +377,7 @@ export default function ListaFluxos() {
       ) : null}
       {conteudo}
       <ComoFunciona />
-      {podeEditar ? <ModalNovaGravacao aberto={novo} aoFechar={fecharNovo} tarefaInicial={tarefaDaUrl} /> : null}
+      {podeEditar ? <ModalNovaGravacao aberto={novo} aoFechar={fecharNovo} tarefaInicial={tarefaDaUrl} urlInicialSugerida={gravarDaUrl} /> : null}
     </div>
   );
 }
