@@ -60,8 +60,10 @@ export class LlmClaude implements Llm {
           thinking: { type: 'adaptive', block_binding: { prefix_mismatch_behavior: 'drop_block' } },
           output_config: { effort: pedido.esforco ?? this.opcoes.esforco },
           system: [{ type: 'text', text: pedido.sistema, cache_control: { type: 'ephemeral' } }],
-          tools: pedido.ferramentas.map((f) => ({ ...f, eager_input_streaming: true })),
-          tool_choice: { type: 'auto' },
+          // tool_choice só vai com ferramentas (sem elas a API recusa o pedido).
+          ...(pedido.ferramentas.length
+            ? { tools: pedido.ferramentas.map((f) => ({ ...f, eager_input_streaming: true })), tool_choice: { type: 'auto' as const } }
+            : {}),
           cache_control: { type: 'ephemeral' },
           messages: pedido.mensagens,
         },

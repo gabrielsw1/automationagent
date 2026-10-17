@@ -57,7 +57,7 @@ export function criarContexto(config: Config, opcoes: OpcoesContexto = {}): Cont
   const auditoria = new Auditoria(banco);
   const conversas = new Conversas(banco, eventos);
   const catalogo = new Catalogo(banco);
-  const conhecimento = new Conhecimento(banco, llm);
+  const conhecimento = new Conhecimento(banco, llm, { eventos, dirDados: config.dirDados });
   const navegador = opcoes.navegador ?? criarNavegador({ config, banco, adaptador, llm });
 
   const parcial = {
