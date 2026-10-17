@@ -6,6 +6,7 @@ import type { FastifyPluginAsync, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import {
   cnpjValido,
+  fmt,
   somenteDigitos,
   type CadastroEmpresaPedido,
   type ConfirmacaoEmail,
@@ -18,7 +19,7 @@ import {
   type PerfilEquipe,
   type PrimeiroAcesso,
 } from '@copiloto/shared';
-import { COOKIE_SESSAO, definirCookie, euDe, iniciais, membro, membroNaEmpresa, perfilNaEmpresa } from '../../auth/console.ts';
+import { COOKIE_SESSAO, PREFIXO_SUPORTE, definirCookie, euDe, membro, membroNaEmpresa, perfilNaEmpresa } from '../../auth/console.ts';
 import { ctxDe, type Contexto } from '../../contexto.ts';
 import { agoraIso } from '../../db/banco.ts';
 import { emailCodigo, emailSenhaNova } from '../../email/modelos.ts';
@@ -174,7 +175,7 @@ const rotas: FastifyPluginAsync = async (app) => {
     const lista = plataforma.empresasDe(conta.email).flatMap((e) => {
       const m = perfilNaEmpresa(plataforma.contexto(e.id), conta.email);
       if (!m) return [];
-      return [{ id: e.id, nome: e.nome, demo: e.demo, perfil: m.perfil, iniciais: iniciais(e.nome), ultimoAcesso: plataforma.ultimoAcesso(conta.email, e.id) }];
+      return [{ id: e.id, nome: e.nome, demo: e.demo, perfil: m.perfil, iniciais: fmt.iniciaisEmpresa(e.nome), ultimoAcesso: plataforma.ultimoAcesso(conta.email, e.id) }];
     });
     return lista.sort(
       (a, b) =>
@@ -256,7 +257,13 @@ const rotas: FastifyPluginAsync = async (app) => {
   });
 
   app.post('/sair', async (request, reply) => {
-    plataforma.encerrarSessao(request.cookies[COOKIE_SESSAO]);
+    const cookie = request.cookies[COOKIE_SESSAO];
+    if (cookie?.startsWith(PREFIXO_SUPORTE)) {
+      // "Sair do modo suporte": o acesso acaba na hora e fica na auditoria da empresa.
+      const acesso = plataforma.starta.encerrarSuporte(cookie.slice(PREFIXO_SUPORTE.length));
+      if (acesso) plataforma.contexto(acesso.empresaId).auditoria.registrar(`${acesso.pessoaNome} (Starta)`, 'saiu do modo suporte', plataforma.empresa(acesso.empresaId)?.nome ?? '');
+    }
+    plataforma.encerrarSessao(cookie);
     reply.clearCookie(COOKIE_SESSAO, { path: '/' });
     return { ok: true };
   });

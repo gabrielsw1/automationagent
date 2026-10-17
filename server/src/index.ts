@@ -2,6 +2,7 @@
 // contexto de cada empresa, aberto quando alguém dela usa o console ou o widget.
 import { lerConfig } from './config.ts';
 import { criarApp } from './app.ts';
+import { emailAtivacaoStarta } from './email/modelos.ts';
 import { Plataforma } from './plataforma/index.ts';
 import { plataformaVazia, semearPlataforma, SENHA_PADRAO } from './seed/index.ts';
 
@@ -17,6 +18,13 @@ if (plataformaVazia(plataforma) && process.env.COPILOTO_SEED !== '0') {
   const r = semearPlataforma(plataforma);
   console.log(`Primeiro início: empresa de demonstração ${r.empresa.nome} criada (${r.tarefas} tarefas, ${r.execucoes} execuções).`);
   console.log(`Console: entre com rafael.lima@seusistema.com.br e a senha ${SENHA_PADRAO}, ou crie a conta de uma empresa nova.`);
+}
+// Equipe Starta: quem está em COPILOTO_ADMINS e ainda não tem conta recebe o link de ativação.
+for (const p of plataforma.prepararEquipeStarta()) {
+  console.log(`Plataforma Starta: ${p.email} ativa o acesso (senha e autenticador) em ${p.link}`);
+  await plataforma.correio
+    .enviar(emailAtivacaoStarta({ para: p.email, nome: p.nome, link: p.link, validoAte: p.expiraEm, convidadoPor: null, redefinicao: false }))
+    .catch((e) => console.error('Falha ao enviar o link de ativação da Plataforma:', e));
 }
 const app = await criarApp(plataforma, { logger: process.env.LOG === '1' });
 

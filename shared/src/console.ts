@@ -1,5 +1,6 @@
 // Contrato entre o console de administração e o servidor. Rotas em /api/console,
 // autenticadas por cookie de sessão (POST /api/console/auth/entrar).
+import type { ModoSuporte } from './plataforma.ts';
 import type {
   CasoDeTeste,
   Fluxo,
@@ -40,10 +41,12 @@ export interface Eu {
   empresa: EmpresaResumo;
   /** Todas as empresas em que esta pessoa está na equipe (para trocar no menu da conta). */
   empresas: EmpresaResumo[];
-  /** Pode ver o painel da plataforma (todas as empresas clientes). Vem de COPILOTO_ADMINS. */
+  /** Tem conta ativa na equipe Starta (o menu mostra o atalho para a Plataforma, que pede a entrada dela). */
   adminPlataforma: boolean;
   /** Confirmou o e-mail com o código. Sem isso, o console só mostra a tela "Confirme o seu e-mail". */
   emailConfirmado: boolean;
+  /** Alguém da Starta entrou como suporte: o console mostra a faixa com o motivo e "Sair do modo suporte". */
+  modoSuporte?: ModoSuporte;
 }
 
 /** Empresa na tela "Em qual empresa você quer entrar?" (A2). */
@@ -203,28 +206,6 @@ export interface ConviteAberto {
 /** Segredo do widget (só Admin): assina o usuário no snippet e os pedidos de sessão. */
 export interface SegredoWidget {
   segredo: string;
-}
-
-/** Linha do painel da plataforma: métricas da empresa, nunca o conteúdo (conversas, prints). */
-export interface EmpresaPlataforma {
-  id: string;
-  nome: string;
-  demo: boolean;
-  status: 'ativa' | 'suspensa';
-  criadoEm: string;
-  criadoPor: string | null;
-  cnpj: string | null;
-  faixaUsuarios: FaixaUsuarios | null;
-  sistema: { nome: string; url: string; conector: ConectorSistema; acesso: ModoAcesso };
-  /** Pessoas ativas na equipe do console. */
-  equipe: number;
-  /** Pessoas do sistema que já usaram o widget. */
-  usuarios: number;
-  tarefasAtivas: number;
-  execucoes30d: number;
-  /** De 0 a 1; null sem execuções no período. */
-  sucesso30d: number | null;
-  ultimaExecucao: string | null;
 }
 
 /** Contadores do menu lateral e faixas globais. */

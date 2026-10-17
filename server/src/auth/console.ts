@@ -2,7 +2,7 @@
 // diz quem é a conta e qual empresa está aberta; o perfil vem da equipe da empresa, conferida a
 // cada pedido (quem sai da equipe perde o acesso na hora).
 import type { FastifyReply, FastifyRequest, preHandlerHookHandler } from 'fastify';
-import { pode, type Eu, type PerfilEquipe, type Permissao } from '@copiloto/shared';
+import { pode, type Eu, type ModoSuporte, type PerfilEquipe, type Permissao } from '@copiloto/shared';
 import type { Contexto } from '../contexto.ts';
 import { agoraIso } from '../db/banco.ts';
 import type { Plataforma, SessaoPlataforma } from '../plataforma/index.ts';
@@ -17,7 +17,12 @@ export interface MembroLogado {
   email: string;
   perfil: PerfilEquipe;
   iniciais: string;
+  /** Pessoa da equipe Starta no modo suporte (perfil Suporte, sem conta na empresa). */
+  suporte?: ModoSuporte & { acessoId: string };
 }
+
+/** Cookie do console no modo suporte: `sup.<token>` (o hash fica em acessos_suporte). */
+export const PREFIXO_SUPORTE = 'sup.';
 
 declare module 'fastify' {
   interface FastifyRequest {
@@ -69,7 +74,8 @@ export function membroNaEmpresa(ctx: Contexto, email: string): MembroLogado | un
 export function lerSessaoConsole(
   plataforma: Plataforma,
   token: string | undefined,
-): { sessao: SessaoPlataforma; ctx: Contexto; membro: MembroLogado } | undefined {
+): { sessao?: SessaoPlataforma; ctx: Contexto; membro: MembroLogado } | undefined {
+  if (token?.startsWith(PREFIXO_SUPORTE)) return lerSuporteConsole(plataforma, token.slice(PREFIXO_SUPORTE.length));
   const sessao = plataforma.lerSessao(token);
   if (!sessao) return undefined;
   const empresa = plataforma.empresa(sessao.empresaId);
@@ -79,9 +85,44 @@ export function lerSessaoConsole(
   return m ? { sessao, ctx, membro: m } : undefined;
 }
 
+/** Modo suporte: a pessoa da Starta entra com o perfil Suporte, até o acesso vencer ou ser encerrado. */
+function lerSuporteConsole(plataforma: Plataforma, token: string): { ctx: Contexto; membro: MembroLogado } | undefined {
+  const lido = plataforma.starta.lerSuporte(token);
+  if (!lido) return undefined;
+  const empresa = plataforma.empresa(lido.acesso.empresaId);
+  if (!empresa || empresa.status !== 'ativa') return undefined;
+  const nome = `${lido.pessoa.nome} (Starta)`;
+  return {
+    ctx: plataforma.contexto(empresa.id),
+    membro: {
+      id: `starta:${lido.pessoa.id}`,
+      nome,
+      email: lido.pessoa.email,
+      perfil: 'suporte',
+      iniciais: iniciais(lido.pessoa.nome),
+      suporte: { acessoId: lido.acesso.id, pessoa: lido.pessoa.nome, motivo: lido.acesso.motivo, ate: lido.acesso.expiraEm },
+    },
+  };
+}
+
 /** "Eu" do console: a pessoa, a empresa aberta e as outras empresas dela. */
 export function euDe(ctx: Contexto, m: MembroLogado): Eu {
   const resumo = (e: { id: string; nome: string; demo: boolean }) => ({ id: e.id, nome: e.nome, demo: e.demo });
+  if (m.suporte) {
+    const { acessoId: _, ...modoSuporte } = m.suporte;
+    return {
+      id: m.id,
+      nome: m.nome,
+      email: m.email,
+      perfil: m.perfil,
+      iniciais: m.iniciais,
+      empresa: resumo(ctx.empresa),
+      empresas: [resumo(ctx.empresa)],
+      adminPlataforma: false,
+      emailConfirmado: true,
+      modoSuporte,
+    };
+  }
   return {
     id: m.id,
     nome: m.nome,

@@ -53,6 +53,53 @@ export function emailConvite(d: {
   };
 }
 
+/** Convite para a equipe Starta (ou "Redefinir acesso"): criar senha e ligar o autenticador. */
+export function emailAtivacaoStarta(d: { para: string; nome: string; link: string; validoAte: string; convidadoPor: string | null; redefinicao: boolean }): EmailSaindo {
+  return {
+    para: d.para,
+    assunto: d.redefinicao ? 'Redefina o seu acesso à Plataforma Starta' : 'Ative o seu acesso à Plataforma Starta',
+    texto: [
+      `Olá, ${fmt.primeiroNome(d.nome)}.`,
+      d.redefinicao
+        ? `${d.convidadoPor ?? 'Um Admin da plataforma'} redefiniu o seu acesso à Plataforma Starta. A senha e o autenticador antigos não valem mais.`
+        : `${d.convidadoPor ? `${d.convidadoPor} convidou você` : 'Você foi convidado'} para a equipe da Plataforma Starta, o painel interno que cuida das empresas clientes do Copiloto.`,
+      `Abra o link abaixo para criar a sua senha e ligar a verificação em duas etapas no aplicativo autenticador do celular. O link vale até ${fmt.data(d.validoAte)} e funciona uma vez só.`,
+      d.link,
+      ASSINATURA,
+    ].join('\n\n'),
+  };
+}
+
+/** Aviso aos Admins da empresa: alguém da Starta entrou como suporte. */
+export function emailSuporte(d: { para: string; empresa: string; pessoa: string; motivo: string; inicio: string; ate: string }): EmailSaindo {
+  return {
+    para: d.para,
+    assunto: `A equipe Starta entrou no Copiloto da ${d.empresa} como suporte`,
+    texto: [
+      'Olá.',
+      `${d.pessoa}, da equipe Starta, entrou no console do Copiloto da ${d.empresa} como suporte em ${fmt.dataHora(d.inicio)}, com acesso até ${fmt.hora(d.ate)}.`,
+      `Motivo informado: ${d.motivo}`,
+      'O acesso fica registrado em Equipe e limites › Auditoria, com tudo o que for feito nele. Se você não esperava este acesso, responda a este e-mail.',
+      ASSINATURA,
+    ].join('\n\n'),
+  };
+}
+
+/** "Sugerir regravação à empresa": o fluxo precisou de muito conserto visual. */
+export function emailRegravar(d: { para: string; empresa: string; tarefa: string; consertos: number; link: string }): EmailSaindo {
+  return {
+    para: d.para,
+    assunto: `Sugestão da Starta: regravar o fluxo “${d.tarefa}”`,
+    texto: [
+      'Olá.',
+      `Nos últimos 30 dias, a tarefa “${d.tarefa}” da ${d.empresa} precisou do agente visual ${d.consertos} vezes, porque a tela do sistema mudou desde a gravação. Cada execução com conserto gasta até 5 créditos.`,
+      'Regravar o fluxo com a extensão leva poucos minutos e faz cada execução voltar a gastar 1 crédito. Abra a tarefa no console:',
+      d.link,
+      ASSINATURA,
+    ].join('\n\n'),
+  };
+}
+
 const ASSUNTO_CONTATO: Record<ContatoRecebido['origem'], string> = {
   demonstracao: 'Pedido de demonstração',
   vendas: 'Contato com vendas',

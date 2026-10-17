@@ -1,0 +1,5 @@
+/* Faixa do modo suporte (console da empresa aberto pela equipe Starta). Vinho com texto branco. */
+.ca-faixa-suporte { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-2) var(--s-3); padding: 10px var(--s-8); background: var(--accent-500); color: var(--white); }
+.ca-faixa-suporte p { overflow-wrap: anywhere; }
+.ca-faixa-suporte .btn { flex: none; }
+@media (max-width: 760px) { .ca-faixa-suporte { padding: 10px var(--s-4); } }

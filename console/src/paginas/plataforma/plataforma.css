@@ -1,8 +1,73 @@
-/* Empresas clientes (painel da plataforma). Cores só por var(--token). */
-/* Muitas colunas: títulos quebram em duas linhas e as células ficam mais justas para caber sem rolar. */
-.cp-empresas .table th { white-space: normal; vertical-align: bottom; }
-.cp-empresas .table th, .cp-empresas .table td { padding-left: 8px; padding-right: 8px; }
-.cp-empresas .table th:first-child, .cp-empresas .table td:first-child { padding-left: 16px; }
-.cp-empresas .table th:last-child, .cp-empresas .table td:last-child { padding-right: 16px; }
+/* Plataforma Starta (S7 e as páginas do menu dela). Cores só por var(--token) de
+   shared/styles/tokens.css. Classes com prefixo cp- para não colidir com as do console (ca-). */
+
+/* ---------- Moldura ---------- */
+.cp-app { flex-wrap: nowrap; }
+.cp-sidebar { flex: 0 0 240px; position: sticky; top: 0; height: 100vh; overflow-y: auto; }
+.cp-marca { color: var(--ink-900); }
+.cp-marca:hover { text-decoration: none; color: var(--ink-900); }
+.cp-pessoa { padding: var(--s-2) var(--s-3); gap: var(--s-3); min-width: 0; }
+.cp-reticencias { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cp-topbar { position: sticky; top: 0; z-index: 20; flex-wrap: nowrap; }
+.cp-topbar .crumbs { min-width: 0; white-space: nowrap; }
+/* 320 px: o texto "Buscar empresa, CNPJ ou responsável" cabe inteiro (com 280 px, como no design, cortava); encolhe em telas médias. */
+.cp-busca-topo { flex: 0 1 320px; min-width: 200px; }
+.cp-so-celular { display: none !important; }
+
+/* Celular: como no design, o menu vira a faixa de cima (rola de lado) e a busca desce para a página. */
+@media (max-width: 760px) {
+  .cp-app { flex-wrap: wrap; align-content: flex-start; }
+  /* relative: o .sr-only dos contadores fica preso na faixa que rola e não alarga a página. */
+  .cp-sidebar { position: relative; height: auto; flex: 1 1 100%; overflow-y: visible; }
+  .cp-topbar { position: static; flex-wrap: wrap; }
+  .cp-so-celular { display: block !important; }
+}
+
+/* ---------- Empresas (S7) ---------- */
+.cp-peso-normal { font-weight: 400; }
+.cp-selo-aba { height: 20px; }
+.cp-selo-demo { height: 20px; align-self: flex-start; }
+.cp-empresa-nome { gap: 10px; white-space: nowrap; }
 .cp-sem-quebra { white-space: nowrap; }
-.cp-sistema { min-width: 140px; overflow-wrap: anywhere; }
+.cp-linha-aberta td, .table tbody tr.cp-linha-aberta:hover td { background: var(--brand-50); }
+.cp-tabela-cheia .table th { white-space: normal; vertical-align: bottom; }
+.cp-tabela-cheia .table th, .cp-tabela-cheia .table td { padding-left: 8px; padding-right: 8px; }
+.cp-tabela-cheia .table th:first-child, .cp-tabela-cheia .table td:first-child { padding-left: 16px; }
+.cp-tabela-cheia .table th:last-child, .cp-tabela-cheia .table td:last-child { padding-right: 16px; }
+.cp-tabela-cheia .cp-quebra-cheia { white-space: normal; }
+.cp-avatar-pausado { background: var(--surface-2); color: var(--ink-500); }
+
+/* Painel da empresa aberta */
+.cp-painel { align-self: flex-start; }
+.cp-painel-cabeca { align-items: flex-start; gap: var(--s-2); }
+.cp-painel-botoes { display: flex; flex-direction: column; align-items: center; gap: var(--s-1); flex: none; }
+.cp-quatro-linhas { overflow: hidden; display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; }
+.cp-quebra { overflow-wrap: break-word; }
+.cp-etapas { list-style: none; margin: 0; padding: 0; }
+.cp-fluxos { list-style: none; margin: 0; padding: var(--s-1) var(--s-4); }
+.cp-fluxos > li { padding: var(--s-3) 0; gap: var(--s-3); }
+.cp-fluxos > li + li { border-top: 1px solid var(--line); }
+.cp-alinhar-inicio { align-self: flex-start; }
+.cp-nota { gap: 6px; }
+.cp-nota svg.i { margin-top: 1px; }
+
+/* ---------- Janelas ---------- */
+.cp-campos-2 { display: grid; gap: var(--s-4); grid-template-columns: repeat(auto-fit, minmax(min(220px, 100%), 1fr)); }
+.cp-campos-3 { display: grid; gap: var(--s-4); grid-template-columns: repeat(auto-fit, minmax(min(200px, 100%), 1fr)); }
+.cp-fieldset { border: 0; padding: 0; margin: 0; min-width: 0; }
+.cp-fieldset legend { padding: 0; margin-bottom: var(--s-2); }
+.cp-selo-linha { margin-left: var(--s-2); height: 20px; vertical-align: middle; }
+.cp-envio { display: flex; gap: var(--s-2); align-items: flex-start; }
+.cp-envio svg.i { margin-top: 3px; }
+.cp-codigos { list-style: none; margin: 0; padding: var(--s-4); display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--s-2) var(--s-6); background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-md); font-size: var(--fs-16); }
+.cp-codigo-app { letter-spacing: .2em; font-size: var(--fs-18); max-width: 200px; }
+
+/* ---------- Outras páginas ---------- */
+.cp-grade-cartoes { display: grid; gap: var(--s-6); grid-template-columns: repeat(auto-fill, minmax(min(380px, 100%), 1fr)); align-items: start; }
+.cp-total th, .cp-total td { background: var(--surface); font-weight: 700; color: var(--ink-900); border-top: 1px solid var(--line); border-bottom: 0; }
+.cp-total th { font-size: var(--fs-14); text-transform: none; letter-spacing: 0; }
+.cp-texto-longo { min-width: 220px; max-width: 420px; overflow-wrap: anywhere; }
+.cp-fluxo-celula { min-width: 200px; }
+.cp-acoes-linha { gap: var(--s-1); justify-content: flex-end; }
+.cp-codigos-cartao { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--s-4); }
+.cp-icone-cartao { background: var(--brand-50); color: var(--brand-700); }

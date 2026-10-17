@@ -5,7 +5,7 @@
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
-import { fmt, type TarefaDefinicao, type CampoExibido, type MensagemWidget } from '@copiloto/shared';
+import { CREDITOS_POR_ROTEIRO, fmt, type TarefaDefinicao, type CampoExibido, type MensagemWidget } from '@copiloto/shared';
 import type { Banco } from '../db/banco.ts';
 import type { Contexto } from '../contexto.ts';
 import { camposExibidos } from '../execucao/motor.ts';
@@ -800,6 +800,9 @@ function semearExecucoes(ctx: Contexto, tarefas: Map<string, TarefaCriada>, agor
       duracao_ms: duracao,
       custo_modelo: e.status === 'cancelada' || e.status === 'aguardando_confirmacao' ? 0.4 : custo.modelo,
       custo_navegador: rodou ? custo.navegador : null,
+      // Como o motor mede: 1 crédito por execução concluída pelo roteiro (nenhuma do exemplo precisou de conserto).
+      creditos: e.status === 'concluida' || e.status === 'desfeita' ? CREDITOS_POR_ROTEIRO : 0,
+      recuperacoes: 0,
       confirmado_por: rodou || e.status === 'aguardando_aprovacao' ? e.quem.nome : null,
       confirmado_em: rodou ? iso(confirmadoEm) : null,
       ip: rodou ? (e.ip ?? `189.6.${a.entre(10, 250)}.${a.entre(2, 250)}`) : null,

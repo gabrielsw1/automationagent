@@ -126,6 +126,8 @@ describe('widget de ponta a ponta', () => {
     const exec = lerExecucao(amb.ctx.banco, cartao.execucaoId)!;
     expect(exec.status).toBe('concluida');
     expect(exec.confirmadoPor).toBe('Ana Ribeiro');
+    // Feita pelo caminho conhecido, sem conserto visual: 1 crédito.
+    expect(amb.ctx.banco.um('SELECT creditos, recuperacoes FROM execucoes WHERE id = ?', cartao.execucaoId)).toEqual({ creditos: 1, recuperacoes: 0 });
     // Próximos passos e avaliação depois do recibo.
     expect(ultimoBloco(amb, conversaId, 'sugestoes').itens[0].rotulo).toMatch(/Agendar visita técnica para Pólen Café/);
 

@@ -10,6 +10,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import {
+  creditosDaExecucao,
   fmt,
   validarTarefa,
   type AcaoBloco,
@@ -1373,6 +1374,7 @@ export class Motor {
 
     if (res.ok) {
       return this.concluir(e, def, progresso, {
+        recuperacoes: res.recuperacoes,
         gerados: res.gerados,
         arquivos: res.arquivos.map((a) => ({ nome: path.basename(a.caminho), tipo: a.tipo, rotulo: a.nome })),
         caminho: 'navegador',
@@ -1464,6 +1466,8 @@ export class Motor {
       arquivos?: { nome: string; tipo: string; rotulo?: string }[];
       simulado: boolean;
       caminho: Caminho;
+      /** Passos que a recuperação visual consertou (a tela tinha mudado). */
+      recuperacoes?: number;
     },
   ): Promise<void> {
     const agora = agoraIso();
@@ -1526,6 +1530,8 @@ export class Motor {
           }
         : null,
       custo_modelo: this.custoModelo(e),
+      recuperacoes: r.recuperacoes ?? 0,
+      creditos: creditosDaExecucao(r),
     });
     this.avisarConsole(e, 'concluida');
     registrarEvento(this.ctx.banco, e.id, { tipo: 'conclusao', titulo: 'Concluída', detalhe: `${titulo}. ${resumo}`, estado: 'ok' });

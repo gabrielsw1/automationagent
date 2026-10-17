@@ -149,7 +149,7 @@ describe('entrar (A1) e escolher a empresa (A2)', () => {
     expect(entrada.eu?.empresa.id).toBe(pedraId);
     expect(entrada.empresas.map((e) => [e.nome, e.perfil, e.iniciais, e.demo])).toEqual([
       ['Pedra Branca', 'admin', 'PB', false],
-      ['Horizonte', 'admin', 'H', true],
+      ['Horizonte', 'admin', 'HO', true],
     ]);
     expect(entrada.empresas.every((e) => e.ultimoAcesso)).toBe(true);
     expect(entrada.avisos).toEqual([]);

@@ -16,6 +16,7 @@ import { codigoRef } from './util/ids.ts';
 import rotasWidget from './rotas/widget.ts';
 import rotasGravacao from './rotas/gravacao.ts';
 import rotasConsole from './rotas/console/index.ts';
+import rotasPlataforma from './rotas/plataforma/index.ts';
 import rotasPublicas from './rotas/publico.ts';
 
 declare module 'fastify' {
@@ -99,6 +100,7 @@ export async function criarApp(plataforma: Plataforma, opcoes: OpcoesApp = {}): 
   await app.register(rotasWidget, { prefix: '/api/widget' });
   await app.register(rotasGravacao, { prefix: '/api/gravacao' });
   await app.register(rotasConsole, { prefix: '/api/console' });
+  await app.register(rotasPlataforma, { prefix: '/api/plataforma' });
   // Site do produto (sem sessão): planos, pedidos de contato e textos jurídicos.
   await app.register(rotasPublicas, { prefix: '/api/publico' });
 

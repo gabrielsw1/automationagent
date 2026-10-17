@@ -106,6 +106,14 @@ export function iniciais(nome: string): string {
   return (primeira + ultima).toUpperCase();
 }
 
+/** Iniciais de empresa, como no design: as duas primeiras palavras ("Clínica Mais Agenda" → CM, "RotaCerta Logística" → RC). */
+export function iniciaisEmpresa(nome: string): string {
+  const p = nome.trim().replace(/(\p{Ll})(\p{Lu})/gu, '$1 $2').split(/\s+/).filter(Boolean);
+  if (p.length === 0) return '?';
+  if (p.length === 1) return p[0].slice(0, 2).toUpperCase();
+  return (p[0][0] + p[1][0]).toUpperCase();
+}
+
 export function primeiroNome(nome: string): string {
   return nome.trim().split(/\s+/)[0] ?? nome;
 }

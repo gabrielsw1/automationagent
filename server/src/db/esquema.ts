@@ -326,4 +326,10 @@ export const MIGRACOES: string[] = [
   `
   ALTER TABLE equipe ADD COLUMN convidado_por TEXT;
   `,
+  // 5: créditos. Cada execução concluída de verdade gasta 1 crédito pelo roteiro, ou 5 quando a
+  // recuperação visual precisou consertar algum passo (a tela mudou). Testes não gastam.
+  `
+  ALTER TABLE execucoes ADD COLUMN creditos INTEGER NOT NULL DEFAULT 0;
+  ALTER TABLE execucoes ADD COLUMN recuperacoes INTEGER NOT NULL DEFAULT 0;
+  `,
 ];

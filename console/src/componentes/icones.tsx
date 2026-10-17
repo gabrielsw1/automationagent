@@ -159,6 +159,20 @@ const P = {
       <path d="M12 8v5M12 16v.01" />
     </>
   ),
+  /** Plataforma › Uso e custos. */
+  cartao: (
+    <>
+      <rect x="3" y="6" width="18" height="14" rx="2" />
+      <path d="M3 10h18M16 15h2" />
+    </>
+  ),
+  /** Plataforma › Configurações. */
+  engrenagem: (
+    <>
+      <circle cx="12" cy="12" r="3" />
+      <path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1L7 17M17 7l2.1-2.1" />
+    </>
+  ),
 } satisfies Record<string, ReactNode>;
 
 export type NomeIcone = keyof typeof P;

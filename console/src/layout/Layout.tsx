@@ -14,6 +14,7 @@ import { ProvedorMigalhas, type Migalha } from '../componentes/pagina.tsx';
 import { recarregar, useSessao } from '../componentes/sessao.tsx';
 import { useToast } from '../componentes/Toast.tsx';
 import BuscaGlobal from './BuscaGlobal.tsx';
+import { FaixaModoSuporte } from './FaixaModoSuporte.tsx';
 import { FaixasDoResumo, FaixaSemInternet } from './Faixas.tsx';
 import { GRUPOS_NAV, migalhasPadrao } from './navegacao.ts';
 
@@ -177,7 +178,7 @@ function SeletorEmpresa({ aoNavegar, idRotulo }: { aoNavegar?: () => void; idRot
           >
             <span className="row ca-seletor-nome">
               <span className="avatar avatar-sm" aria-hidden="true">
-                {fmt.iniciais(eu.empresa.nome)}
+                {fmt.iniciaisEmpresa(eu.empresa.nome)}
               </span>
               <span className="ca-seletor-texto">{eu.empresa.nome}</span>
             </span>
@@ -316,6 +317,7 @@ export default function Layout({ children }: { children: ReactNode }) {
       <a className="ca-pular" href="#conteudo">
         Pular para o conteúdo
       </a>
+      <FaixaModoSuporte />
       <FaixaSemInternet />
       <div className="app ca-app">
         <nav className="sidebar ca-sidebar" aria-label="Menu principal">
