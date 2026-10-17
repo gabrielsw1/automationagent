@@ -2,7 +2,7 @@
 // O fluxo é recarregado ao vivo pelos eventos do console (e a cada 4 s enquanto grava).
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { fmt, type Campo, type EtapaFluxo, type Fluxo, type PassoFluxo, type TarefaDetalhe } from '@copiloto/shared';
+import { fmt, type Campo, type EtapaFluxo, type Fluxo, type PassoFluxo, type ResultadoFluxo, type TarefaDetalhe } from '@copiloto/shared';
 import { api, type ErroApiCliente } from '../../api/cliente.ts';
 import { useApi, useEventosConsole } from '../../api/hooks.ts';
 import { Botao } from '../../componentes/Botao.tsx';
@@ -11,7 +11,7 @@ import { Aviso, CabecalhoPagina } from '../../componentes/formulario.tsx';
 import { Icone } from '../../componentes/icones.tsx';
 import { Confirmar } from '../../componentes/Modal.tsx';
 import { useMigalhas, useOnline } from '../../componentes/pagina.tsx';
-import { SeloCaminho } from '../../componentes/Selos.tsx';
+import { SeloCaminho, SeloStatusTarefa } from '../../componentes/Selos.tsx';
 import { usePode, useSessao } from '../../componentes/sessao.tsx';
 import { useToast } from '../../componentes/Toast.tsx';
 import { camposDoFluxo, ETAPAS, indiceEtapa, PontoAoVivo, prepararAba, type RespostaGravacao } from './comum.tsx';
@@ -21,7 +21,14 @@ import { EtapaPublicar } from './EtapaPublicar.tsx';
 import { EtapaRevisar } from './EtapaRevisar.tsx';
 import { EtapaTestar } from './EtapaTestar.tsx';
 
-type Mudancas = Partial<{ passos: PassoFluxo[]; camposSugeridos: Campo[]; tarefaId: string | null; etapa: EtapaFluxo; nome: string }>;
+type Mudancas = Partial<{
+  passos: PassoFluxo[];
+  camposSugeridos: Campo[];
+  tarefaId: string | null;
+  etapa: EtapaFluxo;
+  nome: string;
+  resultado: ResultadoFluxo | null;
+}>;
 
 function Etapas({
   atual,
@@ -321,28 +328,56 @@ export default function Assistente({ fluxoId }: { fluxoId: string }) {
       corpo = (
         <EtapaPublicar
           fluxo={f}
-          nomeTarefa={nomeTarefa}
+          tarefa={f.tarefaId ? (tarefa.erro ? null : tarefa.dados) : null}
+          campos={campos}
+          nomeSistema={resumo.nomeSistema}
           somenteLeitura={somenteLeitura}
           online={online}
           aoPublicado={atualizar}
+          aoTarefaMudou={() => void tarefa.recarregar()}
           aoIrPara={(e) => irPara(e)}
         />
       );
   }
 
+  // Na etapa Publicar (F3), o cabeçalho fala da tarefa: "Publicar · Abrir chamado", com o selo dela.
+  const naPublicacao = etapaAtual === 'publicar';
+  const cabecalho = naPublicacao ? (
+    <CabecalhoPagina
+      eyebrow="Aprender fluxo"
+      titulo={`Publicar · ${nomeTarefa ?? f.nome}`}
+      selos={
+        !publicado ? (
+          <span className="badge badge-warning">
+            <span className="dot" />
+            Rascunho
+          </span>
+        ) : f.tarefaId && tarefa.dados ? (
+          <SeloStatusTarefa status={tarefa.dados.status} />
+        ) : (
+          situacao
+        )
+      }
+      subtitulo="Confira o que a tarefa faz, quem pode pedir e onde ela aparece. Depois de publicar, você muda tudo isso na ficha da tarefa."
+      acoes={!publicado ? <span className="small muted">Rascunho salvo às {fmt.hora(f.salvoEm)}</span> : undefined}
+    />
+  ) : (
+    <CabecalhoPagina
+      eyebrow="Aprender fluxo"
+      titulo={`Aprender fluxo: ${f.nome}`}
+      selos={<SeloCaminho caminho="navegador" />}
+      subtitulo={`O copiloto vai repetir estes passos na tela do ${resumo.nomeSistema}, num navegador na nuvem, com a sessão de quem pediu.`}
+      acoes={situacao}
+    />
+  );
+
   return (
     <div className="stack-lg">
-      <CabecalhoPagina
-        eyebrow="Aprender fluxo"
-        titulo={`Aprender fluxo: ${f.nome}`}
-        selos={<SeloCaminho caminho="navegador" />}
-        subtitulo={`O copiloto vai repetir estes passos na tela do ${resumo.nomeSistema}, num navegador na nuvem, com a sessão de quem pediu.`}
-        acoes={situacao}
-      />
+      {cabecalho}
 
       {!podeEditar ? (
         <Aviso titulo="Você pode ver este fluxo, mas não mudar">Seu perfil só permite ver. Peça a um Admin ou a um Editor de tarefas para gravar, testar e publicar.</Aviso>
-      ) : publicado ? (
+      ) : publicado && !naPublicacao ? (
         <Aviso
           titulo={`Esta é a versão ${f.versao}, publicada e em uso`}
           acoes={

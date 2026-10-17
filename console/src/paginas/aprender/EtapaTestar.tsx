@@ -10,7 +10,7 @@ import { Icone } from '../../componentes/icones.tsx';
 import { Modal } from '../../componentes/Modal.tsx';
 import { useSessao } from '../../componentes/sessao.tsx';
 import { PrintPasso } from './PrintPasso.tsx';
-import type { Destaque, EventoTeste, RespostaTeste } from './comum.tsx';
+import { registroPorExtenso, type Destaque, type EventoTeste, type RespostaTeste } from './comum.tsx';
 
 function pct(n: number) {
   return `${Math.round(n * 100)}%`;
@@ -343,6 +343,18 @@ export function EtapaTestar({
 
           {!rodando && !res && !fluxo.ultimoTeste ? (
             <p className="small muted">Ainda não testado. Preencha os valores e rode o teste para ver o print de cada passo.</p>
+          ) : null}
+
+          {res?.ok && !rodando && res.registro ? (
+            <p className="small">
+              Registro criado: <span className="strong">{registroPorExtenso(res.registro)}</span>
+              <span className="muted"> · {res.registro.origem === 'configurado' ? 'lido do lugar configurado' : 'achado no aviso da tela'}. Vai no recibo.</span>
+            </p>
+          ) : res?.ok && !rodando && res.registro === null ? (
+            <p className="small muted">
+              Não achei o número do registro criado na tela, então o recibo sai sem número. Se o sistema mostra o número, diga onde em Mapear
+              campos.
+            </p>
           ) : null}
 
           {res && !rodando && (Object.keys(res.gerados).length || res.arquivos.length) ? (

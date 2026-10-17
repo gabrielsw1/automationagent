@@ -332,4 +332,9 @@ export const MIGRACOES: string[] = [
   ALTER TABLE execucoes ADD COLUMN creditos INTEGER NOT NULL DEFAULT 0;
   ALTER TABLE execucoes ADD COLUMN recuperacoes INTEGER NOT NULL DEFAULT 0;
   `,
+  // 6: onde a tela mostra o número do registro que o fluxo criou (Mapear campos), para o recibo
+  // dizer "Chamado #1287". JSON com seletor, formato e nome; NULL procura no aviso de confirmação.
+  `
+  ALTER TABLE fluxos ADD COLUMN resultado TEXT;
+  `,
 ];

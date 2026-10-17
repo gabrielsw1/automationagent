@@ -175,6 +175,38 @@ describe('blocos', () => {
     expect(desfazer).toHaveBeenCalledWith('EX-20431');
   });
 
+  it('recibo pela tela (F6): número do registro lido da tela, detalhes e "Abrir o chamado"', () => {
+    renderizar([
+      bot([
+        {
+          tipo: 'recibo',
+          execucaoId: 'EX-20458',
+          titulo: 'Abrir chamado: feito',
+          registro: { nome: 'Chamado', numero: 'CH-2026-0154', detalhes: ['Padaria Estrela', 'Prioridade alta'] },
+          campos: [
+            { rotulo: 'Assunto', valor: 'Impressora sem tinta' },
+            { rotulo: 'Descrição', valor: 'A impressora do caixa parou de imprimir os cupons fiscais.' },
+          ],
+          resumo: 'Feito pela tela em 9 s',
+          link: { rotulo: 'Abrir o chamado', url: 'http://localhost:4000/chamados/154' },
+        },
+      ]),
+    ]);
+    const recibo = screen.getByRole('region', { name: 'Abrir chamado: feito' });
+    const linha = within(recibo).getByText((_, el) => el?.tagName === 'P' && el.classList.contains('cp-recibo-registro'));
+    expect(linha.textContent).toBe('Chamado CH-2026-0154 · Padaria Estrela · Prioridade alta');
+    expect(within(linha).getByText('CH-2026-0154').className).toContain('mono');
+    expect(within(recibo).getByText('Assunto')).toBeTruthy();
+    expect(within(recibo).getByText('Impressora sem tinta')).toBeTruthy();
+    expect(within(recibo).getByRole('link', { name: /Abrir o chamado/ }).getAttribute('href')).toBe('http://localhost:4000/chamados/154');
+    expect(within(recibo).queryByRole('button', { name: /Desfazer/ })).toBeNull();
+  });
+
+  it('recibo sem número lido: nenhuma linha de registro (não chuta)', () => {
+    renderizar([bot([{ tipo: 'recibo', execucaoId: 'EX-3', titulo: 'Abrir chamado: feito', campos: [], resumo: 'Feito pela tela em 9 s' }])]);
+    expect(document.querySelector('.cp-recibo-registro')).toBeNull();
+  });
+
   it('recibo: desfeito e prazo encerrado', () => {
     renderizar([
       bot([{ tipo: 'recibo', execucaoId: 'EX-1', titulo: 'A', campos: [], resumo: 'Feito via API em 4 s', desfazerAte: new Date(Date.now() + 60000).toISOString(), desfeito: true }]),

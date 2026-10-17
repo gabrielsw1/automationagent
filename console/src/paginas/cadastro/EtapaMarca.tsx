@@ -1,9 +1,9 @@
-// Etapa 3 do cadastro: "Sua marca". Nome do assistente, cor e primeira mensagem, com a
+// Etapa 3 do cadastro: "Sua marca". Nome do assistente, cor, logo e primeira mensagem, com a
 // pré-visualização ao lado. Grava na configuração do widget (rascunho e publicação), a mesma de
 // Canais e widget, e abre o console no guia de início.
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import type { Canais, ConfigWidget, Eu } from '@copiloto/shared';
+import { fmt, type Canais, type ConfigWidget, type Eu } from '@copiloto/shared';
 import { PreviaWidget } from '@copiloto/widget/chat';
 import '@copiloto/widget/chat.css';
 import { api, type ErroApiCliente } from '../../api/cliente.ts';
@@ -12,6 +12,7 @@ import { Botao } from '../../componentes/Botao.tsx';
 import { Carregando, EstadoErro } from '../../componentes/estados.tsx';
 import { Aviso, Campo } from '../../componentes/formulario.tsx';
 import { Icone } from '../../componentes/icones.tsx';
+import { CampoLogo } from '../canais/Logo.tsx';
 import { contrasteComBranco, textoContraste, useCoresSugeridas } from '../canais/marca.ts';
 
 type FormMarca = Pick<ConfigWidget, 'nome' | 'cor' | 'boasVindas'>;
@@ -149,6 +150,8 @@ export default function EtapaMarca({ eu, aoVoltar }: { eu: Eu; aoVoltar: () => v
               ) : null}
             </fieldset>
 
+            <CampoLogo logo={r.logo} iniciais={fmt.iniciaisEmpresa(eu.empresa.nome)} aoMudar={(c) => canais.definir(() => c)} />
+
             <Campo
               rotulo="Primeira mensagem"
               obrigatorio
@@ -166,7 +169,7 @@ export default function EtapaMarca({ eu, aoVoltar }: { eu: Eu; aoVoltar: () => v
               <PreviaWidget config={{ ...r, nome: form.nome, cor: erros.cor ? r.cor : form.cor, boasVindas: form.boasVindas }} usuarioNome={eu.nome} />
             </div>
             <span className="tiny muted" style={{ textAlign: 'center' }}>
-              Atualiza enquanto você edita. É assim que as pessoas vão ver.
+              Atualiza enquanto você edita. É assim que seus clientes vão ver.
             </span>
           </div>
         </div>

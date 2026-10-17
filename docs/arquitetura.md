@@ -229,6 +229,7 @@ Autenticação: `POST /iniciar` devolve `token`; as demais rotas usam `Authoriza
 | `POST /anexos` (multipart, campo `arquivo`) | → `AnexoEnviado` |
 | `POST /proativa` `{ pagina, segundosParado }` | → `{ sugestao: SugestaoProativa \| null }` |
 | `GET /recentes` | → `ItemRecente[]` |
+| `GET /marca/:chave/:arquivo` | logo da empresa (público, sem token). Só serve o arquivo que o rascunho ou a publicação do widget usam, pela chave pública da própria empresa; `cache-control: public, max-age=31536000, immutable` e ETag (o nome é o hash do conteúdo); SVG com CSP `default-src 'none'; sandbox`. A URL vem pronta em `config.logo.url` |
 
 Ações de botão dentro das mensagens (`AcaoBloco.acao`): `abrir` (abre `url`), `mensagem` (envia `mensagem` como se a
 pessoa tivesse escrito), `humano` (`POST /conversas/:id/humano`), `atualizar` (`POST /execucoes/:id/atualizar-existente`),
@@ -335,6 +336,7 @@ console-b:
 | `GET /canais` | ver | `Canais` |
 | `PUT /canais/rascunho` `{ config: ConfigWidget }` | editar | `Canais` |
 | `POST /canais/publicar` · `POST /canais/descartar` | editar | `Canais` |
+| `POST /canais/logo` (multipart, campo `arquivo`) · `DELETE /canais/logo` | editar | `Canais`: o logo entra no rascunho (vale no widget depois de publicar). PNG ou SVG quadrado, até 1 MB, conferido pelo conteúdo (`servicos/logo.ts`); recusa com 422 ou 413 `logo_invalido`. Fica em `<pasta da empresa>/marca/<hash>.<ext>`; publicar, descartar, trocar e remover apagam os arquivos que nem o rascunho nem a publicação usam |
 | `GET /equipe` | ver | `MembroEquipe[]` |
 | `POST /equipe/convites` `{ email, perfil }` | administrar | `{ membro: MembroEquipe, linkConvite }` (sem envio de e-mail: o console mostra o link para copiar) |
 | `POST /equipe/:id/reenviar` | administrar | `{ membro, linkConvite }` |
@@ -344,13 +346,19 @@ console-b:
 | `GET /auditoria?antes=` | administrar | `RegistroAuditoria[]` |
 
 navegador: `GET /fluxos` → `Fluxo[]`; `POST /fluxos {nome, tarefaId?, urlInicial}` → `{ fluxo, token, urlGravacao }`;
-`GET /fluxos/:id`; `PUT /fluxos/:id` (revisar/mapear); `POST /fluxos/:id/aprender` (Claude transforma os eventos em passos e sugere campos);
-`POST /fluxos/:id/testar {valores, usuarioId}`; `POST /fluxos/:id/publicar`; `DELETE /fluxos/:id`; `GET /prints/:id` (imagem);
+`GET /fluxos/:id`; `PUT /fluxos/:id` (revisar/mapear; `resultado: {seletor?, formato?, nome?} | null` diz onde a tela mostra o número do registro criado); `POST /fluxos/:id/aprender` (Claude transforma os eventos em passos e sugere campos);
+`POST /fluxos/:id/testar {valores, usuarioId}` (o resultado traz `registro`, o número lido da tela); `POST /fluxos/:id/publicar {ativar?, perfis?}` → `FluxoPublicado` (com `ativar`, publica também a tarefa ligada, com `perfis` em quem pode usar; ficha incompleta é 422 `ficha_incompleta` e nada é publicado); `DELETE /fluxos/:id`; `GET /prints/:id` (imagem);
 `GET /prints/:id/info`; `GET /fluxos/:id/gravacao` (passos gravados até agora, para o "N passos até agora" ao vivo);
 `POST /fluxos/:id/gravar` (abre uma gravação nova para o fluxo); `POST /fluxos/:id/concluir-gravacao`; `POST /fluxos/:id/cancelar-gravacao`;
 `POST /fluxos/:id/nova-versao` (fluxo publicado fica só leitura: editar cria versão nova); `POST /fluxos/:id/criar-tarefa`
 (ficha em rascunho com os campos sugeridos, frases de exemplo tiradas do nome do fluxo e recibo `<nome>: feito`, ou com o primeiro dado lido).
 Execuções de teste usam IDs `teste_*`, gravam o uso do Claude com `execucao_id` nulo e penduram os prints no fluxo.
+Número do registro criado (`navegador/registro.ts`): no fim do fluxo, o executor lê o número do que foi criado. Com
+`fluxos.resultado.seletor`, lê daquele elemento (com `formato`, em que 9 é dígito e a é letra); sem, procura nos avisos de
+confirmação (`[role=status]`, `.alerta`, `.toast`…) por padrões conservadores ("Chamado #1287", "Pedido nº 1287",
+"Protocolo: …", "Chamado CH-2026-0153 aberto") e só aceita exatamente um número. Sem número, o recibo sai sem a linha. Com
+número, o recibo ganha `registro: {nome, numero, detalhes}` ("Chamado #1287 · Padaria Estrela · Prioridade alta") e, se a
+tela tem um link do mesmo site com o número, o botão "Abrir o chamado". Migração 6: coluna `fluxos.resultado`.
 
 conhecimento: `GET /conhecimento/fontes` → `FonteConhecimento[]`; `POST /conhecimento/fontes/site {url, limitePaginas?}`;
 `POST /conhecimento/fontes/arquivo` (multipart: PDF, DOCX, TXT, MD); `POST /conhecimento/fontes/video` (transcrição .vtt/.srt ou texto);

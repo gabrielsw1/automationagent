@@ -2,7 +2,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import type { Fluxo, GravacaoEstado, TarefaDefinicao } from '@copiloto/shared';
+import type { Fluxo, FluxoPublicado, GravacaoEstado, RegistroLido, TarefaDefinicao } from '@copiloto/shared';
 import type { Contexto } from '../../src/contexto.ts';
 import type { EventoConsole } from '../../src/eventos.ts';
 import { salvarPrint } from '../../src/navegador/prints.ts';
@@ -19,6 +19,8 @@ class NavegadorFalso implements Navegador {
   dirDados!: string;
   pedidos: PedidoExecucaoNavegador[] = [];
   falharNoPasso: number | null = null;
+  /** Número do registro que a "tela" mostrou no fim (undefined: não procurou). */
+  registro: RegistroLido | null | undefined = undefined;
   async disponivel() {
     return { ok: true, detalhe: 'falso' };
   }
@@ -33,7 +35,7 @@ class NavegadorFalso implements Navegador {
       }
       p.aoEvento({ tipo: 'passo_ok', passo: passo.n, titulo: `Passo ${passo.n}`, printId });
     }
-    return { ok: true, gerados: { linha_digitavel: '123' }, arquivos: [], duracaoMs: 10, recuperacoes: 0 };
+    return { ok: true, gerados: { linha_digitavel: '123' }, arquivos: [], duracaoMs: 10, recuperacoes: 0, registro: this.registro };
   }
 }
 
@@ -317,6 +319,67 @@ describe('fluxos no console', () => {
     expect(def.tituloRecibo).toBe('Segunda via de boleto: {linha_digitavel}');
     expect((await a.pedir('GET', `/api/console/fluxos/${fluxo.id}`)).json<Fluxo>().tarefaId).toBe(tarefaId);
     expect((await a.pedir('POST', `/api/console/fluxos/${fluxo.id}/criar-tarefa`)).statusCode).toBe(409);
+  });
+
+  it('número do registro (Mapear campos), teste com o número lido e publicar ligando a tarefa no widget', async () => {
+    const a = await ambiente();
+    const { fluxo } = await gravarBoleto(a);
+    const base = `/api/console/fluxos/${fluxo.id}`;
+    const { tarefaId } = (await a.pedir('POST', `${base}/criar-tarefa`)).json() as { tarefaId: string };
+
+    // Onde o número aparece: formato com 9 e a; tudo vazio volta a procurar no aviso.
+    const ruim = await a.pedir('PUT', base, { resultado: { formato: 'CH--' } });
+    expect(ruim.statusCode).toBe(400);
+    expect(ruim.json().mensagem).toBe('No formato do número, use 9 para cada dígito e a para cada letra. Ex.: CH-9999-9999.');
+    const lugar = { seletor: '[data-campo="numero_chamado"]', formato: 'CH-9999-9999', nome: 'Chamado' };
+    const comLugar = (await a.pedir('PUT', base, { resultado: lugar })).json<Fluxo>();
+    expect(comLugar.resultado).toEqual(lugar);
+    expect((await a.pedir('PUT', base, { resultado: { seletor: ' ', formato: '', nome: '' } })).json<Fluxo>().resultado).toBeNull();
+    await a.pedir('PUT', base, { resultado: lugar });
+
+    // O teste leva o lugar ao navegador e guarda o número lido, a duração e quem testou.
+    a.falso!.registro = { numero: 'CH-2026-0153', nome: 'Chamado', artigo: 'o', texto: 'Chamado CH-2026-0153 aberto.', seletor: lugar.seletor, origem: 'configurado' };
+    const t = await a.pedir('POST', `${base}/testar`, { valores: { cpf_cnpj_pagador: '12.345.678/0001-95', competencia: '10/2026' }, usuarioId: '102' });
+    expect(a.falso!.pedidos.at(-1)!.fluxo.resultado).toEqual(lugar);
+    expect(t.json().resultado.registro).toMatchObject({ numero: 'CH-2026-0153', origem: 'configurado' });
+    const testado = t.json().fluxo as Fluxo;
+    expect(testado.ultimoTeste).toMatchObject({ ok: true, duracaoMs: 10, usuarioNome: 'Marcos Teixeira', registro: { numero: 'CH-2026-0153' } });
+
+    // Widget ligado com a ficha incompleta: nada é publicado e a mensagem diz o que falta.
+    const rascunho = a.ctx.catalogo.rascunho(tarefaId)!.definicao;
+    a.ctx.catalogo.salvarRascunho(tarefaId, { ...rascunho, quandoUsar: 'Curto' }, 'Júlia Martins');
+    const incompleta = await a.pedir('POST', `${base}/publicar`, { ativar: true });
+    expect(incompleta.statusCode).toBe(422);
+    expect(incompleta.json()).toMatchObject({ erro: 'ficha_incompleta' });
+    expect(incompleta.json().mensagem).toMatch(/^Antes de ativar a tarefa: Escreva em "Quando usar".* desligue o widget para publicar só o fluxo\.$/);
+    expect((await a.pedir('GET', base)).json<Fluxo>().status).toBe('rascunho');
+    a.ctx.catalogo.salvarRascunho(tarefaId, rascunho, 'Júlia Martins');
+
+    expect((await a.pedir('POST', `${base}/publicar`, { ativar: true }, a.leitor.cookie)).statusCode).toBe(403);
+    const pub = await a.pedir('POST', `${base}/publicar`, { ativar: true, perfis: ['Financeiro', 'Financeiro'] });
+    expect(pub.statusCode).toBe(200);
+    const corpo = pub.json<FluxoPublicado>();
+    expect(corpo.fluxo).toMatchObject({ status: 'publicado', resultado: lugar });
+    expect(corpo.tarefa).toMatchObject({ id: tarefaId, nome: 'Segunda via de boleto', status: 'ativa', versao: 1, ativada: true, publicadoPor: 'Júlia Martins' });
+    const publicada = a.ctx.catalogo.publicada(tarefaId)!.definicao;
+    expect(publicada).toMatchObject({ fluxoId: fluxo.id, perfisPermitidos: ['Financeiro'] });
+    expect(a.ctx.auditoria.listar().map((x) => x.acao)).toEqual(expect.arrayContaining(['publicou a versão 1 da tarefa', 'publicou o fluxo']));
+
+    // Uma versão nova do fluxo leva o lugar do número junto.
+    const nova = (await a.pedir('POST', `${base}/gravar`)).json() as { fluxo: Fluxo };
+    expect(nova.fluxo.resultado).toEqual(lugar);
+  });
+
+  it('publicar com o widget desligado: só o fluxo, ligado ao rascunho da tarefa', async () => {
+    const a = await ambiente();
+    const { fluxo } = await gravarBoleto(a);
+    const base = `/api/console/fluxos/${fluxo.id}`;
+    const { tarefaId } = (await a.pedir('POST', `${base}/criar-tarefa`)).json() as { tarefaId: string };
+    await a.pedir('POST', `${base}/testar`, { valores: { cpf_cnpj_pagador: '12.345.678/0001-95', competencia: '10/2026' }, usuarioId: '102' });
+    const pub = (await a.pedir('POST', `${base}/publicar`, { ativar: false })).json<FluxoPublicado>();
+    expect(pub.tarefa).toMatchObject({ id: tarefaId, status: 'rascunho', ativada: false, publicadoPor: null });
+    expect(a.ctx.catalogo.publicada(tarefaId)).toBeFalsy();
+    expect(a.ctx.catalogo.rascunho(tarefaId)!.definicao.fluxoId).toBe(fluxo.id);
   });
 
   it('conclui e cancela a gravação pelo console', async () => {

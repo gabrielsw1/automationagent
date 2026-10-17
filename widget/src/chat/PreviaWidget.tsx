@@ -1,11 +1,11 @@
 // Prévia estática do widget para a tela Canais do console (C8 "Pré-visualização ao vivo"), sem servidor.
-// Reflete nome, boas-vindas, sugestões, cor principal (--brand-* locais), posição e atalho.
+// Reflete nome, logo, boas-vindas, sugestões, cor principal (--brand-* locais), posição e atalho.
 import { useMemo, type CSSProperties } from 'react';
 import type { WidgetConfigPublica } from '@copiloto/shared';
 import { fmt } from '@copiloto/shared';
 import { Composer } from './composer.tsx';
 import { variaveisMarca } from './cor.ts';
-import { Icone } from './icones.tsx';
+import { Icone, ProvedorLogo } from './icones.tsx';
 import { BoasVindas, Cabecalho, DicaComposer, placeholderBoasVindas } from './painel.tsx';
 import { ehMac } from './util.ts';
 
@@ -15,7 +15,15 @@ export interface PropsPreviaWidget {
   pagina?: string;
 }
 
-export function PreviaWidget({ config, usuarioNome, pagina }: PropsPreviaWidget) {
+export function PreviaWidget(props: PropsPreviaWidget) {
+  return (
+    <ProvedorLogo value={props.config.logo?.url || null}>
+      <Previa {...props} />
+    </ProvedorLogo>
+  );
+}
+
+function Previa({ config, usuarioNome, pagina }: PropsPreviaWidget) {
   const estilo = useMemo(() => (variaveisMarca(config.cor) ?? {}) as CSSProperties, [config.cor]);
   const sugestoes = config.sugestoes.filter((s) => s.trim()).slice(0, 4).map((s) => ({ rotulo: s, mensagem: s }));
   const esquerda = config.posicao === 'esquerda';

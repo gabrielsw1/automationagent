@@ -1,5 +1,5 @@
 // Ícones de traço do design (viewBox 24, stroke = currentColor). Classes .i / .i-sm / .i-lg vêm do base.css.
-import type { ReactNode } from 'react';
+import { createContext, useContext, useState, type ReactNode } from 'react';
 
 const CAMINHOS = {
   brilho: <path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z" />,
@@ -138,8 +138,25 @@ export function Icone({
 }
 
 /** Avatar do copiloto (bolinha de marca com o brilho). */
+/**
+ * Endereço do logo da empresa (Canais e widget › Aparência). Quem monta o chat (widget, prévia,
+ * chat do console) passa o `config.logo?.url`; sem logo, o avatar do copiloto é o ícone padrão.
+ */
+const ContextoLogo = createContext<string | null>(null);
+export const ProvedorLogo = ContextoLogo.Provider;
+
 export function AvatarCopiloto({ tamanho = 'md' }: { tamanho?: 'sm' | 'md' | 'lg' }) {
+  const logo = useContext(ContextoLogo);
+  // Se a imagem não carregar (removida, fora do ar), volta ao ícone padrão.
+  const [falhou, setFalhou] = useState<string | null>(null);
   const classe = tamanho === 'sm' ? 'avatar avatar-bot avatar-sm' : tamanho === 'lg' ? 'avatar avatar-bot cp-avatar-lg' : 'avatar avatar-bot';
+  if (logo && falhou !== logo) {
+    return (
+      <span className={`${classe} cp-avatar-logo`} aria-hidden="true">
+        <img src={logo} alt="" draggable={false} onError={() => setFalhou(logo)} />
+      </span>
+    );
+  }
   return (
     <span className={classe} aria-hidden="true">
       <Icone nome="brilho" tamanho={tamanho === 'sm' ? 'sm' : 'md'} />
