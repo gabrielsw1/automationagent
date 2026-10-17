@@ -3,19 +3,39 @@
 // na equipe; o perfil é de cada empresa.
 import type { FastifyPluginAsync, FastifyReply } from 'fastify';
 import { z } from 'zod';
-import type { CadastroEmpresaPedido, ConviteAberto, Eu, PerfilEquipe, PrimeiroAcesso } from '@copiloto/shared';
+import { cnpjValido, somenteDigitos, type CadastroEmpresaPedido, type ConviteAberto, type Eu, type PerfilEquipe, type PrimeiroAcesso } from '@copiloto/shared';
 import { COOKIE_SESSAO, definirCookie, euDe, membro, membroNaEmpresa } from '../../auth/console.ts';
 import { ctxDe, type Contexto } from '../../contexto.ts';
 import { agoraIso } from '../../db/banco.ts';
-import { empresaDoToken, type Conta, type Plataforma } from '../../plataforma/index.ts';
+import { empresaDoToken, sistemaNovo, type Conta, type Plataforma } from '../../plataforma/index.ts';
 import { ErroHttp, pedidoInvalido } from '../../util/erros.ts';
 import { novoId } from '../../util/ids.ts';
 
 const Entrar = z.object({ email: z.string().trim().toLowerCase(), senha: z.string() });
-const Senha = z.string().min(8, 'A senha precisa de pelo menos 8 caracteres.');
 const Nome = z.string().trim().min(2, 'Diga seu nome.').max(120, 'O nome pode ter até 120 caracteres.');
 const AceitarConvite = z.object({ nome: z.string().trim().max(120).optional(), senha: z.string() });
 const TrocarEmpresa = z.object({ empresaId: z.string().min(1) });
+
+/** Regras de senha da conta (as mesmas que a tela de cadastro mostra). Devolve o problema ou null. */
+export function problemaSenha(senha: string, empresa?: string): string | null {
+  if (senha.length < 10) return 'A senha precisa de pelo menos 10 caracteres.';
+  if (senha.length > 200) return 'A senha pode ter até 200 caracteres.';
+  if (!/\p{L}/u.test(senha) || !/\d/.test(senha)) return 'Use letras e números na senha.';
+  const simples = (t: string) => t.toLowerCase().replace(/[^\p{L}\d]/gu, '');
+  const nomeEmpresa = empresa ? simples(empresa) : '';
+  if (nomeEmpresa.length >= 3 && simples(senha).includes(nomeEmpresa)) return 'A senha precisa ser diferente do nome da empresa.';
+  return null;
+}
+
+// Quem cria o espaço de uma empresa usa o e-mail da empresa (o design pede "e-mail de trabalho").
+const PROVEDORES_PESSOAIS = new Set([
+  'gmail.com', 'googlemail.com', 'hotmail.com', 'hotmail.com.br', 'outlook.com', 'outlook.com.br', 'live.com', 'msn.com',
+  'yahoo.com', 'yahoo.com.br', 'icloud.com', 'me.com', 'bol.com.br', 'uol.com.br', 'terra.com.br', 'ig.com.br',
+  'proton.me', 'protonmail.com', 'aol.com',
+]);
+
+/** Metadados de nuvem e afins: nenhum sistema de cliente mora aí, e o servidor não deve abrir. */
+const HOST_PROIBIDO = /^(169\.254\.\d+\.\d+|metadata(\.google\.internal)?|\[fd00:ec2::254\])$/i;
 
 /** Endereço http(s) completo. Ex.: https://app.suaempresa.com.br */
 export const UrlSistema = z
@@ -25,26 +45,42 @@ export const UrlSistema = z
   .refine((v) => {
     try {
       const u = new URL(v);
-      return (u.protocol === 'http:' || u.protocol === 'https:') && !!u.host;
+      return (u.protocol === 'http:' || u.protocol === 'https:') && !!u.host && !HOST_PROIBIDO.test(u.hostname);
     } catch {
       return false;
     }
   }, 'Use o endereço completo do sistema, começando com https://');
 
-const Cadastro = z.object({
-  empresa: z.object({
-    nome: z.string().trim().min(2, 'Diga o nome da empresa.').max(80, 'O nome da empresa pode ter até 80 caracteres.'),
-    sistemaNome: z.string().trim().min(2, 'Diga como a equipe chama o sistema.').max(60, 'O nome do sistema pode ter até 60 caracteres.'),
-    sistemaUrl: UrlSistema,
-  }),
-  pessoa: z
-    .object({
-      nome: Nome,
-      email: z.string().trim().toLowerCase().email('E-mail inválido.'),
-      senha: Senha,
-    })
-    .optional(),
-}) satisfies z.ZodType<CadastroEmpresaPedido>;
+const Cadastro = z
+  .object({
+    empresa: z.object({
+      nome: z.string().trim().min(2, 'Diga o nome da empresa.').max(80, 'O nome da empresa pode ter até 80 caracteres.'),
+      cnpj: z
+        .string()
+        .trim()
+        .optional()
+        .transform((v) => (v ? somenteDigitos(v) : undefined))
+        .refine((v) => v === undefined || cnpjValido(v), 'CNPJ inválido. Confira os números.'),
+      faixaUsuarios: z.enum(['ate_200', 'ate_1000', 'ate_5000', 'mais_5000']).optional(),
+    }),
+    pessoa: z
+      .object({
+        nome: Nome,
+        email: z.string().trim().toLowerCase().email('E-mail inválido.'),
+        senha: z.string(),
+      })
+      .optional(),
+    aceites: z.object({ termos: z.boolean(), dados: z.boolean() }, { error: 'Aceite os termos de uso e o contrato de tratamento de dados.' }),
+  })
+  .superRefine((d, c) => {
+    if (!d.aceites.termos || !d.aceites.dados) {
+      c.addIssue({ code: 'custom', message: 'Para criar o espaço, aceite os termos de uso e o contrato de tratamento de dados (LGPD).' });
+    }
+    if (!d.pessoa) return;
+    if (PROVEDORES_PESSOAIS.has(d.pessoa.email.split('@')[1] ?? '')) {
+      c.addIssue({ code: 'custom', message: 'Use o e-mail da empresa, por exemplo nome@suaempresa.com.br.' });
+    }
+  }) satisfies z.ZodType<CadastroEmpresaPedido, unknown>;
 
 function validar<T>(esquema: z.ZodType<T>, corpo: unknown): T {
   const r = esquema.safeParse(corpo ?? {});
@@ -132,8 +168,8 @@ const rotas: FastifyPluginAsync = async (app) => {
   }));
 
   /**
-   * Cria a conta de uma empresa nova: a empresa (com o sistema dela, ligado só pelas telas), o
-   * banco dela e quem criou como Admin. Logado, a empresa nova fica com a conta da sessão.
+   * Etapa 1 do cadastro: cria o espaço de uma empresa nova (banco próprio, sistema só pela tela,
+   * ainda sem endereço) e quem criou como Admin. Logado, a empresa nova fica com a conta da sessão.
    */
   app.post('/cadastro', async (request, reply): Promise<Eu> => {
     const d = validar(Cadastro, request.body);
@@ -146,6 +182,8 @@ const rotas: FastifyPluginAsync = async (app) => {
       }
       if (!d.pessoa) throw pedidoInvalido('Diga seu nome, e-mail e senha.');
       const existente = plataforma.conta(d.pessoa.email);
+      const problema = existente ? null : problemaSenha(d.pessoa.senha, d.empresa.nome);
+      if (problema) throw pedidoInvalido(problema);
       if (existente) {
         const conferida = plataforma.conferirSenha(d.pessoa.email, d.pessoa.senha);
         if (!conferida) {
@@ -161,16 +199,14 @@ const rotas: FastifyPluginAsync = async (app) => {
       }
     }
     const nomePessoa = conta.nome ?? d.pessoa?.nome ?? conta.email;
+    // O sistema (endereço e acesso) vem na etapa 2 do cadastro, já logado, por PUT /sistema/config.
     const empresa = plataforma.criarEmpresa({
       nome: d.empresa.nome,
-      sistema: {
-        nome: d.empresa.sistemaNome,
-        url: d.empresa.sistemaUrl.replace(/\/+$/, ''),
-        conector: 'tela',
-        acesso: { modo: 'nenhum', urlLogin: '', usuario: '' },
-        perfis: [],
-      },
+      sistema: sistemaNovo(d.empresa.nome),
       criadoPor: conta.email,
+      cnpj: d.empresa.cnpj,
+      faixaUsuarios: d.empresa.faixaUsuarios,
+      termosAceitos: true,
     });
     const ctx = plataforma.contexto(empresa.id);
     ctx.banco.inserir('equipe', {
@@ -182,7 +218,12 @@ const rotas: FastifyPluginAsync = async (app) => {
       criado_em: agoraIso(),
     });
     plataforma.vincular(conta.email, empresa.id);
-    ctx.auditoria.registrar(nomePessoa, 'criou a conta da empresa', empresa.nome, `Sistema ${empresa.sistema.nome} · ${empresa.sistema.url}`);
+    ctx.auditoria.registrar(
+      nomePessoa,
+      'criou o espaço da empresa',
+      empresa.nome,
+      'Aceitou os termos de uso e o contrato de tratamento de dados (LGPD)',
+    );
     if (request.sessaoConsole) {
       plataforma.trocarEmpresa(request.sessaoConsole.token, conta.id, empresa.id);
       return euDe(ctx, membroNaEmpresa(ctx, conta.email)!);
@@ -208,7 +249,8 @@ const rotas: FastifyPluginAsync = async (app) => {
       nome = d.nome || conta.nome || convite.email;
     } else {
       nome = validar(Nome, d.nome);
-      validar(Senha, d.senha);
+      const problema = problemaSenha(d.senha, ctx.empresa.nome);
+      if (problema) throw pedidoInvalido(problema);
       conta = plataforma.criarConta({ email: convite.email, nome, senha: d.senha });
     }
     ctx.banco.atualizar('equipe', convite.id, { nome, status: 'ativo', convite_token: null });

@@ -52,6 +52,8 @@ export interface SessaoNavegador {
    * entra com ela antes do fluxo. A senha vem do cofre e só é digitada no campo de senha.
    */
   login?: { url: string; usuario: string; senha: string };
+  /** Link de entrada única do sistema (modo sessão): o navegador abre antes do fluxo e fica logado. */
+  urlEntrada?: string;
 }
 
 /** Rota da API do sistema, para o console sugerir chamadas ao criar uma tarefa. */
@@ -109,6 +111,14 @@ export interface ArquivoBaixado {
 }
 
 /** Falha de rede ou tempo esgotado ao falar com o sistema. */
+/** O sistema não deu acesso ao navegador do copiloto. A mensagem é de negócio e vai para quem pediu e para o console. */
+export class ErroAcessoSistema extends Error {
+  constructor(mensagem: string) {
+    super(mensagem);
+    this.name = 'ErroAcessoSistema';
+  }
+}
+
 export class ErroConexaoSistema extends Error {
   constructor(
     mensagem: string,

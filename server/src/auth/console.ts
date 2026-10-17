@@ -83,6 +83,7 @@ export function euDe(ctx: Contexto, m: MembroLogado): Eu {
     iniciais: m.iniciais,
     empresa: resumo(ctx.empresa),
     empresas: ctx.plataforma.empresasDe(m.email).map(resumo),
+    adminPlataforma: ctx.plataforma.adminDaPlataforma(m.email),
   };
 }
 

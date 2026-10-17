@@ -6,7 +6,7 @@ import type { Banco } from '../db/banco.ts';
 import { AdaptadorHorizonte } from './exemplo/index.ts';
 import { AdaptadorTela } from './tela.ts';
 import type { AdaptadorSistema, ArquivoBaixado, ChamadaApi, SessaoNavegador } from './tipos.ts';
-import type { UsuarioSistema } from '@copiloto/shared';
+import type { ModoAcesso, UsuarioSistema } from '@copiloto/shared';
 
 export * from './tipos.ts';
 
@@ -15,8 +15,10 @@ export interface DadosAdaptador {
   config: Config;
   banco: Banco;
   perfis: string[];
-  acesso: { modo: 'nenhum' | 'conta'; urlLogin: string; usuario: string };
+  acesso: { modo: ModoAcesso; urlSessao: string; urlLogin: string; usuario: string };
   senhaAcesso: () => string | null;
+  /** Segredo do widget da empresa: também assina os pedidos de sessão (modo `sessao`). */
+  segredoWidget: () => string;
 }
 
 const ADAPTADORES: Record<string, (d: DadosAdaptador) => AdaptadorSistema> = {
@@ -28,6 +30,7 @@ const ADAPTADORES: Record<string, (d: DadosAdaptador) => AdaptadorSistema> = {
       perfis: d.perfis,
       acesso: d.acesso,
       senha: d.senhaAcesso,
+      segredo: d.segredoWidget,
     }),
 };
 

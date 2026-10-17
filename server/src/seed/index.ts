@@ -9,7 +9,7 @@ import { fmt, type TarefaDefinicao, type CampoExibido, type MensagemWidget } fro
 import type { Banco } from '../db/banco.ts';
 import type { Contexto } from '../contexto.ts';
 import { camposExibidos } from '../execucao/motor.ts';
-import { tokenDaEmpresa, type Empresa, type Plataforma } from '../plataforma/index.ts';
+import { sistemaNovo, tokenDaEmpresa, type Empresa, type Plataforma } from '../plataforma/index.ts';
 import { novoId } from '../util/ids.ts';
 import { semearConhecimento } from './conhecimento.ts';
 import { fluxosExemplo } from './fluxos.ts';
@@ -1222,13 +1222,7 @@ export function semearPlataforma(
     nome: config.sistema.nome,
     demo: true,
     chavePublica: process.env.WIDGET_CHAVE_PUBLICA || 'pk_local_horizonte',
-    sistema: {
-      nome: config.sistema.nome,
-      url: config.sistema.urlBase,
-      conector: 'api',
-      acesso: { modo: 'nenhum', urlLogin: '', usuario: '' },
-      perfis: [],
-    },
+    sistema: { ...sistemaNovo(config.sistema.nome, config.sistema.urlBase), conector: 'api' },
   });
   const ctx = plataforma.contexto(empresa.id);
   const resumo = semear(ctx, opcoes);

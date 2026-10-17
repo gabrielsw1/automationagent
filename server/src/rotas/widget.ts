@@ -258,7 +258,10 @@ const rotas: FastifyPluginAsync = async (app) => {
       throw new ErroHttp(403, 'dominio_nao_liberado', `O domínio ${host} não está liberado para o widget. Libere em Canais, no console.`);
     }
     const identidade = { nome, email, perfis };
-    if (ctx.config.exigirAssinatura && !assinaturaValida(textoAssinado(usuarioId, identidade), assinatura, ctx.config.segredoWidget)) {
+    // WIDGET_EXIGIR_ASSINATURA=0 só vale para a demonstração: nas empresas clientes, sem assinatura
+    // qualquer um poderia se passar por qualquer pessoa.
+    const exigir = ctx.config.exigirAssinatura || !ctx.empresa.demo;
+    if (exigir && !assinaturaValida(textoAssinado(usuarioId, identidade), assinatura, ctx.config.segredoWidget)) {
       throw new ErroHttp(401, 'assinatura_invalida', 'A assinatura do usuário no snippet não confere (data-assinatura).');
     }
     let usuario: UsuarioSistema | null;

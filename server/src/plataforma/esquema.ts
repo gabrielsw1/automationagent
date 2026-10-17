@@ -19,6 +19,11 @@ export const MIGRACOES_PLATAFORMA: string[] = [
     credenciais TEXT,
     -- Domínios liberados no widget publicado (para o CORS, antes de saber a empresa).
     dominios TEXT NOT NULL DEFAULT '[]',
+    -- Dados do cadastro: CNPJ (nota e contrato), faixa de pessoas que usam o sistema (plano) e
+    -- quando quem criou aceitou os termos de uso e o contrato de tratamento de dados (LGPD).
+    cnpj TEXT,
+    faixa_usuarios TEXT,
+    termos_aceitos_em TEXT,
     criado_por TEXT,
     criado_em TEXT NOT NULL
   );

@@ -12,7 +12,7 @@ import type { Llm } from '../src/llm/tipos.ts';
 import { LlmSimulado } from '../src/llm/simulado.ts';
 import type { Navegador } from '../src/navegador/tipos.ts';
 import type { AdaptadorSistema, ChamadaApi, RespostaApi, RotaApi, SessaoNavegador } from '../src/adaptadores/tipos.ts';
-import { Plataforma } from '../src/plataforma/index.ts';
+import { Plataforma, sistemaNovo } from '../src/plataforma/index.ts';
 import { semearPlataforma, type ResumoSeed } from '../src/seed/index.ts';
 import { novoId } from '../src/util/ids.ts';
 
@@ -183,7 +183,7 @@ export async function criarAmbiente(opcoes: OpcoesAmbiente = {}): Promise<Ambien
     plataforma.criarEmpresa({
       nome: 'Horizonte',
       demo: true,
-      sistema: { nome: 'Horizonte', url: config.sistema.urlBase, conector: 'api', acesso: { modo: 'nenhum', urlLogin: '', usuario: '' }, perfis: [] },
+      sistema: { ...sistemaNovo('Horizonte', config.sistema.urlBase), conector: 'api' },
     });
   const ctx = plataforma.contexto(empresa.id);
   const app = await criarApp(plataforma);

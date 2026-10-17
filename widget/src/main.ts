@@ -1,6 +1,9 @@
 // copiloto.js: script que o sistema anfitrião inclui em cada página.
 //   <script src="{COPILOTO_URL}/copiloto.js" data-chave="pk_..." data-usuario="{id}"
+//           [data-nome="..." data-email="..." data-perfis="Comercial,Financeiro"]
 //           data-assinatura="{hmac}" [data-servidor="https://..."] async></script>
+// Nome, e-mail e perfis entram na assinatura (veja textoAssinado em @copiloto/shared). Empresas
+// ligadas só pela tela mandam esses dados: o copiloto aprende quem é a pessoa por eles.
 // Monta o widget num Shadow DOM (o CSS da página não vaza para dentro nem para fora).
 // Com ?copiloto_gravacao=<token> na URL (ou o token no sessionStorage), liga o gravador de fluxos no lugar do chat,
 // a não ser que a extensão do copiloto esteja na página: aí quem grava é ela.
@@ -22,6 +25,9 @@ const FONTES =
 interface DadosScript {
   chave: string | null;
   usuario: string | null;
+  nome?: string;
+  email?: string;
+  perfis?: string[];
   assinatura: string | null;
   servidor: string;
 }
@@ -50,9 +56,16 @@ function lerDados(script: HTMLScriptElement | null): DadosScript {
       servidor = '';
     }
   }
+  const perfis = ds.perfis
+    ?.split(',')
+    .map((p) => p.trim())
+    .filter(Boolean);
   return {
     chave: ds.chave?.trim() || null,
     usuario: ds.usuario?.trim() || null,
+    nome: ds.nome?.trim() || undefined,
+    email: ds.email?.trim() || undefined,
+    perfis: ds.perfis !== undefined ? perfis : undefined,
     assinatura: ds.assinatura?.trim() || null,
     servidor: servidor || location.origin,
   };
@@ -93,7 +106,7 @@ function explicarFalha(e: unknown, dados: DadosScript): string {
   if (e instanceof ErroCliente) {
     switch (e.codigo) {
       case 'assinatura_invalida':
-        return `${prefixo} A assinatura do usuário "${dados.usuario}" não confere. O data-assinatura deve ser o HMAC-SHA256 do ID do usuário com o segredo do widget, calculado no servidor do seu sistema.`;
+        return `${prefixo} A assinatura do usuário "${dados.usuario}" não confere. O data-assinatura deve ser o HMAC-SHA256, com o segredo do widget, do ID do usuário (ou, com data-nome, data-email e data-perfis, de ID, nome, e-mail e perfis separados por quebra de linha), calculado no servidor do seu sistema.`;
       case 'dominio_nao_liberado':
         return `${prefixo} O domínio ${location.host} não está liberado para a chave ${dados.chave}. Libere-o no console, em Canais e widget.`;
       case 'usuario_nao_encontrado':
@@ -141,6 +154,9 @@ async function iniciar(script: HTMLScriptElement | null): Promise<void> {
     inicio = await ClienteApi.iniciar(dados.servidor, {
       chave: dados.chave,
       usuario: dados.usuario,
+      nome: dados.nome,
+      email: dados.email,
+      perfis: dados.perfis,
       assinatura: dados.assinatura ?? undefined,
       pagina: lerContextoPagina(),
     });

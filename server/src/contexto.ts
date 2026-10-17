@@ -72,6 +72,7 @@ function adaptadorReal(config: Config, banco: Banco, empresa: Empresa, plataform
     perfis: empresa.sistema.perfis,
     acesso: empresa.sistema.acesso,
     senhaAcesso: () => plataforma.senhaAcesso(empresa.id),
+    segredoWidget: () => config.segredoWidget,
   });
 }
 

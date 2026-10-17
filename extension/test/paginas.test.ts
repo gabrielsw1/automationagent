@@ -165,7 +165,7 @@ describe('opções', () => {
     });
     await montarOpcoes(raiz);
     botao('Testar conexão')!.click();
-    await vi.waitFor(() => expect(texto()).toContain('Conectado ao copiloto do Horizonte. O console fica em http://localhost:5173.'));
+    await vi.waitFor(() => expect(texto()).toContain('Conectado ao copiloto. O console fica em http://localhost:5173.'));
     expect(pedidos).toEqual([{ tipo: 'saude', servidor: 'http://localhost:3000' }]);
   });
 

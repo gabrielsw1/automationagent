@@ -50,6 +50,8 @@ export interface Config {
   chaveMestra: string;
   /** Qualquer pessoa pode criar a conta de uma empresa nova pela tela de entrada (COPILOTO_CADASTRO=fechado desliga). */
   cadastroAberto: boolean;
+  /** E-mails de quem vê o painel da plataforma com todas as empresas (COPILOTO_ADMINS, separados por vírgula). */
+  adminsPlataforma: string[];
   /** Exige a assinatura do usuário no snippet do widget. */
   exigirAssinatura: boolean;
   /** Mostra o navegador do Playwright (só para depurar fluxos). */
@@ -86,6 +88,10 @@ export function lerConfig(): Config {
     segredoSessao,
     chaveMestra: env('COPILOTO_CHAVE_MESTRA', segredoSessao),
     cadastroAberto: env('COPILOTO_CADASTRO', 'aberto') !== 'fechado',
+    adminsPlataforma: env('COPILOTO_ADMINS', '')
+      .split(',')
+      .map((e) => e.trim().toLowerCase())
+      .filter(Boolean),
     exigirAssinatura: env('WIDGET_EXIGIR_ASSINATURA', '1') !== '0',
     navegadorVisivel: env('NAVEGADOR_VISIVEL', '0') === '1',
     chromiumPath: process.env.CHROMIUM_PATH || undefined,

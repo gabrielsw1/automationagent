@@ -76,7 +76,7 @@ export async function montarOpcoes(raiz: HTMLElement, busca = '') {
     mostrar(
       statusServidor,
       r.ok
-        ? { tipo: 'ok', texto: `Conectado ao copiloto do ${r.sistema}. O console fica em ${r.urlConsole}.` }
+        ? { tipo: 'ok', texto: `Conectado ao copiloto. O console fica em ${r.urlConsole}.` }
         : { tipo: 'erro', texto: r.semPermissao ? `Salve o servidor para liberar ${origem} e teste de novo.` : r.mensagem },
     );
   };

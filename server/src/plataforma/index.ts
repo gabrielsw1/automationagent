@@ -10,7 +10,7 @@
 //   (`<empresa>.<aleatório>`), e o token do widget leva a empresa assinada.
 import fs from 'node:fs';
 import path from 'node:path';
-import type { ConectorSistema } from '@copiloto/shared';
+import type { ConectorSistema, FaixaUsuarios, ModoAcesso } from '@copiloto/shared';
 import type { AdaptadorSistema } from '../adaptadores/tipos.ts';
 import { hashSenha, verificarSenha } from '../auth/senha.ts';
 import type { Config } from '../config.ts';
@@ -27,8 +27,13 @@ export interface SistemaGuardado {
   nome: string;
   url: string;
   conector: ConectorSistema;
-  acesso: { modo: 'nenhum' | 'conta'; urlLogin: string; usuario: string };
+  acesso: { modo: ModoAcesso; urlSessao: string; urlLogin: string; usuario: string };
   perfis: string[];
+}
+
+/** Sistema de uma empresa recém-criada: só pela tela, sem endereço ainda (etapa 2 do cadastro). */
+export function sistemaNovo(nome: string, url = ''): SistemaGuardado {
+  return { nome, url, conector: 'tela', acesso: { modo: 'nenhum', urlSessao: '', urlLogin: '', usuario: '' }, perfis: [] };
 }
 
 export interface Empresa {
@@ -40,6 +45,9 @@ export interface Empresa {
   sistema: SistemaGuardado;
   chavePublica: string;
   dominios: string[];
+  cnpj: string | null;
+  faixaUsuarios: FaixaUsuarios | null;
+  criadoPor: string | null;
   criadoEm: string;
 }
 
@@ -82,7 +90,16 @@ interface LinhaEmpresa {
   segredo_widget: string;
   credenciais: string | null;
   dominios: string;
+  cnpj: string | null;
+  faixa_usuarios: FaixaUsuarios | null;
+  criado_por: string | null;
   criado_em: string;
+}
+
+function lerSistema(l: LinhaEmpresa): SistemaGuardado {
+  const padrao = sistemaNovo(l.nome);
+  const lido = json<Partial<SistemaGuardado>>(l.sistema, {});
+  return { ...padrao, ...lido, acesso: { ...padrao.acesso, ...lido.acesso } };
 }
 
 function deLinha(l: LinhaEmpresa): Empresa {
@@ -92,9 +109,12 @@ function deLinha(l: LinhaEmpresa): Empresa {
     nome: l.nome,
     status: l.status,
     demo: l.demo === 1,
-    sistema: json<SistemaGuardado>(l.sistema, { nome: l.nome, url: '', conector: 'tela', acesso: { modo: 'nenhum', urlLogin: '', usuario: '' }, perfis: [] }),
+    sistema: lerSistema(l),
     chavePublica: l.chave_publica,
     dominios: json<string[]>(l.dominios, []),
+    cnpj: l.cnpj,
+    faixaUsuarios: l.faixa_usuarios,
+    criadoPor: l.criado_por,
     criadoEm: l.criado_em,
   };
 }
@@ -169,6 +189,9 @@ export class Plataforma {
     chavePublica?: string;
     segredoWidget?: string;
     criadoPor?: string;
+    cnpj?: string;
+    faixaUsuarios?: FaixaUsuarios;
+    termosAceitos?: boolean;
   }): Empresa {
     const id = novoId('emp');
     const host = hostDe(d.sistema.url);
@@ -183,6 +206,9 @@ export class Plataforma {
       segredo_widget: this.cofre.cifrar(d.segredoWidget ?? `sw_${tokenAleatorio(32)}`),
       credenciais: null,
       dominios: host ? [host] : [],
+      cnpj: d.cnpj ?? null,
+      faixa_usuarios: d.faixaUsuarios ?? null,
+      termos_aceitos_em: d.termosAceitos ? agoraIso() : null,
       criado_por: d.criadoPor ?? null,
       criado_em: agoraIso(),
     });
@@ -233,6 +259,18 @@ export class Plataforma {
     this.banco.atualizar('empresas', empresaId, dados);
     const ctx = this.contextos.get(empresaId);
     if (ctx) trocarSistema(ctx, this.empresa(empresaId)!, this);
+  }
+
+  /** Suspende ou reativa a empresa. Suspensa, ninguém entra no console nem no widget dela. */
+  mudarStatus(empresaId: string, status: Empresa['status']) {
+    this.banco.executar('UPDATE empresas SET status = ? WHERE id = ?', status, empresaId);
+    if (status === 'suspensa') this.banco.executar('DELETE FROM sessoes WHERE empresa_id = ?', empresaId);
+    this.cacheDominios = null;
+  }
+
+  /** Pode ver o painel da plataforma (COPILOTO_ADMINS). */
+  adminDaPlataforma(email: string): boolean {
+    return this.config.adminsPlataforma.includes(email.trim().toLowerCase());
   }
 
   /** Guarda os domínios do widget publicado (o CORS consulta antes de saber a empresa). */
