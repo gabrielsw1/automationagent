@@ -1,5 +1,5 @@
 // Dados de exemplo: equipe do console, as 6 tarefas (com versões, testes e fluxos gravados),
-// 1.284 execuções dos últimos 30 dias, aprovações, pedidos sem tarefa, conversas, auditoria e a
+// 1.284 execuções dos últimos 30 dias (e 1.146 nos 30 antes, para a comparação do painel), aprovações, pedidos sem tarefa, conversas, auditoria e a
 // base de conhecimento. Tudo marcado como exemplo; os números batem com o design do painel.
 // Roda sozinho no primeiro início (banco vazio) e com `npm run seed` (recria o banco).
 import crypto from 'node:crypto';
@@ -53,6 +53,15 @@ const VOLUME: Record<string, { total: number; falhas: number }> = {
   alterar_plano: { total: 241, falhas: 6 },
   agendar_visita: { total: 187, falhas: 22 },
   segunda_via_boleto: { total: 88, falhas: 10 },
+};
+
+/** Os 30 dias antes desses, para o painel comparar ("+12% vs. período anterior"). */
+const VOLUME_ANTERIOR: Record<string, { total: number; falhas: number }> = {
+  cadastrar_cliente: { total: 372, falhas: 9 },
+  emitir_relatorio_vendas: { total: 318, falhas: 4 },
+  alterar_plano: { total: 222, falhas: 5 },
+  agendar_visita: { total: 196, falhas: 31 },
+  segunda_via_boleto: { total: 38, falhas: 6 },
 };
 
 const CLIENTES = [
@@ -388,12 +397,12 @@ const FALHAS: Record<string, ExecSeed['falha'][]> = {
 };
 
 const FALHA_TELA_MUDOU: NonNullable<ExecSeed['falha']> = {
-  etapa: 'Preencher data da visita',
-  detalhe: 'Falhou: o campo “Data da visita” não foi encontrado, a tela mudou.',
+  etapa: 'Clicar em Agendar visita',
+  detalhe: 'Falhou: o botão “Agendar visita” não foi encontrado, a tela mudou.',
   diagnostico: {
     titulo: 'A tela de agendamento mudou e nada foi gravado.',
     detalhe:
-      'O campo “Data da visita” agora se chama “Data”. Atualize o fluxo gravado para que as próximas visitas sejam agendadas sem ajuda. Até lá, esta tarefa vai transferir para o suporte quando não tiver certeza.',
+      'O botão “Agendar visita” agora se chama “Confirmar agendamento”. Atualize o fluxo gravado para que as próximas visitas sejam agendadas sem ajuda. Até lá, esta tarefa vai transferir para o suporte quando não tiver certeza.',
     tom: 'erro',
   },
   erro: 'elemento_nao_encontrado',
@@ -515,7 +524,7 @@ function execucoesFixas(agora: number): ExecSeed[] {
       transferidaPara: p.camila,
       conversa: true,
       ip: '189.6.214.37',
-      candidato: { texto: 'Data', confianca: 0.58 },
+      candidato: { texto: 'Confirmar agendamento', confianca: 0.58 },
     },
     {
       id: 'EX-20414',
@@ -553,7 +562,7 @@ function execucoesFixas(agora: number): ExecSeed[] {
       duracaoMs: 68_000,
       falha: FALHA_TELA_MUDOU,
       transferidaPara: p.camila,
-      candidato: { texto: 'Data', confianca: 0.52 },
+      candidato: { texto: 'Confirmar agendamento', confianca: 0.52 },
     },
   ];
 }
@@ -631,6 +640,49 @@ function execucoesEmMassa(a: Aleatorio, agora: number, fixas: ExecSeed[]): ExecS
   return lista;
 }
 
+/** Execuções dos 30 dias anteriores (dias 30 a 59 antes de hoje), só para a comparação do painel. */
+function execucoesPeriodoAnterior(a: Aleatorio, agora: number): ExecSeed[] {
+  const hoje = inicioDoDiaSp(new Date(agora));
+  const dias = Array.from({ length: 30 }, (_, i) => hoje - (59 - i) * DIA);
+  const fimDeSemana = (d: number) => [0, 6].includes(new Date(d).getUTCDay());
+  const total = Object.values(VOLUME_ANTERIOR).reduce((s, v) => s + v.total, 0);
+  const brutos = dias.map((d) => (fimDeSemana(d) ? a.entre(9, 22) : a.entre(40, 58)));
+  let soma = brutos.reduce((s, v) => s + v, 0);
+  while (soma !== total) {
+    const i = a.entre(0, 29);
+    const lim = fimDeSemana(dias[i]) ? [9, 22] : [40, 58];
+    if (soma < total && brutos[i] < lim[1] + 4) {
+      brutos[i]++;
+      soma++;
+    } else if (soma > total && brutos[i] > lim[0]) {
+      brutos[i]--;
+      soma--;
+    }
+  }
+  const tarefas = a.embaralhar(Object.entries(VOLUME_ANTERIOR).flatMap(([slug, v]) => Array.from({ length: v.total }, () => slug)));
+  const lista: ExecSeed[] = [];
+  let k = 0;
+  dias.forEach((d, i) => {
+    for (let j = 0; j < brutos[i]; j++) {
+      const slug = tarefas[k++];
+      const inicio = emSp(d, a.entre(8 * 60, 18 * 60 + 30)).getTime() + a.entre(0, 59) * 1000;
+      const quem = PESSOAS[a.escolher(QUEM_PEDE[slug])];
+      const { pedido, dados } = dadosAleatorios(slug, a, quem, inicio);
+      lista.push({ slug, quem, inicio, status: 'concluida', pedido, dados });
+    }
+  });
+  for (const [slug, v] of Object.entries(VOLUME_ANTERIOR)) {
+    for (const e of a.embaralhar(lista.filter((x) => x.slug === slug)).slice(0, v.falhas)) {
+      e.status = 'falhou';
+      e.falha = a.escolher(FALHAS[slug]);
+    }
+  }
+  for (const e of a.embaralhar(lista.filter((x) => x.slug === 'cadastrar_cliente' && x.status === 'concluida')).slice(0, 4)) {
+    e.status = 'desfeita';
+  }
+  return lista;
+}
+
 function duracaoTipica(a: Aleatorio, caminho: 'api' | 'navegador', falhou: boolean): number {
   if (caminho === 'api') return (falhou ? a.entre(8, 20) : a.entre(3, 9)) * 1000 + a.entre(0, 999);
   return (falhou ? a.entre(55, 110) : a.entre(36, 62)) * 1000 + a.entre(0, 999);
@@ -651,21 +703,24 @@ function custos(a: Aleatorio, slug: string, duracaoMs: number | null): { modelo:
   return { modelo, navegador: nav };
 }
 
-function semearExecucoes(ctx: Contexto, tarefas: Map<string, TarefaCriada>, agora: number, a: Aleatorio) {
+function semearExecucoes(ctx: Contexto, tarefas: Map<string, TarefaCriada>, agora: number, a: Aleatorio, b: Aleatorio) {
   const { banco } = ctx;
   const fixas = execucoesFixas(agora);
   const massa = execucoesEmMassa(a, agora, fixas);
   const todas = [...fixas, ...massa].sort((x, y) => y.inicio - x.inicio);
+  // O período anterior usa outro gerador: assim os últimos 30 dias saem iguais com ou sem ele.
+  const anteriores = execucoesPeriodoAnterior(b, agora).sort((x, y) => y.inicio - x.inicio);
   const usados = new Set(fixas.map((f) => f.id!));
   let cursor = Math.min(...fixas.map((f) => Number(f.id!.slice(3)))) - 1;
-  for (const e of todas) {
+  for (const e of [...todas, ...anteriores]) {
     if (e.id) continue;
     while (usados.has(`EX-${cursor}`)) cursor--;
     e.id = `EX-${cursor--}`;
   }
 
   const sistema = ctx.adaptador.nome;
-  for (const e of todas) {
+  const ger = new Map<ExecSeed, Aleatorio>([...todas.map((e) => [e, a] as const), ...anteriores.map((e) => [e, b] as const)]);
+  for (const [e, a] of ger) {
     const t = tarefas.get(e.slug)!;
     const caminho = t.def.caminho;
     const rodou = !['aguardando_confirmacao', 'cancelada', 'aguardando_aprovacao'].includes(e.status);
@@ -732,7 +787,7 @@ function semearExecucoes(ctx: Contexto, tarefas: Map<string, TarefaCriada>, agor
     `INSERT INTO sequencias (nome, valor) VALUES ('execucao', ?) ON CONFLICT(nome) DO UPDATE SET valor = excluded.valor`,
     Math.max(...fixas.map((f) => Number(f.id!.slice(3)))),
   );
-  return todas.length;
+  return todas.length + anteriores.length;
 }
 
 function resultadoPadrao(def: TarefaDefinicao, e: ExecSeed, a: Aleatorio): Record<string, unknown> {
@@ -816,7 +871,11 @@ function semearEventos(
       detalhe: `O navegador abriu o ${sistema} com as permissões de ${primeiro}. A sessão vale só para esta execução.`,
     });
     const fluxo = fluxosExemplo()?.[e.slug === 'agendar_visita' ? 'agendar_visita' : 'segunda_via_boleto'];
-    for (const p of fluxo?.passos ?? []) passos.push({ titulo: p.titulo });
+    for (const p of fluxo?.passos ?? []) {
+      // Na tela nova, o campo de data também mudou de nome, mas a recuperação visual teve certeza.
+      const recuperado = e.falha === FALHA_TELA_MUDOU && p.titulo === 'Preencher data da visita';
+      passos.push({ titulo: p.titulo, detalhe: recuperado ? 'O campo “Data da visita” agora se chama “Data”. A recuperação visual achou o campo com 93% de confiança e seguiu.' : undefined });
+    }
   }
   const falhaEm = e.falha ? Math.max(0, passos.findIndex((p) => p.titulo === e.falha!.etapa)) : -1;
   const ate = e.falha ? (falhaEm >= 0 && passos[falhaEm]?.titulo === e.falha.etapa ? falhaEm : passos.length - 1) : passos.length;
@@ -831,7 +890,7 @@ function semearEventos(
       ev(m.inicioExec + ate * passo + 3000, {
         tipo: 'recuperacao',
         titulo: 'Recuperação visual tentou 2 vezes',
-        detalhe: `O agente procurou na tela um campo parecido. Achou “${e.candidato.texto}” no mesmo lugar, mas não usou: baixa confiança, preferi não arriscar.`,
+        detalhe: `O agente procurou na tela ${e.falha.etapa.startsWith('Clicar') ? 'um botão parecido' : 'um campo parecido'}. Achou “${e.candidato.texto}” no mesmo lugar, mas não ${e.falha.etapa.startsWith('Clicar') ? 'clicou' : 'usou'}: baixa confiança, preferi não arriscar.`,
         estado: 'aviso',
         candidato: e.candidato,
         fim: m.inicioExec + ate * passo + 30_000,
@@ -1081,10 +1140,11 @@ export function bancoVazio(banco: Banco): boolean {
 export function semear(ctx: Contexto, opcoes: { agora?: Date; semente?: number } = {}): ResumoSeed {
   const agora = (opcoes.agora ?? new Date()).getTime();
   const a = aleatorio(opcoes.semente ?? 20431);
+  const b = aleatorio((opcoes.semente ?? 20431) + 1);
   return ctx.banco.transacao(() => {
     semearEquipe(ctx.banco, agora);
     const tarefas = semearTarefas(ctx.banco, agora);
-    const execucoes = semearExecucoes(ctx, tarefas, agora, a);
+    const execucoes = semearExecucoes(ctx, tarefas, agora, a, b);
     semearPedidos(ctx.banco, agora, a);
     semearAuditoria(ctx.banco, agora, tarefas);
     const conhecimento = semearConhecimento(ctx.banco, new Date(agora));

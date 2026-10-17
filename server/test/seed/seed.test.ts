@@ -30,6 +30,8 @@ describe('seed', () => {
     const painel = (await amb.app.inject({ method: 'GET', url: '/api/console/painel?periodo=30d', headers: { cookie } })).json();
     expect(painel.executadas).toBe(1284);
     expect(Math.round(painel.taxaSucesso * 1000) / 10).toBe(96.2);
+    // "+12% vs. período anterior", como no design.
+    expect(Math.round(painel.variacao * 100)).toBe(12);
 
     const lista = (await amb.app.inject({ method: 'GET', url: '/api/console/tarefas', headers: { cookie } })).json();
     const porSlug = Object.fromEntries(lista.tarefas.map((t: { slug: string }) => [t.slug, t]));

@@ -390,7 +390,7 @@ export const TAREFAS_SEED: TarefaSeed[] = [
     definicao: CADASTRAR_CLIENTE,
     fluxo: 'cadastro_cliente_tela',
     versoes: [
-      { por: 'Júlia Martins', diasAtras: 60, resumo: 'Primeira versão.' },
+      { por: 'Júlia Martins', diasAtras: 90, resumo: 'Primeira versão.' },
       { por: 'Júlia Martins', diasAtras: 41, resumo: 'Confere se o CNPJ já existe antes de gravar.' },
       { por: 'Rafael Lima', diasAtras: 15, resumo: 'Usa o fluxo gravado quando a API falhar.' },
       { por: 'Júlia Martins', diasAtras: 3, resumo: 'Desfazer por 5 minutos e frases de exemplo novas.' },
@@ -458,7 +458,7 @@ export const TAREFAS_SEED: TarefaSeed[] = [
     status: 'ativa',
     definicao: ALTERAR_PLANO,
     versoes: [
-      { por: 'Rafael Lima', diasAtras: 50, resumo: 'Primeira versão.' },
+      { por: 'Rafael Lima', diasAtras: 80, resumo: 'Primeira versão.' },
       { por: 'Rafael Lima', diasAtras: 8, resumo: 'Pede aprovação do Gestor financeiro para quem não tem o perfil.' },
     ],
     testes: [
@@ -475,7 +475,7 @@ export const TAREFAS_SEED: TarefaSeed[] = [
     slug: 'emitir_relatorio_vendas',
     status: 'ativa',
     definicao: EMITIR_RELATORIO,
-    versoes: [{ por: 'Júlia Martins', diasAtras: 17, resumo: 'Primeira versão.' }],
+    versoes: [{ por: 'Júlia Martins', diasAtras: 75, resumo: 'Primeira versão.' }],
     testes: [
       { frase: 'relatório de vendas de setembro', esperado: { resultado: 'pergunta', campoPerguntado: 'agrupar_por' } },
       {
@@ -491,7 +491,7 @@ export const TAREFAS_SEED: TarefaSeed[] = [
     definicao: AGENDAR_VISITA,
     fluxo: 'agendar_visita',
     versoes: [
-      { por: 'Júlia Martins', diasAtras: 30, resumo: 'Primeira versão.' },
+      { por: 'Júlia Martins', diasAtras: 70, resumo: 'Primeira versão.' },
       { por: 'Júlia Martins', diasAtras: 15, resumo: 'Fluxo regravado com o campo de técnico.' },
     ],
     testes: [
@@ -508,7 +508,7 @@ export const TAREFAS_SEED: TarefaSeed[] = [
     status: 'teste',
     definicao: SEGUNDA_VIA,
     fluxo: 'segunda_via_boleto',
-    versoes: [{ por: 'Júlia Martins', diasAtras: 1, resumo: 'Primeira versão, em teste com 3 pessoas.' }],
+    versoes: [{ por: 'Júlia Martins', diasAtras: 60, resumo: 'Primeira versão, em teste com 3 pessoas.' }],
     testes: [
       { frase: 'segunda via do boleto de setembro', esperado: { resultado: 'pergunta', campoPerguntado: 'documento_pagador' } },
       {
