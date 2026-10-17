@@ -1,0 +1,39 @@
+/* Popup e opções da extensão. Cores só por var(--token) de shared/styles/tokens.css. */
+
+/* ---------- Marca (quadrado arredondado com o ponto de gravação, como o ícone) ---------- */
+.pp-marca {
+  width: 32px; height: 32px; flex: none; border-radius: var(--r-md); background: var(--brand-600);
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.pp-marca-ponto { width: 12px; height: 12px; border-radius: 50%; background: var(--white); }
+
+/* ---------- Popup ---------- */
+.pp-corpo-pagina { background: var(--white); }
+.pp { width: 340px; display: flex; flex-direction: column; }
+.pp-topo { display: flex; align-items: center; gap: var(--s-3); padding: var(--s-3) var(--s-4); border-bottom: 1px solid var(--line); }
+.pp-titulo { display: flex; flex-direction: column; line-height: 1.3; }
+.pp-corpo { display: flex; flex-direction: column; gap: var(--s-3); padding: var(--s-4); }
+.pp-gravando { display: flex; align-items: center; gap: var(--s-2); min-width: 0; }
+.pp-ponto { width: 10px; height: 10px; border-radius: 50%; background: var(--danger-500); flex: none; animation: pulse 1.2s infinite; }
+.pp-nome { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.pp-passos { font-size: var(--fs-20); font-weight: 700; color: var(--ink-900); }
+.pp-acoes { display: flex; align-items: center; flex-wrap: wrap; gap: var(--s-2); }
+.pp-aviso { padding: var(--s-3); }
+.pp-final { display: flex; align-items: flex-start; gap: var(--s-2); }
+.pp-rodape {
+  display: flex; align-items: center; justify-content: space-between; gap: var(--s-2);
+  padding: var(--s-2) var(--s-4); border-top: 1px solid var(--line); background: var(--surface);
+}
+.pp-servidor { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.pp-link { flex: none; font-weight: 600; }
+
+/* ---------- Opções ---------- */
+.op { max-width: 640px; margin: 0 auto; padding: var(--s-8) var(--s-4); display: flex; flex-direction: column; gap: var(--s-5); }
+.op-topo { display: flex; align-items: center; gap: var(--s-3); }
+.op-acoes { display: flex; flex-wrap: wrap; gap: var(--s-2); justify-content: flex-end; }
+.op-status:empty { display: none; }
+.op-permissao { border: 1px solid var(--brand-100); }
+
+@media (prefers-reduced-motion: reduce) {
+  .pp-ponto { animation: none; }
+}

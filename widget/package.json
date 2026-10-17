@@ -5,7 +5,9 @@
   "type": "module",
   "exports": {
     "./chat": "./src/chat/index.ts",
-    "./chat.css": "./src/chat/chat.css"
+    "./chat.css": "./src/chat/chat.css",
+    "./chat/api.ts": "./src/chat/api.ts",
+    "./gravador/*": "./src/gravador/*"
   },
   "scripts": {
     "dev": "vite build --watch --mode development",
