@@ -2,6 +2,7 @@
 //   Horizonte (sistema de exemplo com o widget)  http://localhost:4000
 //   Console do copiloto                           http://localhost:5173
 //   API do copiloto e copiloto.js                 http://localhost:3000
+//   Extensão do navegador (gravar fluxos)         extension/dist, recompilada ao salvar
 import { ambiente, avisoChave, carregarEnv, garantirChromium, garantirDependencias, rodarJuntos, titulo } from './comum.mjs';
 
 carregarEnv();
@@ -13,6 +14,7 @@ avisoChave();
 console.log(`
   Sistema de exemplo (Horizonte), com o widget:  http://localhost:4000   (entre como Ana Ribeiro)
   Console do copiloto:                           http://localhost:5173   (rafael.lima@seusistema.com.br / copiloto123)
+  Extensão para gravar fluxos:                   extension/dist   (chrome://extensions › Carregar sem compactação)
   Para parar: Ctrl+C
 `);
 
@@ -22,4 +24,5 @@ await rodarJuntos([
   { name: 'copiloto', command: 'npm run dev -w server', prefixColor: 'magenta', env: { ...env, PORT: '3000' } },
   { name: 'widget', command: 'npm run dev -w widget', prefixColor: 'yellow', env },
   { name: 'console', command: 'npm run dev -w console', prefixColor: 'green', env },
+  { name: 'extensao', command: 'npm run dev -w extension', prefixColor: 'blue', env },
 ]);

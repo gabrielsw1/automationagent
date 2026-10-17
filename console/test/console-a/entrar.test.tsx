@@ -1,8 +1,10 @@
 // Entrar, primeiro acesso e convite.
+import { StrictMode } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import App from '../../src/App.tsx';
 import Convite from '../../src/paginas/entrar/Convite.tsx';
-import Entrar from '../../src/paginas/entrar/Entrar.tsx';
+import Entrar, { destinoDepoisDeEntrar } from '../../src/paginas/entrar/Entrar.tsx';
 import { instalarFetch, local, renderizar, status } from './ambiente.tsx';
 
 afterEach(() => {
@@ -38,6 +40,39 @@ describe('Entrar', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Entrar' }));
     await waitFor(() => expect(local()).toBe('/'));
     expect(pedidos.filter((p) => p.caminho === '/auth/entrar').at(-1)?.corpo).toEqual({ email: 'rafael.lima@seusistema.com.br', senha: 'copiloto123' });
+  });
+
+  it('volta para onde ia depois de entrar (ex.: "Gravar esta aba" da extensão)', async () => {
+    instalarFetch({ 'GET /auth/primeiro-acesso': { precisaCriarAdmin: false, demo: false }, 'POST /auth/entrar': EU });
+    const destino = '/aprender?gravar=http%3A%2F%2Flocalhost%3A4000%2Fchamados';
+    renderizar(<Entrar />, { caminho: `/entrar?voltar=${encodeURIComponent(destino)}`, rota: '/entrar' });
+    fireEvent.change(await screen.findByLabelText('E-mail'), { target: { value: 'rafael.lima@seusistema.com.br' } });
+    fireEvent.change(screen.getByLabelText('Senha'), { target: { value: 'copiloto123' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Entrar' }));
+    await waitFor(() => expect(local()).toBe(destino));
+    expect(destinoDepoisDeEntrar('https://outro.site/x')).toBe('/');
+    expect(destinoDepoisDeEntrar('//outro.site/x')).toBe('/');
+    expect(destinoDepoisDeEntrar('/entrar')).toBe('/');
+  });
+
+  it('sem sessão, leva à entrada uma vez só, guardando para onde ia', async () => {
+    const { pedidos } = instalarFetch({
+      'GET /resumo': status(401, { erro: 'sem_sessao', mensagem: 'Entre de novo.' }),
+      'GET /auth/primeiro-acesso': { precisaCriarAdmin: false, demo: false },
+    });
+    const destino = '/aprender?gravar=http%3A%2F%2Flocalhost%3A4000%2Fchamados';
+    window.history.replaceState(null, '', destino);
+    // Como no main.tsx: o StrictMode carrega o resumo duas vezes, e as duas respostas são 401.
+    render(
+      <StrictMode>
+        <App />
+      </StrictMode>,
+    );
+    await screen.findByRole('heading', { name: 'Entrar no console' });
+    await waitFor(() => expect(pedidos.filter((p) => p.caminho === '/resumo').length).toBe(2));
+    await new Promise((r) => setTimeout(r, 50));
+    expect(`${window.location.pathname}${window.location.search}`).toBe(`/entrar?voltar=${encodeURIComponent(destino)}`);
+    window.history.replaceState(null, '', '/');
   });
 
   it('sem modo demonstração não mostra a dica', async () => {

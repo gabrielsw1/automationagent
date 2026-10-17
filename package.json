@@ -9,14 +9,15 @@
     "server",
     "sample-system",
     "console",
-    "widget"
+    "widget",
+    "extension"
   ],
   "engines": {
     "node": ">=22.13"
   },
   "scripts": {
     "dev": "node scripts/dev.mjs",
-    "build": "npm run build -w widget && npm run build -w console",
+    "build": "npm run build -w widget && npm run build -w console && npm run build -w extension",
     "start": "npm run build && node scripts/start.mjs",
     "test": "npm run test --workspaces --if-present",
     "lint": "eslint . && npm run typecheck",

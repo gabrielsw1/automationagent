@@ -8,6 +8,7 @@ import type { Contexto } from '../../contexto.ts';
 import { aprenderFluxo, pendenciaDe } from '../../navegador/aprender.ts';
 import { Fluxos, publico, type LinhaFluxo } from '../../navegador/fluxos.ts';
 import { apagarPrint, apagarPrintsDoFluxo } from '../../navegador/prints.ts';
+import { minusculaInicial } from '../../navegador/texto.ts';
 import type { EventoNavegador, ResultadoNavegador } from '../../navegador/tipos.ts';
 import { ErroLlm, RecusaDoModelo } from '../../llm/tipos.ts';
 import { agoraIso } from '../../db/banco.ts';
@@ -97,22 +98,36 @@ export interface RespostaTesteFluxo {
   eventos: EventoNavegador[];
 }
 
-/** Endereço que o console abre numa aba nova: a tela inicial com o token do gravador. */
-export function urlDeGravacao(urlBase: string, urlInicial: string, token: string): string {
-  const base = urlBase.replace(/\/+$/, '');
-  const caminho = urlInicial.startsWith('/') ? urlInicial : `/${urlInicial}`;
-  return `${base}${caminho}${caminho.includes('?') ? '&' : '?'}copiloto_gravacao=${encodeURIComponent(token)}`;
+/**
+ * Endereço que o console abre numa aba nova: a tela inicial com o token do gravador e o endereço
+ * do servidor do copiloto (a extensão do navegador lê o `copiloto_api` para saber com quem falar).
+ * `urlInicial` é um caminho do sistema ou, para outro site, o endereço completo.
+ */
+export function urlDeGravacao(urlBase: string, urlInicial: string, token: string, urlApi: string): string {
+  const inicio = /^https?:\/\//i.test(urlInicial)
+    ? urlInicial
+    : `${urlBase.replace(/\/+$/, '')}${urlInicial.startsWith('/') ? urlInicial : `/${urlInicial}`}`;
+  // Os parâmetros vão antes do #, para valerem também em sistemas com rotas no hash.
+  const corte = inicio.indexOf('#');
+  const semHash = corte < 0 ? inicio : inicio.slice(0, corte);
+  const hash = corte < 0 ? '' : inicio.slice(corte);
+  const parametros = `copiloto_gravacao=${encodeURIComponent(token)}&copiloto_api=${encodeURIComponent(urlApi.replace(/\/+$/, ''))}`;
+  return `${semHash}${semHash.includes('?') ? '&' : '?'}${parametros}${hash}`;
 }
 
-/** Aceita "/caminho" ou um endereço completo do próprio sistema; devolve o caminho. */
+/**
+ * Aceita "/caminho" ou um endereço completo. Do próprio sistema, devolve o caminho; de outro site
+ * (a extensão grava em qualquer site), devolve o endereço completo, sempre sem os parâmetros do gravador.
+ */
 function caminhoInicial(urlBase: string, entrada: string, nomeSistema: string): string {
   const t = entrada.trim();
   if (t.startsWith('/')) return t;
   try {
     const u = new URL(t);
-    const base = new URL(urlBase);
-    if (u.host !== base.host) throw new Error('outro host');
+    if (u.protocol !== 'http:' && u.protocol !== 'https:') throw new Error('protocolo');
     u.searchParams.delete('copiloto_gravacao');
+    u.searchParams.delete('copiloto_api');
+    if (u.host !== new URL(urlBase).host) return u.toString();
     const busca = u.searchParams.toString();
     return u.pathname + (busca ? `?${busca}` : '');
   } catch {
@@ -174,7 +189,7 @@ const rotas: FastifyPluginAsync = async (app) => {
   const respostaGravacao = (f: LinhaFluxo): RespostaGravacao => ({
     fluxo: publico(f),
     token: f.tokenGravacao!,
-    urlGravacao: urlDeGravacao(adaptador.urlBase, f.urlInicial ?? '/', f.tokenGravacao!),
+    urlGravacao: urlDeGravacao(adaptador.urlBase, f.urlInicial ?? '/', f.tokenGravacao!, ctx.config.urlPublica),
   });
   const tarefaExiste = (id: string | null | undefined) => {
     if (id && !catalogo.obter(id)) throw pedidoInvalido('A tarefa escolhida não existe mais. Escolha outra.');
@@ -483,8 +498,26 @@ function validarValores(campos: Campo[], passos: PassoFluxo[], entrada: Record<s
   return valores;
 }
 
+/** "a, b e c". */
+function emLista(itens: string[]): string {
+  return itens.length > 1 ? `${itens.slice(0, -1).join(', ')} e ${itens[itens.length - 1]}` : (itens[0] ?? '');
+}
+
+/**
+ * Pedidos de exemplo a partir do nome do fluxo: "Abrir chamado" → "abrir chamado", "abre chamado" e
+ * "pode abrir chamado para mim?". Ajudam o copiloto a reconhecer o pedido escrito de outros jeitos.
+ */
+export function exemplosDoNome(nome: string): string[] {
+  const base = minusculaInicial(nome.trim().replace(/\s+/g, ' '));
+  if (!base) return [];
+  // Começa por verbo ("abrir", "emitir", "cadastrar"): também como a pessoa fala ("abre", "emite", "cadastra").
+  const m = base.match(/^(\p{L}{3,}?)(ar|er|ir)(\s.*)?$/u);
+  if (!m) return [base];
+  return [base, `${m[1]}${m[2] === 'ar' ? 'a' : 'e'}${m[3] ?? ''}`, `pode ${base} para mim?`];
+}
+
 /** Ficha inicial de uma tarefa criada a partir do fluxo (caminho navegador). */
-function definicaoPadrao(f: LinhaFluxo, nomeSistema: string): TarefaDefinicao {
+export function definicaoPadrao(f: Pick<LinhaFluxo, 'id' | 'nome' | 'passos' | 'camposSugeridos'>, nomeSistema: string): TarefaDefinicao {
   const campos = f.camposSugeridos.length
     ? f.camposSugeridos
     : f.passos
@@ -492,11 +525,12 @@ function definicaoPadrao(f: LinhaFluxo, nomeSistema: string): TarefaDefinicao {
         .map((p) => ({ chave: (p.valor as { campo: string }).campo, rotulo: p.rotuloElemento ?? p.titulo, tipo: 'texto' as const, obrigatorio: true, pergunta: `Qual é ${p.rotuloElemento ?? 'o valor'}?` }));
   const leituras = f.passos.filter((p) => p.tipo === 'leitura' && p.gera).map((p) => p.gera!);
   const segundos = Math.max(10, f.passos.length * 4);
+  const pede = campos.length ? ` Precisa de: ${emLista(campos.map((c) => minusculaInicial(c.rotulo)))}.` : '';
   return {
     nome: f.nome,
-    descricao: `Faz “${f.nome}” na tela do ${nomeSistema}, repetindo o fluxo gravado.`,
+    descricao: `Faz “${f.nome}” na tela do ${nomeSistema}, repetindo o fluxo gravado.${pede}`,
     quandoUsar: `Use quando a pessoa pedir para ${f.nome.toLowerCase()}.`,
-    exemplos: [],
+    exemplos: exemplosDoNome(f.nome),
     campos,
     caminho: 'navegador',
     fluxoId: f.id,
@@ -504,7 +538,7 @@ function definicaoPadrao(f: LinhaFluxo, nomeSistema: string): TarefaDefinicao {
     confirmacao: true,
     desfazerMinutos: 0,
     perfisPermitidos: [],
-    tituloRecibo: leituras.length ? `${f.nome}: {${leituras[0]}}` : `${f.nome} concluída`,
+    tituloRecibo: leituras.length ? `${f.nome}: {${leituras[0]}}` : `${f.nome}: feito`,
     tituloConfirmacao: `Confirme: ${f.nome}`,
     proximosPassos: [],
     contextos: [],

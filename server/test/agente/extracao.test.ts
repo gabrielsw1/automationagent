@@ -1,6 +1,6 @@
 // Nome da empresa no modo simulado: as frases do README têm que chegar ao cartão sem perguntar o nome.
 import { describe, expect, it } from 'vitest';
-import { nomeMencionado } from '../../src/agente/extracao.ts';
+import { extrairCampos, nomeMencionado, respostaDireta } from '../../src/agente/extracao.ts';
 
 describe('nomeMencionado', () => {
   it('acha o nome nas frases de exemplo do README', () => {
@@ -16,5 +16,27 @@ describe('nomeMencionado', () => {
 
   it('não inventa nome quando não há', () => {
     expect(nomeMencionado('quero cadastrar um cliente novo')).toBeNull();
+  });
+});
+
+describe('pedido de um fluxo gravado (Abrir chamado)', () => {
+  const campos = [
+    { chave: 'assunto', rotulo: 'Assunto', tipo: 'texto' as const, obrigatorio: true, pergunta: 'Qual é o assunto?' },
+    { chave: 'prioridade', rotulo: 'Prioridade', tipo: 'lista' as const, obrigatorio: true, pergunta: 'Qual é a prioridade?', opcoes: ['Baixa', 'Média', 'Alta', 'Urgente'] },
+    { chave: 'cliente', rotulo: 'Cliente', tipo: 'texto' as const, obrigatorio: true, pergunta: 'Qual é o cliente?' },
+    { chave: 'descricao', rotulo: 'Descrição', tipo: 'texto' as const, obrigatorio: true, pergunta: 'Qual é a descrição?' },
+  ];
+
+  it('tira assunto, prioridade e cliente da frase do README', () => {
+    expect(extrairCampos(campos, 'Abre um chamado para a Padaria Estrela sobre impressora sem tinta, prioridade alta')).toEqual({
+      assunto: 'impressora sem tinta',
+      prioridade: 'Alta',
+      cliente: 'Padaria Estrela',
+    });
+  });
+
+  it('resposta à pergunta: frase longa fica inteira; resposta curta perde o "é"', () => {
+    expect(respostaDireta(campos[3], 'A impressora do caixa parou de imprimir os cupons.')).toBe('A impressora do caixa parou de imprimir os cupons');
+    expect(respostaDireta(campos[0], 'é troca de toner')).toBe('troca de toner');
   });
 });

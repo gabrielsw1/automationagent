@@ -1,6 +1,7 @@
 // Modo gravação: ativado por ?copiloto_gravacao=<token> (o console abre a tela do sistema assim).
 // O token fica no sessionStorage e vale entre páginas da mesma aba. Nesse modo o chat não aparece.
-import type { EventoGravado } from '@copiloto/shared';
+// Com a extensão do copiloto instalada (marca no <html>), quem grava é ela e o widget fica de fora.
+import { MARCA_EXTENSAO, type EventoGravado } from '@copiloto/shared';
 import { armazenamento, mensagemDeErro } from '../chat/util.ts';
 import { BarraGravacao } from './barra.ts';
 import { Captura } from './captura.ts';
@@ -21,6 +22,7 @@ export function detectarTokenGravacao(): string | null {
     if (token) {
       guarda.gravar(CHAVE_TOKEN, token);
       url.searchParams.delete(CHAVE_TOKEN);
+      url.searchParams.delete('copiloto_api');
       history.replaceState(history.state, '', url.toString());
     }
   } catch {
@@ -32,6 +34,24 @@ export function detectarTokenGravacao(): string | null {
 export function limparGravacao(): void {
   const guarda = armazenamento('sessao');
   for (const k of [CHAVE_TOKEN, CHAVE_PENDENTES, CHAVE_ULTIMA_URL, CHAVE_PASSOS]) guarda.remover(k);
+}
+
+/** A extensão do copiloto marca o <html> antes de qualquer script da página. */
+export function extensaoPresente(): boolean {
+  return document.documentElement.hasAttribute(MARCA_EXTENSAO);
+}
+
+/**
+ * Token que este widget deve gravar. Com a extensão na página, ela já grava a aba: o widget
+ * descarta o token e segue como se não houvesse gravação (nada de gravar duas vezes).
+ */
+export function tokenParaGravar(): string | null {
+  const token = detectarTokenGravacao();
+  if (token && extensaoPresente()) {
+    limparGravacao();
+    return null;
+  }
+  return token;
 }
 
 export interface OpcoesGravador {

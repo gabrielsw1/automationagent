@@ -12,6 +12,12 @@ export interface AcoesBarra {
   fechar: () => void;
 }
 
+/** Botão opcional ao lado do aviso de erro (a extensão usa para "Abrir as opções"). */
+export interface AcaoErro {
+  rotulo: string;
+  aoClicar: () => void;
+}
+
 const SVG = 'http://www.w3.org/2000/svg';
 
 function icone(caminhos: string[]): SVGSVGElement {
@@ -47,6 +53,7 @@ export class BarraGravacao {
   private passos = 0;
   private nome = '';
   private erro: string | null = null;
+  private acaoErro: AcaoErro | null = null;
   private readonly acoes: AcoesBarra;
 
   constructor(raiz: ShadowRoot | HTMLElement, acoes: AcoesBarra) {
@@ -69,8 +76,9 @@ export class BarraGravacao {
     this.desenhar();
   }
 
-  mostrarErro(texto: string | null): void {
+  mostrarErro(texto: string | null, acao: AcaoErro | null = null): void {
     this.erro = texto;
+    this.acaoErro = texto ? acao : null;
     this.desenhar();
   }
 
@@ -97,6 +105,7 @@ export class BarraGravacao {
       await fn();
     } catch (e) {
       this.estado = { tipo: 'gravando' };
+      this.acaoErro = null;
       this.erro =
         e && typeof e === 'object' && 'message' in e && typeof e.message === 'string' && e.message
           ? e.message
@@ -116,7 +125,8 @@ export class BarraGravacao {
       linha.appendChild(el('span', 'cp-grav-ponto'));
       const titulo = el('span', 'cp-grav-titulo');
       titulo.appendChild(el('span', 'strong', 'Gravando'));
-      if (this.nome) titulo.appendChild(el('span', 'cp-grav-nome', ` · ${this.nome}`));
+      // Espaço inquebrável: o espaço comum some no começo de um item flex ("Gravando· Abrir chamado").
+      if (this.nome) titulo.appendChild(el('span', 'cp-grav-nome', `\u00a0· ${this.nome}`));
       linha.appendChild(titulo);
       const passos = el('span', 'cp-grav-passos', `· ${this.passos} ${this.passos === 1 ? 'passo' : 'passos'}`);
       passos.setAttribute('aria-live', 'polite');
@@ -156,6 +166,12 @@ export class BarraGravacao {
       const e = el('p', 'cp-grav-erro', this.erro);
       e.setAttribute('role', 'alert');
       b.appendChild(e);
+      const acao = this.acaoErro;
+      if (acao && s.tipo !== 'final') {
+        const linhaAcao = el('div', 'cp-grav-linha');
+        linhaAcao.appendChild(botao(acao.rotulo, 'btn btn-secondary btn-sm', () => acao.aoClicar()));
+        b.appendChild(linhaAcao);
+      }
     }
   }
 }

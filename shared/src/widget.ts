@@ -274,3 +274,9 @@ export interface GravacaoEstado {
   ativa: boolean;
   passos: number;
 }
+
+/**
+ * Atributo que a extensão do copiloto põe no <html> de toda página, logo no início (valor: versão da
+ * extensão). Com ele, quem grava é a extensão: o gravador do widget não liga, e o console sabe que ela está instalada.
+ */
+export const MARCA_EXTENSAO = 'data-copiloto-extensao';

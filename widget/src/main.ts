@@ -2,7 +2,8 @@
 //   <script src="{COPILOTO_URL}/copiloto.js" data-chave="pk_..." data-usuario="{id}"
 //           data-assinatura="{hmac}" [data-servidor="https://..."] async></script>
 // Monta o widget num Shadow DOM (o CSS da página não vaza para dentro nem para fora).
-// Com ?copiloto_gravacao=<token> na URL (ou o token no sessionStorage), liga o gravador de fluxos no lugar do chat.
+// Com ?copiloto_gravacao=<token> na URL (ou o token no sessionStorage), liga o gravador de fluxos no lugar do chat,
+// a não ser que a extensão do copiloto esteja na página: aí quem grava é ela.
 import { createElement } from 'react';
 import { createRoot } from 'react-dom/client';
 import tokensCss from '@copiloto/shared/styles/tokens.css?inline';
@@ -13,7 +14,7 @@ import gravadorCss from './gravador/gravador.css?inline';
 import { ClienteApi, ErroCliente } from './chat/api.ts';
 import { WidgetEmbutido } from './embutido/WidgetEmbutido.tsx';
 import { lerContextoPagina } from './embutido/pagina.ts';
-import { detectarTokenGravacao, iniciarGravador } from './gravador/index.ts';
+import { iniciarGravador, tokenParaGravar } from './gravador/index.ts';
 
 const FONTES =
   'https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap';
@@ -119,7 +120,7 @@ function corPadrao(hospedeiro: HTMLElement): string | undefined {
 async function iniciar(script: HTMLScriptElement | null): Promise<void> {
   const dados = lerDados(script);
 
-  const tokenGravacao = detectarTokenGravacao();
+  const tokenGravacao = tokenParaGravar();
   if (tokenGravacao) {
     carregarFontes();
     const { hospedeiro, raiz } = criarHospedeiro([tokensCss, baseCss, gravadorCss]);

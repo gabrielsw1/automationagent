@@ -328,11 +328,10 @@ export function extrairCampos(
 export function respostaDireta(campo: Campo, texto: string, agora = new Date()): string {
   const extraido = extrairCampos([campo], texto, { agora })[campo.chave];
   if (extraido) return extraido;
-  return texto
-    .replace(/^\[[^\]]*\]\s*/gm, '')
-    .replace(/^(é|e|eh|seria|o|a|:)\s+/i, '')
-    .replace(/[.!]+$/, '')
-    .trim();
+  const limpo = texto.replace(/^\[[^\]]*\]\s*/gm, '').trim();
+  // "é a ACME" vira "a ACME"; uma frase inteira (a descrição de um chamado) fica como veio.
+  const curta = limpo.split(/\s+/).length <= 4;
+  return (curta ? limpo.replace(/^(é|e|eh|seria|o|a|:)\s+/i, '') : limpo).replace(/[.!]+$/, '').trim();
 }
 
 const PALAVRAS_VAZIAS = new Set([

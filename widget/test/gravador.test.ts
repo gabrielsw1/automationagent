@@ -4,7 +4,8 @@ import type { EventoGravado } from '@copiloto/shared';
 import { Captura } from '../src/gravador/captura.ts';
 import { caminhoCss, descreverElemento } from '../src/gravador/descrever.ts';
 import { EnvioLotes } from '../src/gravador/envio.ts';
-import { detectarTokenGravacao, iniciarGravador } from '../src/gravador/index.ts';
+import { BarraGravacao } from '../src/gravador/barra.ts';
+import { detectarTokenGravacao, iniciarGravador, tokenParaGravar } from '../src/gravador/index.ts';
 import { esperarPromessas, servidorFalso } from './apoio.ts';
 
 const CNPJ = '12.345.678/0001-95';
@@ -290,5 +291,75 @@ describe('modo gravação completo', () => {
     await vi.waitFor(() => expect(raiz.textContent).toContain('Gravação descartada'));
     expect(srv.de('POST', '/api/gravacao/tok123/cancelar')).toHaveLength(1);
     expect(sessionStorage.getItem('copiloto_gravacao')).toBeNull();
+  });
+});
+
+describe('com a extensão do copiloto na página', () => {
+  beforeEach(() => {
+    montarFormulario();
+    history.replaceState({}, '', '/clientes/novo?copiloto_gravacao=tok123&copiloto_api=http%3A%2F%2Flocalhost%3A3000');
+  });
+
+  afterEach(() => {
+    document.documentElement.removeAttribute('data-copiloto-extensao');
+    document.querySelectorAll('copiloto-widget').forEach((n) => n.remove());
+    delete window.__copilotoCarregado;
+    document.body.innerHTML = '';
+    history.replaceState({}, '', '/');
+  });
+
+  it('sem a extensão, o widget grava como sempre (e tira o copiloto_api da barra de endereço)', () => {
+    expect(tokenParaGravar()).toBe('tok123');
+    expect(location.search).toBe('');
+    expect(sessionStorage.getItem('copiloto_gravacao')).toBe('tok123');
+  });
+
+  it('com a marca da extensão no <html>, o widget não grava e esquece o token', () => {
+    document.documentElement.setAttribute('data-copiloto-extensao', '0.1.0');
+    sessionStorage.setItem('copiloto_gravacao_pendentes', '[]');
+    expect(tokenParaGravar()).toBeNull();
+    expect(location.search).toBe('');
+    expect(sessionStorage.getItem('copiloto_gravacao')).toBeNull();
+    expect(sessionStorage.getItem('copiloto_gravacao_pendentes')).toBeNull();
+  });
+
+  it('copiloto.js: com a extensão, não monta a barra nem envia nada; sem ela, monta e envia', async () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const srv = servidorFalso({
+      'GET /api/gravacao/tok123': () => ({ fluxoId: 'f1', nome: 'Fluxo', ativa: true, passos: 0 }),
+      'POST /api/gravacao/tok123/eventos': () => ({ passos: 1 }),
+    });
+    document.documentElement.setAttribute('data-copiloto-extensao', '0.1.0');
+    vi.resetModules();
+    await import('../src/main.ts');
+    await esperarPromessas();
+    preencher(document.getElementById('cnpj') as HTMLInputElement, CNPJ);
+    await new Promise((r) => setTimeout(r, 30));
+    expect(document.querySelector('copiloto-widget')).toBeNull();
+    expect(srv.chamadas.filter((c) => c.caminho.startsWith('/api/gravacao'))).toHaveLength(0);
+
+    // Mesma página sem a extensão: o gravador do widget liga.
+    document.documentElement.removeAttribute('data-copiloto-extensao');
+    delete window.__copilotoCarregado;
+    history.replaceState({}, '', '/clientes/novo?copiloto_gravacao=tok123');
+    vi.resetModules();
+    await import('../src/main.ts');
+    await vi.waitFor(() => expect(srv.de('GET', '/api/gravacao/tok123')).toHaveLength(1));
+    expect(document.querySelector('copiloto-widget')).not.toBeNull();
+  });
+});
+
+describe('barra de gravação', () => {
+  it('aviso de erro com botão de ação (usado pela extensão)', () => {
+    const raiz = document.createElement('div');
+    const barra = new BarraGravacao(raiz, { concluir: async () => {}, cancelar: async () => {}, fechar: () => {} });
+    const aoClicar = vi.fn();
+    barra.mostrarErro('O servidor do copiloto ainda não foi liberado.', { rotulo: 'Abrir as opções', aoClicar });
+    expect(raiz.querySelector('[role="alert"]')?.textContent).toBe('O servidor do copiloto ainda não foi liberado.');
+    const botoes = Array.from(raiz.querySelectorAll('button'));
+    botoes.find((b) => b.textContent === 'Abrir as opções')!.click();
+    expect(aoClicar).toHaveBeenCalledOnce();
+    barra.mostrarErro(null);
+    expect(raiz.textContent).not.toContain('Abrir as opções');
   });
 });

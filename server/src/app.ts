@@ -78,10 +78,12 @@ export async function criarApp(ctx: Contexto, opcoes: OpcoesApp = {}): Promise<F
     return reply.status(500).send(corpo);
   });
 
+  // A extensão do navegador lê daqui o endereço do console ("Gravar esta aba").
   app.get('/api/saude', async () => ({
     ok: true,
     modoSimulado: ctx.llm.simulado,
     sistema: ctx.adaptador.nome,
+    urlConsole: ctx.config.urlConsole,
   }));
 
   await app.register(rotasWidget, { prefix: '/api/widget' });

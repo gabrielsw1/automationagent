@@ -153,11 +153,12 @@ export function encurtar(s: string, max: number): string {
   return t.length > max ? t.slice(0, max - 1).trimEnd() + '…' : t;
 }
 
-/** Caminho relativo (com busca) de uma URL, sem o parâmetro do gravador. */
+/** Caminho relativo (com busca) de uma URL, sem os parâmetros do gravador. */
 export function caminhoDe(url: string): string {
   try {
     const u = new URL(url, 'http://x');
     u.searchParams.delete('copiloto_gravacao');
+    u.searchParams.delete('copiloto_api');
     const busca = u.searchParams.toString();
     return u.pathname + (busca ? `?${busca}` : '');
   } catch {

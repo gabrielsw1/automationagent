@@ -21,6 +21,7 @@ export function urlSemToken(href: string): string {
   try {
     const u = new URL(href, location.href);
     u.searchParams.delete('copiloto_gravacao');
+    u.searchParams.delete('copiloto_api');
     return u.toString();
   } catch {
     return href;

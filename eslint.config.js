@@ -30,6 +30,11 @@ export default tseslint.config(
     },
   },
   {
+    // Extensão do navegador: páginas, content scripts e service worker (os tipos do chrome.* vêm de src/chrome.d.ts).
+    files: ['extension/**/*.ts'],
+    languageOptions: { globals: { ...globals.browser } },
+  },
+  {
     files: ['scripts/**/*.mjs'],
     languageOptions: { globals: { ...globals.node } },
   },

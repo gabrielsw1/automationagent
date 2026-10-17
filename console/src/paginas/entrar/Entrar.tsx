@@ -1,6 +1,6 @@
 // Entrar no console. Quando ninguém da equipe tem acesso ainda, a mesma tela cria o primeiro admin.
 import { useEffect, useState, type FormEvent } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import type { Eu } from '@copiloto/shared';
 import { api, ErroApiCliente } from '../../api/cliente.ts';
 import { Botao } from '../../componentes/Botao.tsx';
@@ -16,8 +16,16 @@ interface PrimeiroAcesso {
 
 const emailValido = (s: string) => /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(s.trim());
 
+/** ?voltar=<caminho do console>: só caminhos daqui, nunca outro site. */
+export function destinoDepoisDeEntrar(voltar: string | null): string {
+  const v = voltar ?? '';
+  if (!v.startsWith('/') || v.startsWith('//') || v.startsWith('/\\') || v.startsWith('/entrar')) return '/';
+  return v;
+}
+
 function FormEntrar({ demo }: { demo: boolean }) {
   const navegar = useNavigate();
+  const [busca] = useSearchParams();
   const [email, setEmail] = useState('');
   const [senha, setSenha] = useState('');
   const [verSenha, setVerSenha] = useState(false);
@@ -38,7 +46,7 @@ function FormEntrar({ demo }: { demo: boolean }) {
     setErro(null);
     try {
       await api.post<Eu>('/auth/entrar', { email: email.trim(), senha });
-      navegar('/', { replace: true });
+      navegar(destinoDepoisDeEntrar(busca.get('voltar')), { replace: true });
     } catch (ex) {
       setErro((ex as ErroApiCliente).message);
     } finally {
