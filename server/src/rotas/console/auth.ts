@@ -6,6 +6,7 @@ import type { FastifyPluginAsync, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import {
   cnpjValido,
+  fmt,
   somenteDigitos,
   type CadastroEmpresaPedido,
   type ConfirmacaoEmail,
@@ -18,7 +19,7 @@ import {
   type PerfilEquipe,
   type PrimeiroAcesso,
 } from '@copiloto/shared';
-import { COOKIE_SESSAO, PREFIXO_SUPORTE, definirCookie, euDe, iniciais, membro, membroNaEmpresa, perfilNaEmpresa } from '../../auth/console.ts';
+import { COOKIE_SESSAO, PREFIXO_SUPORTE, definirCookie, euDe, membro, membroNaEmpresa, perfilNaEmpresa } from '../../auth/console.ts';
 import { ctxDe, type Contexto } from '../../contexto.ts';
 import { agoraIso } from '../../db/banco.ts';
 import { emailCodigo, emailSenhaNova } from '../../email/modelos.ts';
@@ -40,7 +41,7 @@ const Email = z
   .trim()
   .toLowerCase()
   .pipe(z.email('Digite um e-mail completo, por exemplo nome@empresa.com.br'));
-const Entrar = z.object({ email: z.string().trim().toLowerCase(), senha: z.string() });
+const Entrar = z.object({ email: z.string().trim().toLowerCase(), senha: z.string(), convite: z.string().min(1).optional() });
 const Nome = z.string().trim().min(2, 'Diga seu nome.').max(120, 'O nome pode ter até 120 caracteres.');
 const AceitarConvite = z.object({ nome: z.string().trim().max(120).optional(), senha: z.string() });
 const TrocarEmpresa = z.object({ empresaId: z.string().min(1) });
@@ -144,13 +145,14 @@ function convitePorToken(plataforma: Plataforma, token: string) {
   return { ctx, convite: l, convidadoPor, expirado };
 }
 
-function conviteVencido(convidadoPor: { nome: string } | null): ErroHttp {
+function conviteVencido(convidadoPor: { nome: string } | null, email: string): ErroHttp {
   return new ErroHttp(
     410,
     'convite_expirado',
     convidadoPor
       ? `Este convite expirou. Peça ao ${convidadoPor.nome} para reenviar em Equipe e limites.`
       : 'Este convite expirou. Peça a um Admin da empresa para reenviar em Equipe e limites.',
+    { email },
   );
 }
 
@@ -173,7 +175,7 @@ const rotas: FastifyPluginAsync = async (app) => {
     const lista = plataforma.empresasDe(conta.email).flatMap((e) => {
       const m = perfilNaEmpresa(plataforma.contexto(e.id), conta.email);
       if (!m) return [];
-      return [{ id: e.id, nome: e.nome, demo: e.demo, perfil: m.perfil, iniciais: iniciais(e.nome), ultimoAcesso: plataforma.ultimoAcesso(conta.email, e.id) }];
+      return [{ id: e.id, nome: e.nome, demo: e.demo, perfil: m.perfil, iniciais: fmt.iniciaisEmpresa(e.nome), ultimoAcesso: plataforma.ultimoAcesso(conta.email, e.id) }];
     });
     return lista.sort(
       (a, b) =>
@@ -223,9 +225,18 @@ const rotas: FastifyPluginAsync = async (app) => {
 
   app.get('/eu', async (request): Promise<Eu> => euDe(ctxDe(request), membro(request)));
 
-  /** Entrar (A1). 5 senhas erradas seguidas bloqueiam a entrada com senha por 15 minutos. */
+  /**
+   * Entrar (A1). 5 senhas erradas seguidas bloqueiam a entrada com senha por 15 minutos. Com
+   * `convite` (A6, e-mail que já tem conta), confere o e-mail do convite antes da senha, aceita o
+   * convite e abre a empresa dele, mesmo para quem ainda não está em nenhuma empresa.
+   */
   app.post('/entrar', async (request, reply): Promise<Entrada> => {
-    const { email, senha } = validar(Entrar, request.body);
+    const { email, senha, convite: token } = validar(Entrar, request.body);
+    const convite = token ? convitePorToken(plataforma, token) : undefined;
+    if (convite?.expirado) throw conviteVencido(convite.convidadoPor, convite.convite.email);
+    if (convite && convite.convite.email.toLowerCase() !== email) {
+      throw new ErroHttp(403, 'outro_email', `Este convite é para ${convite.convite.email}. Entre com esse e-mail para aceitar.`);
+    }
     const r = plataforma.entrarComSenha(email, senha);
     if (!r.conta) {
       if (r.bloqueadaAte) {
@@ -233,7 +244,10 @@ const rotas: FastifyPluginAsync = async (app) => {
       }
       throw new ErroHttp(401, 'credenciais', 'E-mail ou senha incorretos. Confira e tente de novo.');
     }
-    return entradaDe(reply, r.conta);
+    if (!convite) return entradaDe(reply, r.conta);
+    aceitar(convite.ctx, convite.convite.id, convite.convite.email, r.conta.nome ?? convite.convite.email);
+    const eu = abrirSessao(reply, r.conta, convite.ctx);
+    return { eu, empresas: empresasDaConta(plataforma.contaPorId(r.conta.id)!), avisos: plataforma.lerAvisos(r.conta.email) };
   });
 
   /** "Em qual empresa você quer entrar?" (A2), com os avisos guardados. */
@@ -441,7 +455,7 @@ const rotas: FastifyPluginAsync = async (app) => {
 
   app.get<{ Params: { token: string } }>('/convite/:token', async (request): Promise<ConviteAberto> => {
     const { ctx, convite, convidadoPor, expirado } = convitePorToken(plataforma, request.params.token);
-    if (expirado) throw conviteVencido(convidadoPor);
+    if (expirado) throw conviteVencido(convidadoPor, convite.email);
     return {
       email: convite.email,
       perfil: convite.perfil,
@@ -462,7 +476,7 @@ const rotas: FastifyPluginAsync = async (app) => {
   app.post<{ Params: { token: string } }>('/convite/:token', async (request, reply): Promise<Eu> => {
     const d = validar(AceitarConvite, request.body);
     const { ctx, convite, convidadoPor, expirado } = convitePorToken(plataforma, request.params.token);
-    if (expirado) throw conviteVencido(convidadoPor);
+    if (expirado) throw conviteVencido(convidadoPor, convite.email);
     if (plataforma.conta(convite.email)) {
       throw new ErroHttp(409, 'conta_existente', 'Você já tem conta com este e-mail. Entre para aceitar o convite.');
     }
@@ -478,7 +492,7 @@ const rotas: FastifyPluginAsync = async (app) => {
   app.post<{ Params: { token: string } }>('/convite/:token/aceitar', async (request): Promise<Eu> => {
     const sessao = sessaoDe(request);
     const { ctx, convite, convidadoPor, expirado } = convitePorToken(plataforma, request.params.token);
-    if (expirado) throw conviteVencido(convidadoPor);
+    if (expirado) throw conviteVencido(convidadoPor, convite.email);
     if (convite.email.toLowerCase() !== sessao.conta.email) {
       throw new ErroHttp(403, 'outro_email', `Este convite é para ${convite.email}. Entre com esse e-mail para aceitar.`);
     }

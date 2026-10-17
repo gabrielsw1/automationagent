@@ -10,8 +10,13 @@ import { ProvedorToast } from './componentes/Toast.tsx';
 import Layout from './layout/Layout.tsx';
 
 const Entrar = lazy(() => import('./paginas/entrar/Entrar.tsx'));
+const EscolherEmpresa = lazy(() => import('./paginas/entrar/EscolherEmpresa.tsx'));
+const EsqueciSenha = lazy(() => import('./paginas/entrar/EsqueciSenha.tsx'));
+const SenhaNova = lazy(() => import('./paginas/entrar/SenhaNova.tsx'));
 const Convite = lazy(() => import('./paginas/entrar/Convite.tsx'));
 const Cadastro = lazy(() => import('./paginas/cadastro/Cadastro.tsx'));
+const Site = lazy(() => import('./paginas/site/Site.tsx'));
+const PaginaLegal = lazy(() => import('./paginas/site/PaginaLegal.tsx'));
 const Guia = lazy(() => import('./paginas/guia/Guia.tsx'));
 const Painel = lazy(() => import('./paginas/painel/Painel.tsx'));
 const ListaTarefas = lazy(() => import('./paginas/tarefas/ListaTarefas.tsx'));
@@ -29,13 +34,19 @@ function AreaLogada() {
   const navegar = useNavigate();
   const [resumo, setResumo] = useState<ResumoConsole | null>(null);
   const [erro, setErro] = useState<ErroApiCliente | null>(null);
+  // Sem sessão no endereço principal: quem chega vê o site do produto (S1), não a tela de entrada.
+  const [visitante, setVisitante] = useState(false);
 
   // Depois de entrar, volta para onde a pessoa ia (ex.: /aprender?gravar=..., aberto pela extensão).
   const irParaEntrar = useCallback(() => {
     // Vários 401 chegam juntos (e o StrictMode carrega duas vezes): só o primeiro leva à entrada.
     if (window.location.pathname === '/entrar') return;
+    if (window.location.pathname === '/') {
+      setVisitante(true);
+      return;
+    }
     const aqui = `${window.location.pathname}${window.location.search}`;
-    navegar(aqui === '/' ? '/entrar' : `/entrar?voltar=${encodeURIComponent(aqui)}`, { replace: true });
+    navegar(`/entrar?voltar=${encodeURIComponent(aqui)}`, { replace: true });
   }, [navegar]);
 
   const carregar = useCallback(async () => {
@@ -45,9 +56,11 @@ function AreaLogada() {
     } catch (e) {
       const ex = e as ErroApiCliente;
       if (ex.status === 401) irParaEntrar();
+      // Conta nova que ainda não confirmou o e-mail: o cadastro mostra o código (A5) no lugar do console.
+      else if (ex.erro === 'email_nao_confirmado') navegar('/criar-conta', { replace: true });
       else setErro(ex);
     }
-  }, [irParaEntrar]);
+  }, [irParaEntrar, navegar]);
 
   useEffect(() => {
     definirAoSessaoExpirar(irParaEntrar);
@@ -57,6 +70,7 @@ function AreaLogada() {
     void carregar();
   }, [carregar, irParaEntrar]);
 
+  if (visitante) return <Site />;
   if (erro && !resumo) {
     return (
       <div className="ca-tela-cheia">
@@ -105,8 +119,15 @@ export default function App() {
         <Suspense fallback={<Carregando />}>
           <Routes>
             <Route path="/entrar" element={<Entrar />} />
+            <Route path="/entrar/empresa" element={<EscolherEmpresa />} />
+            <Route path="/senha" element={<EsqueciSenha />} />
+            <Route path="/senha-nova/:token" element={<SenhaNova />} />
             <Route path="/convite/:token" element={<Convite />} />
             <Route path="/criar-conta/:etapa?" element={<Cadastro />} />
+            <Route path="/site" element={<Site />} />
+            <Route path="/termos" element={<PaginaLegal documento="termos" />} />
+            <Route path="/privacidade" element={<PaginaLegal documento="privacidade" />} />
+            <Route path="/contrato-lgpd" element={<PaginaLegal documento="contrato-lgpd" />} />
             <Route path="/*" element={<AreaLogada />} />
           </Routes>
         </Suspense>

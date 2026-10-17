@@ -1,17 +1,46 @@
-/* Telas de entrada (entrar, convite). Cores só por var(--token). */
-.ce-tela { min-height: 100vh; display: grid; place-items: center; padding: var(--s-8) var(--s-4); background: var(--surface); }
-.ce-coluna { width: 100%; max-width: 440px; display: flex; flex-direction: column; gap: var(--s-4); }
-.ce-marca { justify-content: center; padding: 0 0 var(--s-2); font-size: var(--fs-18); }
-.ce-marca .logo-ph { width: 32px; height: 32px; }
-.ce-cartao { padding: var(--s-8); }
-.ce-rodape { text-align: center; padding: 0 var(--s-4); }
+/* Telas de acesso (A1–A6: entrar, empresa, senha, código e convite). Cores só por var(--token). */
+.ce-tela { min-height: 100vh; background: var(--surface); color: var(--ink-900); }
+.ce-topo { background: var(--white); border-bottom: 1px solid var(--line); }
+.ce-topo-dentro { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--s-3); max-width: 1160px; min-height: 64px; margin: 0 auto; padding: var(--s-3) clamp(16px, 4vw, 32px); }
+.ce-topo .brandmark { padding: 0; color: var(--ink-900); }
+.ce-topo .brandmark:hover { text-decoration: none; }
+.ce-main { padding: var(--s-12) clamp(16px, 4vw, 32px) var(--s-16); }
+.ce-cartao, .ce-rodape { width: 100%; max-width: 440px; margin: 0 auto; }
+.ce-cartao { padding: clamp(20px, 5vw, 32px); }
+.ce-rodape { text-align: center; }
+
+/* Botão com cara de link ("Trocar e-mail", "Entrar com outra conta") */
+.ce-link { padding: 0; border: 0; background: none; font: inherit; color: var(--brand-700); cursor: pointer; }
+.ce-link:hover { color: var(--brand-900); text-decoration: underline; }
+
+/* A1 · "Depois de entrar: Execuções › EX-20431" e a senha com "Mostrar" */
+.ce-destino { align-self: flex-start; max-width: 100%; flex-wrap: wrap; }
 .ca-senha { position: relative; }
 .ca-senha .input { padding-right: 96px; }
 .ca-ver-senha { position: absolute; right: 4px; top: 50%; transform: translateY(-50%); }
-.ca-dica-demo { display: flex; align-items: flex-start; gap: var(--s-2); padding: var(--s-3) var(--s-4); color: var(--ink-700); border-radius: var(--r-md); }
-.ca-dica-demo svg.i { margin-top: 3px; color: var(--brand-700); }
-.ca-dica-demo .mono { overflow-wrap: anywhere; }
-@media (max-width: 760px) {
-  .ce-tela { padding: var(--s-6) var(--s-4); align-items: start; }
-  .ce-cartao { padding: var(--s-6) var(--s-5); }
-}
+
+/* Regras embaixo da senha ("Pelo menos 8 caracteres", "As duas senhas são iguais") */
+.ce-regras { list-style: none; margin: 0; padding: 0; gap: var(--s-1) var(--s-4); }
+.ce-regras li { display: inline-flex; align-items: center; gap: 4px; }
+
+/* A2 · empresas da conta (a usada por último em destaque) */
+.ce-empresas { list-style: none; margin: 0; padding: 0; }
+.ce-empresa { width: 100%; gap: var(--s-3); padding: 14px 16px; border: 1px solid var(--line-strong); border-radius: 16px; background: var(--white); color: var(--ink-900); font: inherit; text-align: left; cursor: pointer; }
+.ce-empresa:hover { border-color: var(--brand-200); }
+.ce-empresa:focus-visible { outline: none; box-shadow: var(--ring); }
+.ce-empresa:disabled { cursor: progress; }
+.ce-empresa-recente { border-color: var(--brand-200); background: var(--brand-50); }
+.ce-empresa .badge { height: 20px; }
+
+/* A4 e A6 · link ou convite expirado */
+.ce-icone-aviso { width: 48px; height: 48px; border-radius: 14px; display: grid; place-items: center; background: var(--warning-50); color: var(--warning-700); }
+
+/* A5 · código de 6 dígitos */
+.ce-fieldset { border: 0; margin: 0; padding: 0; min-width: 0; }
+.ce-fieldset > legend { padding: 0; margin-bottom: var(--s-2); }
+.ce-codigo { gap: var(--s-2); }
+.ce-digito { flex: 1 1 0; min-width: 0; max-width: 52px; height: 56px; padding: 0; text-align: center; font-family: var(--font-mono); font-size: var(--fs-24); font-weight: 500; }
+.ce-reenviar[disabled] { background: transparent; border-color: transparent; }
+
+/* A6 · e-mail do convite, só para leitura */
+.ce-somente-leitura { background: var(--surface); color: var(--ink-700); }

@@ -1,4 +1,5 @@
-// E-mails do produto: código de confirmação do cadastro, link de senha nova e convite da equipe.
+// E-mails do produto: código de confirmação do cadastro, link de senha nova, convite da equipe e
+// pedidos de contato do site para a equipe de vendas.
 //
 // - Com SMTP_URL (ex.: smtps://usuario:senha@smtp.seuprovedor.com:465), envia pelo provedor de
 //   verdade, com o remetente de EMAIL_REMETENTE.
@@ -15,6 +16,8 @@ export interface EmailSaindo {
   assunto: string;
   /** Texto puro (o HTML é montado a partir dele). */
   texto: string;
+  /** Endereço do "Responder" (ex.: quem pediu a demonstração). */
+  responderPara?: string;
 }
 
 export interface Correio {
@@ -49,7 +52,14 @@ export class CorreioSmtp implements Correio {
   }
 
   async enviar(e: EmailSaindo): Promise<void> {
-    await this.transporte.sendMail({ from: this.remetente, to: e.para, subject: e.assunto, text: e.texto, html: htmlDe(e.texto) });
+    await this.transporte.sendMail({
+      from: this.remetente,
+      to: e.para,
+      replyTo: e.responderPara,
+      subject: e.assunto,
+      text: e.texto,
+      html: htmlDe(e.texto),
+    });
   }
 }
 
@@ -66,7 +76,8 @@ export class CaixaLocal implements Correio {
     fs.mkdirSync(this.pasta, { recursive: true });
     const nome = `${new Date().toISOString().replace(/[:.]/g, '-')}-${e.para.replace(/[^\w.@-]/g, '_')}.txt`;
     const arquivo = path.join(this.pasta, nome);
-    fs.writeFileSync(arquivo, `Para: ${e.para}\nAssunto: ${e.assunto}\n\n${e.texto}\n`, 'utf8');
+    const responder = e.responderPara ? `Responder para: ${e.responderPara}\n` : '';
+    fs.writeFileSync(arquivo, `Para: ${e.para}\n${responder}Assunto: ${e.assunto}\n\n${e.texto}\n`, 'utf8');
     console.log(`E-mail não enviado (SMTP_URL não configurado). Ficou em ${arquivo}`);
   }
 }

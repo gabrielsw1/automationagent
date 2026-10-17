@@ -33,6 +33,11 @@ describe('formato', () => {
   it('iniciais e primeiro nome', () => {
     expect(fmt.iniciais('Ana Ribeiro')).toBe('AR');
     expect(fmt.iniciais('Júlia Martins Souza')).toBe('JS');
+    // Empresas: as duas primeiras palavras, como no design.
+    expect(fmt.iniciaisEmpresa('Clínica Mais Agenda')).toBe('CM');
+    expect(fmt.iniciaisEmpresa('RotaCerta Logística')).toBe('RC');
+    expect(fmt.iniciaisEmpresa('Pólen ERP')).toBe('PE');
+    expect(fmt.iniciaisEmpresa('Horizonte')).toBe('HO');
     expect(fmt.primeiroNome('Camila Souza')).toBe('Camila');
   });
 });

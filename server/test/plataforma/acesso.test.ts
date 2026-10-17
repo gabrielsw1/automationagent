@@ -149,7 +149,7 @@ describe('entrar (A1) e escolher a empresa (A2)', () => {
     expect(entrada.eu?.empresa.id).toBe(pedraId);
     expect(entrada.empresas.map((e) => [e.nome, e.perfil, e.iniciais, e.demo])).toEqual([
       ['Pedra Branca', 'admin', 'PB', false],
-      ['Horizonte', 'admin', 'H', true],
+      ['Horizonte', 'admin', 'HO', true],
     ]);
     expect(entrada.empresas.every((e) => e.ultimoAcesso)).toBe(true);
     expect(entrada.avisos).toEqual([]);
@@ -259,7 +259,10 @@ describe('aceitar convite (A6)', () => {
     amb.ctx.banco.executar("UPDATE equipe SET convite_expira_em = ? WHERE email = 'bia@horizonte.com.br'", new Date(Date.now() - 1000).toISOString());
     const vencido = await api(amb, 'GET', `/auth/convite/${outro.linkConvite.split('/convite/')[1]}`);
     expect(vencido.statusCode).toBe(410);
-    expect(vencido.json().mensagem).toBe('Este convite expirou. Peça ao Rafael Lima para reenviar em Equipe e limites.');
+    expect(vencido.json()).toMatchObject({
+      mensagem: 'Este convite expirou. Peça ao Rafael Lima para reenviar em Equipe e limites.',
+      email: 'bia@horizonte.com.br',
+    });
   });
 
   it('quem já tem conta entra e aceita; o convite de outro e-mail não serve', async () => {
@@ -284,5 +287,29 @@ describe('aceitar convite (A6)', () => {
     expect(aceito.json<Eu>()).toMatchObject({ perfil: 'leitor', empresa: { nome: 'Horizonte' } });
     expect(aceito.json<Eu>().empresas).toHaveLength(2);
     expect(amb.ctx.auditoria.listar()[0]).toMatchObject({ ator: 'Luana Freitas', acao: 'aceitou o convite' });
+  });
+
+  it('entrar com o convite aceita na mesma entrada, mesmo para quem não está em nenhuma empresa', async () => {
+    amb = await criarAmbiente();
+    const rafael = entrarComo(amb.ctx, 'admin', 'Rafael Lima', 'rafael@horizonte.com.br');
+    // Conta que saiu de todas as empresas.
+    amb.plataforma.criarConta({ email: 'caio@horizonte.com.br', nome: 'Caio Prado', senha: 'senha-do-caio-1' });
+    const { linkConvite } = (await api(amb, 'POST', '/equipe/convites', { email: 'caio@horizonte.com.br', perfil: 'editor' }, rafael.cookie)).json();
+    const token = linkConvite.split('/convite/')[1];
+
+    // Outro e-mail: recusa antes de conferir a senha, sem abrir sessão.
+    const outro = await api(amb, 'POST', '/auth/entrar', { email: 'rafael@horizonte.com.br', senha: 'copiloto123', convite: token });
+    expect(outro.statusCode).toBe(403);
+    expect(outro.json().erro).toBe('outro_email');
+    expect(outro.headers['set-cookie']).toBeUndefined();
+    expect((await api(amb, 'POST', '/auth/entrar', { email: 'caio@horizonte.com.br', senha: 'errada-123', convite: token })).statusCode).toBe(401);
+
+    const r = await api(amb, 'POST', '/auth/entrar', { email: 'caio@horizonte.com.br', senha: 'senha-do-caio-1', convite: token });
+    expect(r.statusCode, r.body).toBe(200);
+    const entrada = r.json<Entrada>();
+    expect(entrada.eu).toMatchObject({ nome: 'Caio Prado', perfil: 'editor', empresa: { nome: 'Horizonte' } });
+    expect(entrada.empresas.map((e) => e.nome)).toEqual(['Horizonte']);
+    expect((await api(amb, 'GET', '/fluxos', undefined, cookieDe(r))).statusCode).toBe(200);
+    expect((await api(amb, 'POST', '/auth/entrar', { email: 'caio@horizonte.com.br', senha: 'senha-do-caio-1', convite: token })).statusCode).toBe(404);
   });
 });

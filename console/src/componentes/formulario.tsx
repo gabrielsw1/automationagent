@@ -15,7 +15,10 @@
 //   <Aviso tipo="aviso" titulo="Você usou 80% do limite" acoes={<Botao tamanho="sm">Ajustar</Botao>}>texto</Aviso>
 //
 //   <Progresso valor={0.54} rotulo="Gasto do mês" />
+//
+//   {envio === 'caixa_local' ? <NotaCaixaDeSaida /> : null}
 import { useId, type ReactNode } from 'react';
+import type { EnvioEmail } from '@copiloto/shared';
 import { Icone, type NomeIcone } from './icones.tsx';
 
 export interface PropsControle {
@@ -215,6 +218,23 @@ export function Progresso({ valor, rotulo, cor, altura }: { valor: number; rotul
       style={altura ? { height: altura } : undefined}
     >
       <span style={{ width: `${pct}%`, background: cor }} />
+    </div>
+  );
+}
+
+/**
+ * O servidor não tem SMTP_URL: o e-mail (código, link de senha nova, convite) não saiu e ficou em
+ * DATA_DIR/caixa-de-saida. Aparece nas telas que avisam "enviamos um e-mail".
+ */
+export function NotaCaixaDeSaida({ envio = 'caixa_local' }: { envio?: EnvioEmail }) {
+  if (envio !== 'caixa_local') return null;
+  return (
+    <div className="card-flat ca-nota" role="note">
+      <Icone nome="info" tamanho="sm" />
+      <p className="small">
+        O envio de e-mail ainda não está configurado neste servidor (<span className="mono">SMTP_URL</span>). A mensagem ficou na pasta{' '}
+        <span className="mono">caixa-de-saida</span> dos dados do servidor.
+      </p>
     </div>
   );
 }
