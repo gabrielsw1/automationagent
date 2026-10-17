@@ -67,6 +67,7 @@ export function resumo(perfil: PerfilEquipe = 'admin', extra: Partial<ResumoCons
       email: 'rafael.lima@seusistema.com.br',
       perfil,
       iniciais: 'RL',
+      emailConfirmado: true,
       empresa: HORIZONTE,
       empresas: [HORIZONTE],
       adminPlataforma: false,

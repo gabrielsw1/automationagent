@@ -22,6 +22,7 @@ const EU: Eu = {
   email: 'ana@acme.com.br',
   perfil: 'admin',
   iniciais: 'AR',
+  emailConfirmado: true,
   empresa: ACME,
   empresas: [ACME],
   adminPlataforma: false,

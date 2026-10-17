@@ -75,6 +75,7 @@ export function resumo(perfil: PerfilEquipe = 'admin', nome = 'Rafael Lima', id 
       email: 'rafael.lima@seusistema.com.br',
       perfil,
       iniciais: 'RL',
+      emailConfirmado: true,
       empresa: HORIZONTE,
       empresas: [HORIZONTE],
       adminPlataforma: false,
