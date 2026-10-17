@@ -2,10 +2,10 @@
 // acesso, desativar e reativar) e os preços dos planos (em reais na tela, centavos na API).
 import { useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { fmt, type LinkAtivacao, type MembroStarta } from '@copiloto/shared';
+import { fmt, type LinkAtivacao, type MembroStarta, type Plano, type PrecosPlano } from '@copiloto/shared';
 import type { ErroApiCliente } from '../../api/cliente.ts';
 import { useAcao } from '../../api/hooks.ts';
-import { apiPlataforma, useApiPlataforma, type PlanoStarta, type PrecosPlanoStarta } from '../../api/plataforma.ts';
+import { apiPlataforma, useApiPlataforma } from '../../api/plataforma.ts';
 import { Abas } from '../../componentes/Abas.tsx';
 import { Botao } from '../../componentes/Botao.tsx';
 import { Carregando, EstadoErro, EstadoVazio } from '../../componentes/estados.tsx';
@@ -331,7 +331,7 @@ function EquipeStarta() {
 
 // ---------------------------------------------------------------- Planos e preços
 
-const CAMPOS_PRECO: { chave: keyof PrecosPlanoStarta; rotulo: string; ajuda: string }[] = [
+const CAMPOS_PRECO: { chave: keyof PrecosPlano; rotulo: string; ajuda: string }[] = [
   { chave: 'precoMensalCentavos', rotulo: 'Preço mensal', ajuda: 'Por mês, com os créditos incluídos.' },
   { chave: 'taxaImplantacaoCentavos', rotulo: 'Taxa de implantação', ajuda: 'Uma vez, no começo.' },
   { chave: 'precoCreditoExtraCentavos', rotulo: 'Preço do crédito extra', ajuda: 'Entra na receita e na margem de Uso e custos.' },
@@ -354,25 +354,25 @@ export function campoParaCentavos(s: string): number | null | undefined {
   return Math.round(Number(normal) * 100);
 }
 
-function usuarios(p: PlanoStarta): string {
+function usuarios(p: Plano): string {
   return p.usuariosMax === null ? `Mais de ${fmt.numero(Math.max(0, p.usuariosMin - 1))} usuários` : `${fmt.numero(p.usuariosMin)} a ${fmt.numero(p.usuariosMax)} usuários`;
 }
 
-function CartaoPlano({ plano, aoSalvar }: { plano: PlanoStarta; aoSalvar: (p: PlanoStarta) => void }) {
+function CartaoPlano({ plano, aoSalvar }: { plano: Plano; aoSalvar: (p: Plano) => void }) {
   const toast = useToast();
-  const inicial = Object.fromEntries(CAMPOS_PRECO.map((c) => [c.chave, centavosParaCampo(plano[c.chave])])) as Record<keyof PrecosPlanoStarta, string>;
+  const inicial = Object.fromEntries(CAMPOS_PRECO.map((c) => [c.chave, centavosParaCampo(plano[c.chave])])) as Record<keyof PrecosPlano, string>;
   const [v, setV] = useState(inicial);
-  const [erros, setErros] = useState<Partial<Record<keyof PrecosPlanoStarta, string>>>({});
+  const [erros, setErros] = useState<Partial<Record<keyof PrecosPlano, string>>>({});
   // Créditos do pacote avulso de Plano e créditos (ao preço do crédito extra).
   const [pacote, setPacote] = useState(String(plano.pacoteCreditos));
   const [erroPacote, setErroPacote] = useState<string | null>(null);
-  const salvar = useAcao((corpo: Partial<PrecosPlanoStarta> & { pacoteCreditos?: number }) =>
-    apiPlataforma.put<PlanoStarta>(`/planos/${encodeURIComponent(plano.id)}`, corpo),
+  const salvar = useAcao((corpo: Partial<PrecosPlano> & { pacoteCreditos?: number }) =>
+    apiPlataforma.put<Plano>(`/planos/${encodeURIComponent(plano.id)}`, corpo),
   );
   const mudou = CAMPOS_PRECO.some((c) => v[c.chave] !== inicial[c.chave]) || pacote !== String(plano.pacoteCreditos);
 
   const enviar = async () => {
-    const corpo: Partial<PrecosPlanoStarta> & { pacoteCreditos?: number } = {};
+    const corpo: Partial<PrecosPlano> & { pacoteCreditos?: number } = {};
     const e: typeof erros = {};
     for (const c of CAMPOS_PRECO) {
       if (v[c.chave] === inicial[c.chave]) continue;
@@ -467,7 +467,7 @@ function CartaoPlano({ plano, aoSalvar }: { plano: PlanoStarta; aoSalvar: (p: Pl
 
 function PlanosPrecos() {
   const { atualizar } = useSessaoStarta();
-  const planos = useApiPlataforma<PlanoStarta[]>('/planos');
+  const planos = useApiPlataforma<Plano[]>('/planos');
   return (
     <section className="stack" aria-labelledby="t-planos">
       <div className="stack-sm" style={{ gap: 2 }}>

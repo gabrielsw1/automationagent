@@ -1,7 +1,7 @@
 // Moldura da Plataforma Starta (S7): menu lateral próprio (Empresas, Implantações, Uso e custos,
 // Saúde dos fluxos, Suporte, Configurações e quem entrou), topo com a trilha, "Buscar empresa",
 // "Plataforma Starta" e o menu da pessoa. Separada do console das empresas: a sessão é a da equipe
-// Starta (GET /api/plataforma/auth/eu); sem ela, vai para /plataforma/entrar.
+// Starta (GET /api/plataforma/auth/eu); sem ela, vai para a entrada (A7, /plataforma/entrar).
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, Navigate, NavLink, Route, Routes, useLocation, useNavigate } from 'react-router-dom';
 import type { EuStarta, PainelEmpresas, SaudeFluxo } from '@copiloto/shared';
@@ -10,6 +10,7 @@ import { apiPlataforma, definirAoSessaoStartaExpirar, useApiPlataforma } from '.
 import { Carregando, EstadoErro } from '../../componentes/estados.tsx';
 import { Icone, type NomeIcone } from '../../componentes/icones.tsx';
 import { ItemMenu, Menu } from '../../componentes/Menu.tsx';
+import { useToast } from '../../componentes/Toast.tsx';
 import { FaixaSemInternet } from '../../layout/Faixas.tsx';
 import { BuscaEmpresa } from './Busca.tsx';
 import { ModalCodigos } from './Codigos.tsx';
@@ -17,6 +18,7 @@ import Configuracoes from './Configuracoes.tsx';
 import { ProvedorSessaoStarta, useSessaoStarta, type SessaoStarta } from './contexto.tsx';
 import Empresas from './Empresas.tsx';
 import Implantacoes from './Implantacoes.tsx';
+import type { EstadoEntrou } from './MolduraAcesso.tsx';
 import SaudeFluxos from './SaudeFluxos.tsx';
 import Suporte from './Suporte.tsx';
 import UsoCustos from './UsoCustos.tsx';
@@ -180,19 +182,36 @@ function Moldura() {
   );
 }
 
-/** Enquanto a tela de entrada da Plataforma (A7) não está no console, /plataforma/entrar mostra só o aviso. */
-function SemSessao() {
+/**
+ * Logo depois de entrar (A7), com 2 códigos de recuperação ou menos: avisa uma vez e oferece gerar
+ * códigos novos. O aviso também fica no cartão de Configurações.
+ */
+function AvisoCodigos() {
+  const { eu, abrirCodigos } = useSessaoStarta();
+  const toast = useToast();
+  const navegar = useNavigate();
+  const local = useLocation();
+  const entrou = (local.state as Partial<EstadoEntrou> | null)?.entrou === true;
+  // Uma vez por entrada, mesmo com o efeito rodando duas vezes (StrictMode em desenvolvimento).
+  const avisou = useRef(false);
   useEffect(() => {
-    document.title = 'Entrar · Plataforma Starta';
-  }, []);
-  return (
-    <div className="ca-tela-cheia">
-      <div className="card card-pad stack">
-        <h1 className="h3">Entre na Plataforma Starta</h1>
-        <p className="muted">Sua sessão da Plataforma terminou ou ainda não começou. Entre com o e-mail da equipe Starta, a senha e o código do aplicativo autenticador.</p>
-      </div>
-    </div>
-  );
+    if (!entrou || avisou.current) return;
+    avisou.current = true;
+    // Tira a marca do histórico: voltar ou recarregar não repete o aviso.
+    navegar(`${local.pathname}${local.search}`, { replace: true, state: null });
+    if (eu.codigosRecuperacao > 2) return;
+    toast.mostrar({
+      tipo: 'info',
+      duracaoMs: 20_000,
+      texto:
+        eu.codigosRecuperacao === 0
+          ? 'Você não tem mais códigos de recuperação. Gere códigos novos para conseguir entrar se perder o celular.'
+          : `${eu.codigosRecuperacao === 1 ? 'Resta 1 código' : `Restam ${eu.codigosRecuperacao} códigos`} de recuperação. Gere códigos novos para não ficar sem acesso se perder o celular.`,
+      acao: { rotulo: 'Gerar códigos novos', aoClicar: abrirCodigos },
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [entrou]);
+  return null;
 }
 
 export default function AreaPlataforma() {
@@ -203,15 +222,17 @@ export default function AreaPlataforma() {
   const [eu, setEu] = useState<EuStarta | null>(null);
   const [erro, setErro] = useState<ErroApiCliente | null>(null);
   const [codigosAbertos, setCodigosAbertos] = useState(false);
-  const semSessao = local.pathname.startsWith(ENTRAR) || local.pathname.startsWith('/plataforma/ativar');
 
+  // `navigate` muda a cada navegação: pela ref, a sessão carrega uma vez só, não a cada página.
+  const navegarRef = useRef(navegar);
+  navegarRef.current = navegar;
   const irParaEntrar = useCallback(() => {
     const { pathname, search } = onde.current;
     if (pathname.startsWith(ENTRAR)) return;
     const aqui = `${pathname}${search}`;
     setEu(null);
-    navegar(aqui === '/plataforma' ? ENTRAR : `${ENTRAR}?voltar=${encodeURIComponent(aqui)}`, { replace: true });
-  }, [navegar]);
+    navegarRef.current(aqui === '/plataforma' ? ENTRAR : `${ENTRAR}?voltar=${encodeURIComponent(aqui)}`, { replace: true });
+  }, []);
 
   const carregar = useCallback(async () => {
     try {
@@ -226,10 +247,10 @@ export default function AreaPlataforma() {
 
   useEffect(() => {
     definirAoSessaoStartaExpirar(irParaEntrar);
-    if (!semSessao) void carregar();
-  }, [carregar, irParaEntrar, semSessao]);
+    void carregar();
+  }, [carregar, irParaEntrar]);
 
-  const logado = eu !== null && !semSessao;
+  const logado = eu !== null;
   const painel = useApiPlataforma<PainelEmpresas>(logado ? '/empresas' : null);
   const saude = useApiPlataforma<SaudeFluxo[]>(logado ? '/saude' : null);
   const { recarregar: recarregarPainel } = painel;
@@ -253,8 +274,8 @@ export default function AreaPlataforma() {
   const sair = useCallback(async () => {
     await apiPlataforma.post('/auth/sair').catch(() => {});
     setEu(null);
-    navegar(ENTRAR, { replace: true });
-  }, [navegar]);
+    navegarRef.current(ENTRAR, { replace: true });
+  }, []);
 
   const valor = useMemo<SessaoStarta | null>(
     () =>
@@ -264,7 +285,6 @@ export default function AreaPlataforma() {
     [eu, painel, saude, atualizar, sair],
   );
 
-  if (semSessao) return <SemSessao />;
   if (erro && !eu) {
     return (
       <div className="ca-tela-cheia">
@@ -277,6 +297,7 @@ export default function AreaPlataforma() {
   return (
     <ProvedorSessaoStarta valor={valor}>
       <Moldura />
+      <AvisoCodigos />
       <ModalCodigos aberto={codigosAbertos} aoFechar={() => setCodigosAbertos(false)} />
     </ProvedorSessaoStarta>
   );

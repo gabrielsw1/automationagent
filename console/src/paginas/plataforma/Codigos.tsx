@@ -1,5 +1,6 @@
 // "Meus códigos de recuperação": pede um código do aplicativo autenticador e mostra os 10 códigos
-// novos uma vez só, para copiar ou baixar. Os antigos param de funcionar.
+// novos uma vez só, para copiar ou baixar. Os antigos param de funcionar. A lista com "Copiar" e
+// "Baixar .txt" também aparece no fim da ativação do acesso.
 import { useState } from 'react';
 import { fmt } from '@copiloto/shared';
 import type { ErroApiCliente } from '../../api/cliente.ts';
@@ -10,6 +11,7 @@ import { Icone } from '../../componentes/icones.tsx';
 import { Modal } from '../../componentes/Modal.tsx';
 import { useSessaoStarta } from './contexto.tsx';
 import { copiarTexto } from './pecas.tsx';
+import './plataforma.css';
 
 function baixar(nome: string, texto: string): boolean {
   try {
@@ -27,19 +29,51 @@ function baixar(nome: string, texto: string): boolean {
   }
 }
 
+/** Os códigos de recuperação, mostrados uma vez só: a lista, "Copiar códigos" e "Baixar .txt". */
+export function ListaCodigos({ codigos, email }: { codigos: string[]; email: string }) {
+  const [aviso, setAviso] = useState<string | null>(null);
+  const texto = [`Códigos de recuperação da Plataforma Starta (${email}), gerados em ${fmt.dataHora(new Date())}.`, 'Cada código vale uma vez.', '', ...codigos].join('\n');
+  return (
+    <>
+      <ul className="cp-codigos" aria-label="Códigos de recuperação">
+        {codigos.map((c) => (
+          <li key={c} className="mono">
+            {c}
+          </li>
+        ))}
+      </ul>
+      <div className="row wrap" style={{ gap: 'var(--s-2)' }}>
+        <Botao tamanho="sm" icone="copiar" onClick={async () => setAviso((await copiarTexto(codigos.join('\n'))) ? 'Códigos copiados.' : 'Não consegui copiar. Selecione os códigos e copie.')}>
+          Copiar códigos
+        </Botao>
+        <Botao
+          tamanho="sm"
+          icone="baixar"
+          onClick={() => setAviso(baixar('codigos-recuperacao-plataforma-starta.txt', texto) ? 'Arquivo baixado.' : 'Não consegui baixar o arquivo. Copie os códigos.')}
+        >
+          Baixar .txt
+        </Botao>
+        {aviso ? (
+          <span className="tiny muted" role="status">
+            {aviso}
+          </span>
+        ) : null}
+      </div>
+    </>
+  );
+}
+
 export function ModalCodigos({ aberto, aoFechar }: { aberto: boolean; aoFechar: () => void }) {
   const { eu, definirEu } = useSessaoStarta();
   const [codigo, setCodigo] = useState('');
   const [erro, setErro] = useState<string | null>(null);
   const [enviando, setEnviando] = useState(false);
   const [novos, setNovos] = useState<string[] | null>(null);
-  const [aviso, setAviso] = useState<string | null>(null);
 
   const fechar = () => {
     setCodigo('');
     setErro(null);
     setNovos(null);
-    setAviso(null);
     aoFechar();
   };
 
@@ -60,10 +94,6 @@ export function ModalCodigos({ aberto, aoFechar }: { aberto: boolean; aoFechar: 
       setEnviando(false);
     }
   };
-
-  const texto = novos
-    ? [`Códigos de recuperação da Plataforma Starta (${eu.email}), gerados em ${fmt.dataHora(new Date())}.`, 'Cada código vale uma vez.', '', ...novos].join('\n')
-    : '';
 
   return (
     <Modal
@@ -102,30 +132,7 @@ export function ModalCodigos({ aberto, aoFechar }: { aberto: boolean; aoFechar: 
             <Icone nome="alerta" />
             <p className="small">Guarde estes códigos agora: eles não aparecem de novo. Os códigos antigos pararam de funcionar.</p>
           </div>
-          <ul className="cp-codigos" aria-label="Códigos de recuperação novos">
-            {novos.map((c) => (
-              <li key={c} className="mono">
-                {c}
-              </li>
-            ))}
-          </ul>
-          <div className="row wrap" style={{ gap: 'var(--s-2)' }}>
-            <Botao tamanho="sm" icone="copiar" onClick={async () => setAviso((await copiarTexto(novos.join('\n'))) ? 'Códigos copiados.' : 'Não consegui copiar. Selecione os códigos e copie.')}>
-              Copiar códigos
-            </Botao>
-            <Botao
-              tamanho="sm"
-              icone="baixar"
-              onClick={() => setAviso(baixar('codigos-recuperacao-plataforma-starta.txt', texto) ? 'Arquivo baixado.' : 'Não consegui baixar o arquivo. Copie os códigos.')}
-            >
-              Baixar .txt
-            </Botao>
-            {aviso ? (
-              <span className="tiny muted" role="status">
-                {aviso}
-              </span>
-            ) : null}
-          </div>
+          <ListaCodigos codigos={novos} email={eu.email} />
         </>
       ) : (
         <form
