@@ -125,7 +125,8 @@ export class BarraGravacao {
       linha.appendChild(el('span', 'cp-grav-ponto'));
       const titulo = el('span', 'cp-grav-titulo');
       titulo.appendChild(el('span', 'strong', 'Gravando'));
-      if (this.nome) titulo.appendChild(el('span', 'cp-grav-nome', ` · ${this.nome}`));
+      // Espaço inquebrável: o espaço comum some no começo de um item flex ("Gravando· Abrir chamado").
+      if (this.nome) titulo.appendChild(el('span', 'cp-grav-nome', `\u00a0· ${this.nome}`));
       linha.appendChild(titulo);
       const passos = el('span', 'cp-grav-passos', `· ${this.passos} ${this.passos === 1 ? 'passo' : 'passos'}`);
       passos.setAttribute('aria-live', 'polite');

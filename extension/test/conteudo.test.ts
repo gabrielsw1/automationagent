@@ -72,7 +72,7 @@ describe('content script · começo da página', () => {
     const b = barra();
     expect(b.host?.hasAttribute('data-copiloto')).toBe(true);
     expect(b.host?.parentElement).toBe(document.documentElement);
-    expect(b.texto()).toContain('Gravando · Abrir chamado· 1 passo');
+    expect(b.texto().replace(/\u00a0/g, ' ')).toContain('Gravando · Abrir chamado· 1 passo');
     expect(b.raiz?.querySelector('style')?.textContent).toContain('--brand-600');
     expect(comandos).toEqual(['comecar']);
     expect(g?.estaCapturando).toBe(true);
