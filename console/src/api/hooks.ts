@@ -72,6 +72,8 @@ export function useEventosConsole(aoEvento: (e: { tipo: string; [k: string]: unk
   const ref = useRef(aoEvento);
   ref.current = aoEvento;
   useEffect(() => {
+    // Sem EventSource (testes em jsdom, navegadores muito antigos): sem atualização ao vivo.
+    if (typeof EventSource === 'undefined') return;
     const fonte = new EventSource('/api/console/eventos');
     fonte.onmessage = (m) => {
       try {

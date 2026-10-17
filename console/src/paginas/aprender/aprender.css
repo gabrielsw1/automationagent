@@ -1,0 +1,90 @@
+/* Aprender fluxo (C4). Classes com prefixo ap-. Cores só por token; o caminho navegador usa --accent-500. */
+
+/* ---------- Etapas do assistente ---------- */
+.ap-etapas { list-style: none; margin: 0; padding: var(--s-4) var(--s-6); display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-3); }
+.ap-etapa { display: flex; align-items: center; gap: var(--s-2); }
+.ap-etapa button { display: inline-flex; align-items: center; gap: var(--s-2); padding: 2px 4px; border: 0; background: transparent; font: inherit; color: inherit; cursor: pointer; border-radius: var(--r-sm); }
+.ap-etapa button:disabled { cursor: default; }
+.ap-etapa button:focus-visible { outline: none; box-shadow: var(--ring); }
+.ap-etapa-bola { width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; flex: none; font-size: var(--fs-12); font-weight: 700; background: var(--white); border: 2px solid var(--line-strong); color: var(--ink-500); }
+.ap-etapa.feita .ap-etapa-bola { background: var(--success-700); border-color: var(--success-700); color: var(--white); }
+.ap-etapa.atual .ap-etapa-bola { border-color: var(--brand-600); color: var(--brand-700); box-shadow: 0 0 0 4px var(--brand-100); }
+.ap-etapa.atual .ap-etapa-nome { color: var(--brand-700); }
+.ap-etapa-nome { font-weight: 600; color: var(--ink-900); }
+.ap-etapa.futura .ap-etapa-nome { color: var(--ink-500); }
+.ap-etapa-linha { flex: 1 1 24px; min-width: 24px; height: 2px; background: var(--line); }
+.ap-etapa-linha.feita { background: var(--success-500); }
+
+/* ---------- Lista de passos (coluna lateral) ---------- */
+.ap-passos { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--s-2); }
+.ap-passo-botao { width: 100%; display: flex; align-items: center; gap: var(--s-3); text-align: left; padding: var(--s-2) var(--s-3) var(--s-2) var(--s-2); border-radius: var(--r-md); border: 1px solid var(--line); background: var(--white); font: inherit; color: inherit; cursor: pointer; }
+.ap-passo-botao:hover { border-color: var(--line-strong); }
+.ap-passo-botao:focus-visible { outline: none; box-shadow: var(--ring); }
+.ap-passo-botao[aria-pressed='true'] { border-color: var(--brand-600); background: var(--brand-50); box-shadow: 0 0 0 3px var(--brand-100); }
+.ap-passo-botao.pendente { border-color: var(--warning-500); }
+.ap-miniatura { width: 64px; height: 44px; flex: none; border-radius: var(--r-sm); border: 1px solid var(--line); background: var(--surface); overflow: hidden; display: grid; place-items: center; color: var(--ink-400); }
+.ap-miniatura img { width: 100%; height: 100%; object-fit: cover; object-position: top left; display: block; }
+.ap-passo-texto { display: flex; flex-direction: column; min-width: 0; flex: 1; }
+.ap-passo-texto .small { overflow-wrap: anywhere; }
+
+/* ---------- Print do passo com o destaque ---------- */
+.ap-print { margin: 0; display: flex; flex-direction: column; gap: var(--s-2); }
+.ap-print-quadro { position: relative; border: 1px solid var(--line); border-radius: var(--r-md); overflow: hidden; background: var(--surface); }
+.ap-print-quadro.limitado { max-height: 420px; overflow-y: auto; }
+.ap-print-quadro img { display: block; width: 100%; height: auto; }
+.ap-print-destaque { position: absolute; border: 2px solid var(--brand-600); border-radius: var(--r-sm); box-shadow: 0 0 0 4px var(--brand-100); pointer-events: none; }
+.ap-print-vazio { min-height: 180px; display: grid; place-items: center; text-align: center; padding: var(--s-6); color: var(--ink-500); border: 1px dashed var(--line-strong); border-radius: var(--r-md); background: var(--surface); }
+.ap-print-ampliar { position: absolute; right: var(--s-2); top: var(--s-2); }
+
+/* ---------- Seletores ---------- */
+.ap-seletores { display: flex; flex-direction: column; gap: var(--s-2); margin: 0; padding: 0; border: 0; }
+.ap-seletor { display: flex; align-items: flex-start; gap: var(--s-3); padding: var(--s-3); border: 1px solid var(--line); border-radius: var(--r-md); background: var(--white); cursor: pointer; }
+.ap-seletor:has(input:checked) { border-color: var(--brand-600); background: var(--brand-50); }
+.ap-seletor:has(input:disabled) { cursor: default; }
+.ap-seletor input { margin-top: 3px; accent-color: var(--brand-600); }
+.ap-seletor .mono { overflow-wrap: anywhere; font-size: var(--fs-13); }
+
+/* ---------- Mapeamento ---------- */
+.ap-mapa { display: grid; grid-template-columns: minmax(0, 1fr) 24px minmax(0, 1fr); gap: var(--s-3) var(--s-4); align-items: start; }
+.ap-mapa-seta { height: 40px; display: grid; place-items: center; color: var(--ink-400); margin-top: 22px; }
+.ap-campo-tela { min-height: 40px; padding: 8px 12px; border: 1px solid var(--line); border-radius: var(--r-md); background: var(--surface); display: flex; flex-direction: column; justify-content: center; }
+.ap-linha-mapa { padding: var(--s-4) 0; border-bottom: 1px solid var(--line); }
+.ap-linha-mapa:last-child { border-bottom: 0; padding-bottom: 0; }
+.ap-linha-mapa:first-child { padding-top: 0; }
+
+/* ---------- Gravação ao vivo ---------- */
+.ap-ao-vivo { display: inline-flex; align-items: center; gap: var(--s-2); font-weight: 700; color: var(--accent-700); }
+.ap-ao-vivo-ponto { width: 10px; height: 10px; border-radius: 50%; background: var(--accent-500); box-shadow: 0 0 0 0 var(--accent-50); animation: ap-pulso 1.6s ease-out infinite; }
+@keyframes ap-pulso {
+  0% { box-shadow: 0 0 0 0 var(--brand-200); }
+  70% { box-shadow: 0 0 0 10px transparent; }
+  100% { box-shadow: 0 0 0 0 transparent; }
+}
+.ap-gravando { border-left: 4px solid var(--accent-500); }
+.ap-dicas { margin: 0; padding-left: var(--s-5); display: flex; flex-direction: column; gap: var(--s-2); }
+.ap-novo-passo { animation: ap-entrar .3s ease-out; }
+@keyframes ap-entrar { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+
+/* ---------- Teste ---------- */
+.ap-resultado-passo { display: flex; gap: var(--s-3); align-items: flex-start; }
+.ap-resultado-passo .ap-miniatura { width: 96px; height: 64px; cursor: zoom-in; padding: 0; }
+.ap-resultado-passo .ap-miniatura:focus-visible { outline: none; box-shadow: var(--ring); }
+.ap-nota { font-size: var(--fs-13); color: var(--warning-700); display: flex; gap: 6px; align-items: flex-start; }
+.ap-cronometro { font-variant-numeric: tabular-nums; }
+
+/* ---------- Lista de fluxos ---------- */
+.ap-como-funciona { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: var(--s-4); }
+.ap-como-funciona li { display: flex; gap: var(--s-3); align-items: flex-start; }
+.ap-como-numero { width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center; flex: none; background: var(--accent-50); color: var(--accent-700); font-size: var(--fs-12); font-weight: 700; }
+
+@media (max-width: 760px) {
+  .ap-etapas { padding: var(--s-3) var(--s-4); }
+  .ap-etapa-linha { display: none; }
+  .ap-etapa:not(.atual) .ap-etapa-nome { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  .ap-mapa { grid-template-columns: minmax(0, 1fr); }
+  .ap-mapa-seta { display: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ap-ao-vivo-ponto, .ap-novo-passo { animation: none; }
+}

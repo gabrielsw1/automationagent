@@ -5,6 +5,7 @@ import type { ResumoConsole } from '@copiloto/shared';
 import { api, definirAoSessaoExpirar, ErroApiCliente } from './api/cliente.ts';
 import { Carregando, EstadoErro } from './componentes/estados.tsx';
 import { ProvedorSessao } from './componentes/sessao.tsx';
+import { ProvedorToast } from './componentes/Toast.tsx';
 import Layout from './layout/Layout.tsx';
 
 const Entrar = lazy(() => import('./paginas/entrar/Entrar.tsx'));
@@ -41,11 +42,17 @@ function AreaLogada() {
     void carregar();
   }, [carregar, navegar]);
 
-  if (erro && !resumo) return <EstadoErro erro={erro} aoTentar={() => void carregar()} />;
+  if (erro && !resumo) {
+    return (
+      <div className="ca-tela-cheia">
+        <EstadoErro erro={erro} aoTentar={() => void carregar()} titulo="Não conseguimos abrir o console" />
+      </div>
+    );
+  }
   if (!resumo) return <Carregando texto="Abrindo o console…" />;
 
   const sair = async () => {
-    await api.post('/auth/sair');
+    await api.post('/auth/sair').catch(() => {});
     navegar('/entrar', { replace: true });
   };
 
@@ -77,13 +84,15 @@ function AreaLogada() {
 export default function App() {
   return (
     <BrowserRouter>
-      <Suspense fallback={<Carregando />}>
-        <Routes>
-          <Route path="/entrar" element={<Entrar />} />
-          <Route path="/convite/:token" element={<Convite />} />
-          <Route path="/*" element={<AreaLogada />} />
-        </Routes>
-      </Suspense>
+      <ProvedorToast>
+        <Suspense fallback={<Carregando />}>
+          <Routes>
+            <Route path="/entrar" element={<Entrar />} />
+            <Route path="/convite/:token" element={<Convite />} />
+            <Route path="/*" element={<AreaLogada />} />
+          </Routes>
+        </Suspense>
+      </ProvedorToast>
     </BrowserRouter>
   );
 }

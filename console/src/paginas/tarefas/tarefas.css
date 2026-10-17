@@ -1,0 +1,69 @@
+/* Tarefas (C2) e ficha da tarefa (C3). Cores só por var(--token). */
+.ca-peso-medio { font-weight: 500; }
+.ct-sugestao { padding: var(--s-5) var(--s-6); }
+.ct-sugestao-icone { width: 40px; height: 40px; padding: 0; justify-content: center; flex: none; border-radius: var(--r-md); }
+.ct-sugestao-texto { min-width: min(280px, 100%); }
+.ct-ver-mais { align-self: flex-start; }
+.ct-busca { width: 320px; max-width: 100%; }
+.ct-nome { color: var(--ink-900); }
+.ct-vazio-acoes { width: 100%; max-width: 420px; text-align: left; }
+.ct-opcao { justify-content: flex-start; min-height: 56px; padding: var(--s-2) var(--s-4); white-space: normal; text-align: left; }
+
+/* ---------- Ficha (C3) ---------- */
+.ct-ficha .page-head { align-items: flex-start; }
+.ct-grade-form { gap: var(--s-4); align-items: start; }
+.ct-checks { padding-top: 22px; gap: 0; }
+.ct-nota { margin: 0; }
+.ct-remover { margin-right: auto; color: var(--danger-700); }
+.ct-fieldset { border: 0; margin: 0; padding: var(--s-5) var(--s-6); min-width: 0; }
+.ct-fieldset[disabled] .input, .ct-fieldset[disabled] .select, .ct-fieldset[disabled] .textarea { background: var(--surface-2); }
+.card .card-body.ct-fieldset { padding: var(--s-5) var(--s-6); }
+.ct-fieldset-limpo { border: 0; margin: 0; padding: 0; min-width: 0; }
+.ct-fieldset-limpo > legend { padding: 0; margin-bottom: var(--s-2); }
+.ct-checks-grade { gap: var(--s-1) var(--s-4); grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); }
+.ct-chip { max-width: 100%; cursor: pointer; }
+span.ct-chip { cursor: default; }
+.ct-chip-texto { max-width: 340px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ct-nova-frase .input { min-width: min(320px, 100%); }
+.ct-tabela-campos td { vertical-align: top; }
+.ct-tabela-campos td:last-child { white-space: nowrap; }
+.ct-acoes-campo { gap: 2px; justify-content: flex-end; }
+.ct-chamada { gap: var(--s-2); flex-wrap: nowrap; }
+.ct-metodo { width: 112px; flex: none; }
+.ct-kv-mapa { grid-template-columns: minmax(140px, 180px) 1fr; margin: 0; }
+.ct-sans { font-family: var(--font-sans); font-weight: 400; }
+.ct-id-retorno { gap: var(--s-2); }
+.ct-id-retorno .input { width: 120px; min-height: 32px; }
+.ct-tabela-mapa td { padding-top: var(--s-2); padding-bottom: var(--s-2); }
+.ct-tabela-mapa .input, .ct-tabela-mapa .select { min-width: 160px; }
+.ct-detalhes > summary { cursor: pointer; color: var(--brand-700); list-style-position: inside; padding: var(--s-1) 0; }
+.ct-detalhes > summary:focus-visible { outline: none; box-shadow: var(--ring); border-radius: var(--r-sm); }
+.ct-detalhes .ct-fieldset { padding: 0; }
+.ct-lista-limpa { list-style: none; margin: 0; padding: 0; }
+.ct-quebra { overflow-wrap: anywhere; }
+.ct-link { background: none; border: 0; padding: 0; font: inherit; color: var(--brand-700); cursor: pointer; text-align: left; }
+.ct-link:hover { text-decoration: underline; }
+.ct-link:focus-visible { outline: none; box-shadow: var(--ring); border-radius: var(--r-sm); }
+.ct-lista-testes > li { gap: var(--s-3); padding: var(--s-3) 0; border-top: 1px solid var(--line); align-items: flex-start; }
+.ct-lista-testes > li:first-child { border-top: 0; padding-top: 0; }
+.ct-selo-esperado { flex: none; }
+.ct-historico > .ct-versao { gap: var(--s-3); padding: var(--s-4) var(--s-6); border-top: 1px solid var(--line); }
+.ct-historico > .ct-versao:first-child { border-top: 0; }
+.ct-versao-ponto { width: 10px; height: 10px; border-radius: 50%; background: var(--line-strong); margin-top: 6px; flex: none; }
+.ct-versao-ponto.is-atual { background: var(--success-500); }
+.ct-menu-vazio { padding: var(--s-3) var(--s-4); margin: 0; }
+.ct-previa .card-body { padding: var(--s-4); }
+.ct-previa .ca-chat-teste-pilula { margin-bottom: var(--s-2); }
+.ct-previa .widget { box-shadow: none; border-radius: var(--r-lg); }
+.ct-travado { cursor: not-allowed; }
+.ct-travado input { cursor: not-allowed; opacity: .75; }
+@media (max-width: 760px) {
+  .ct-chamada { flex-wrap: wrap; }
+  .ct-metodo { width: 100%; }
+  .ct-kv-mapa { grid-template-columns: 1fr; gap: 2px 0; }
+  .ct-kv-mapa dd { margin-bottom: var(--s-2); }
+  .ct-historico > .ct-versao { padding: var(--s-4); flex-wrap: wrap; }
+  .ct-fieldset, .card .card-body.ct-fieldset { padding: var(--s-4); }
+  .ct-checks { padding-top: 0; }
+  .ct-lista-testes > li { flex-wrap: wrap; }
+}

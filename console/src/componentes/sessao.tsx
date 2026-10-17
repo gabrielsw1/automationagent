@@ -20,6 +20,11 @@ export function useSessao(): Sessao {
   return s;
 }
 
+/** Sessão quando existir (componentes que também aparecem fora da área logada). */
+export function useSessaoOpcional(): Sessao | null {
+  return useContext(ContextoSessao);
+}
+
 /** true se o perfil logado tem a permissão. Use para esconder ou desabilitar botões. */
 export function usePode(permissao: Permissao): boolean {
   return pode(useSessao().resumo.eu.perfil, permissao);
