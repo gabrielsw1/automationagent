@@ -10,6 +10,7 @@ Documento de referência para quem mexe no código. Os tipos citados estão em `
 | Servidor do copiloto | `server/` | 3000 | API do widget, API do console, agente (Claude), motor de execução, navegador (Playwright), conhecimento, SQLite |
 | Console | `console/` | 5173 (Vite, com proxy de `/api` e `/copiloto.js` para 3000) | Administração: telas C0–C9 do design |
 | Widget | `widget/` | — (compilado em `widget/dist/copiloto.js`, servido pelo servidor em `/copiloto.js`) | Chat embutido no sistema anfitrião (Shadow DOM) + gravador de fluxos |
+| Extensão do navegador | `extension/` | — (compilada em `extension/dist`, carregada sem compactação no Chrome ou no Edge) | Grava fluxos em qualquer site, com a captura e a barra do widget; fala com o servidor pelo service worker |
 | Sistema de exemplo "Horizonte" | `sample-system/` | 4000 | Sistema fictício com API REST e telas HTML, para demonstrar tudo sem o sistema real |
 | Contratos | `shared/` | — | Tipos TypeScript, validação de campos, formatação pt-BR, `styles/tokens.css` (único arquivo de cores) e `styles/base.css` |
 
@@ -69,6 +70,7 @@ Cada área tem um dono. Não edite arquivo de outra área; se precisar de mudan�
 | Núcleo do servidor, agente, motor, rotas do widget, login, resumo, SSE, seed principal, scripts | `server/src/{app,index,config,contexto,eventos}.ts`, `server/src/{db,llm,auth,agente,execucao,servicos,util,adaptadores}/`, `server/src/rotas/widget.ts`, `server/src/rotas/console/{index,auth,resumo,eventos,sistema,teste}.ts`, `server/src/seed/index.ts`, `scripts/`, `shared/` | coordenação |
 | Sistema de exemplo | `sample-system/` | sistema-exemplo |
 | Widget e gravador | `widget/` | widget |
+| Extensão do navegador | `extension/` | extensão |
 | Console: moldura, login, guia, painel, tarefas, busca | `console/src/{main.tsx,App.tsx,console.css}`, `console/src/{layout,componentes,api}/`, `console/src/paginas/{entrar,guia,painel,tarefas}/`; `server/src/rotas/console/{painel,guia,tarefas,busca}.ts`, `server/src/tarefas/` | console-a |
 | Console: execuções, canais, equipe e limites | `console/src/paginas/{execucoes,canais,equipe}/`; `server/src/rotas/console/{execucoes,canais,equipe}.ts` | console-b |
 | Navegador e aprender fluxo | `server/src/navegador/`, `server/src/rotas/gravacao.ts`, `server/src/rotas/console/{fluxos,prints}.ts`, `server/src/seed/fluxos.ts`, `console/src/paginas/aprender/` | navegador |
@@ -213,9 +215,32 @@ O pacote `widget` exporta para o console (`@copiloto/widget/chat` e `@copiloto/w
 
 ## Gravador de fluxos (`/api/gravacao`, dono: navegador; consumidor: widget)
 
-O console cria o fluxo e abre `{SISTEMA_URL}{urlInicial}?copiloto_gravacao=<token>` numa aba nova. O widget detecta
-o parâmetro, guarda o token em `sessionStorage` (vale entre páginas), mostra a barra "Gravando" e envia os eventos.
-Nunca envia valores digitados: só o formato (`formatoDoValor` de `shared/src/validacao.ts`).
+O console cria o fluxo e abre `urlGravacao` numa aba nova: `{SISTEMA_URL}{urlInicial}?copiloto_gravacao=<token>&copiloto_api=<PUBLIC_URL>`
+(os parâmetros vão antes do `#`). `urlInicial` é um caminho do sistema (`/chamados`) ou, para gravar pela extensão em
+outro site, um endereço completo (`https://portal.fornecedor.com.br/pedidos`); o console aceita os dois e guarda o
+caminho quando o endereço é do próprio sistema. `copiloto_gravacao` e `copiloto_api` saem de toda URL gravada
+(`caminhoDe` no servidor, `Captura` e `descrever` no widget).
+
+Quem grava:
+
+- **Extensão do navegador** (`extension/`), quando está instalada. O content script roda em `document_start` em toda
+  página http(s), põe o atributo `data-copiloto-extensao="<versão>"` (`MARCA_EXTENSAO`) no `<html>`, tira os dois
+  parâmetros da barra de endereço e entrega o token ao service worker, que guarda a gravação da aba em
+  `chrome.storage.session` (vale entre páginas e entre sites na mesma aba, até concluir, cancelar ou fechar a aba).
+  A captura é a `Captura` do widget, rodando num content script no mundo da página (`world: "MAIN"`); a barra é a
+  `BarraGravacao` do widget, num Shadow DOM aberto com `tokens.css`, `base.css` e `gravador.css`. Toda a rede passa
+  pelo service worker (a `ApiGravacao` do widget, em lotes de até 10 eventos). O servidor é o de `copiloto_api`; sem
+  ele, o das opções da extensão (padrão `http://localhost:3000`). `localhost` e `127.0.0.1` já vêm liberados; outros
+  servidores pedem permissão nas opções (`optional_host_permissions`), e até lá os passos ficam guardados na aba.
+- **Widget**, quando a extensão não está: detecta o parâmetro, guarda o token em `sessionStorage` (vale entre páginas),
+  mostra a barra "Gravando" e envia os eventos. Com a marca da extensão no `<html>`, o gravador do widget não liga
+  (`tokenParaGravar`), para não gravar duas vezes.
+
+Os dois nunca enviam valores digitados: só o formato (`formatoDoValor` de `shared/src/validacao.ts`).
+
+`GET /api/saude` → `{ ok, modoSimulado, sistema, urlConsole }`. A extensão lê `urlConsole` (`CONSOLE_URL`) para o
+"Gravar esta aba" do popup, que abre `{urlConsole}/aprender?gravar=<endereço da aba>`: o console abre o "Começar
+gravação" com a página preenchida e, no modal, diz se a extensão está instalada (pela marca no `<html>`).
 
 | Rota | Corpo → resposta |
 |---|---|
@@ -285,7 +310,8 @@ navegador: `GET /fluxos` → `Fluxo[]`; `POST /fluxos {nome, tarefaId?, urlInici
 `POST /fluxos/:id/testar {valores, usuarioId}`; `POST /fluxos/:id/publicar`; `DELETE /fluxos/:id`; `GET /prints/:id` (imagem);
 `GET /prints/:id/info`; `GET /fluxos/:id/gravacao` (passos gravados até agora, para o "N passos até agora" ao vivo);
 `POST /fluxos/:id/gravar` (abre uma gravação nova para o fluxo); `POST /fluxos/:id/concluir-gravacao`; `POST /fluxos/:id/cancelar-gravacao`;
-`POST /fluxos/:id/nova-versao` (fluxo publicado fica só leitura: editar cria versão nova); `POST /fluxos/:id/criar-tarefa`.
+`POST /fluxos/:id/nova-versao` (fluxo publicado fica só leitura: editar cria versão nova); `POST /fluxos/:id/criar-tarefa`
+(ficha em rascunho com os campos sugeridos, frases de exemplo tiradas do nome do fluxo e recibo `<nome>: feito`, ou com o primeiro dado lido).
 Execuções de teste usam IDs `teste_*`, gravam o uso do Claude com `execucao_id` nulo e penduram os prints no fluxo.
 
 conhecimento: `GET /conhecimento/fontes` → `FonteConhecimento[]`; `POST /conhecimento/fontes/site {url, limitePaginas?}`;
