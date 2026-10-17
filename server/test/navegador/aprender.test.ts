@@ -42,7 +42,7 @@ describe('conversão da gravação em passos (regras)', () => {
     // campos sugeridos, ligados aos passos
     expect(camposSugeridos).toEqual([
       expect.objectContaining({ chave: 'cpf_cnpj_pagador', tipo: 'documento', obrigatorio: true, pergunta: 'Qual é o CPF ou CNPJ de quem paga?' }),
-      expect.objectContaining({ chave: 'competencia', tipo: 'lista', opcoes: ['10/2026', '09/2026'], pergunta: 'Qual é a competência?' }),
+      expect.objectContaining({ chave: 'competencia', tipo: 'lista', opcoes: ['10/2026', '09/2026'], pergunta: 'Qual é a competência: 10/2026 ou 09/2026?' }),
     ]);
     expect(passos[1].valor).toEqual({ origem: 'campo', campo: 'cpf_cnpj_pagador' });
     expect(passos[2].valor).toEqual({ origem: 'campo', campo: 'competencia' });

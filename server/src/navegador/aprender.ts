@@ -207,7 +207,13 @@ function sugerirCampos(lista: Rascunho[]): Campo[] {
     let chave = chaveDe(rotulo);
     for (let i = 2; campos.some((c) => c.chave === chave); i++) chave = `${chaveDe(rotulo)}_${i}`;
     const campo: Campo = { chave, rotulo, tipo, obrigatorio: true, pergunta: perguntaPara(rotulo) };
-    if (tipo === 'lista') campo.opcoes = opcoes;
+    if (tipo === 'lista') {
+      campo.opcoes = opcoes;
+      // Com poucas opções, a pergunta já diz quais são: "Qual é a prioridade: Baixa, Média, Alta ou Urgente?"
+      if (opcoes.length >= 2 && opcoes.length <= 6) {
+        campo.pergunta = `${campo.pergunta.replace(/\?$/, '')}: ${opcoes.slice(0, -1).join(', ')} ou ${opcoes[opcoes.length - 1]}?`;
+      }
+    }
     if (tipo === 'documento') campo.pergunta = `Qual é o CPF ou CNPJ${/pagador/i.test(rotulo) ? ' de quem paga' : ''}?`;
     campos.push(campo);
   }

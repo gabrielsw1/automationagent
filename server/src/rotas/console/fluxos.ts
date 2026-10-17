@@ -8,6 +8,7 @@ import type { Contexto } from '../../contexto.ts';
 import { aprenderFluxo, pendenciaDe } from '../../navegador/aprender.ts';
 import { Fluxos, publico, type LinhaFluxo } from '../../navegador/fluxos.ts';
 import { apagarPrint, apagarPrintsDoFluxo } from '../../navegador/prints.ts';
+import { minusculaInicial } from '../../navegador/texto.ts';
 import type { EventoNavegador, ResultadoNavegador } from '../../navegador/tipos.ts';
 import { ErroLlm, RecusaDoModelo } from '../../llm/tipos.ts';
 import { agoraIso } from '../../db/banco.ts';
@@ -497,8 +498,26 @@ function validarValores(campos: Campo[], passos: PassoFluxo[], entrada: Record<s
   return valores;
 }
 
+/** "a, b e c". */
+function emLista(itens: string[]): string {
+  return itens.length > 1 ? `${itens.slice(0, -1).join(', ')} e ${itens[itens.length - 1]}` : (itens[0] ?? '');
+}
+
+/**
+ * Pedidos de exemplo a partir do nome do fluxo: "Abrir chamado" → "abrir chamado", "abre chamado" e
+ * "pode abrir chamado para mim?". Ajudam o copiloto a reconhecer o pedido escrito de outros jeitos.
+ */
+export function exemplosDoNome(nome: string): string[] {
+  const base = minusculaInicial(nome.trim().replace(/\s+/g, ' '));
+  if (!base) return [];
+  // Começa por verbo ("abrir", "emitir", "cadastrar"): também como a pessoa fala ("abre", "emite", "cadastra").
+  const m = base.match(/^(\p{L}{3,}?)(ar|er|ir)(\s.*)?$/u);
+  if (!m) return [base];
+  return [base, `${m[1]}${m[2] === 'ar' ? 'a' : 'e'}${m[3] ?? ''}`, `pode ${base} para mim?`];
+}
+
 /** Ficha inicial de uma tarefa criada a partir do fluxo (caminho navegador). */
-function definicaoPadrao(f: LinhaFluxo, nomeSistema: string): TarefaDefinicao {
+export function definicaoPadrao(f: Pick<LinhaFluxo, 'id' | 'nome' | 'passos' | 'camposSugeridos'>, nomeSistema: string): TarefaDefinicao {
   const campos = f.camposSugeridos.length
     ? f.camposSugeridos
     : f.passos
@@ -506,11 +525,12 @@ function definicaoPadrao(f: LinhaFluxo, nomeSistema: string): TarefaDefinicao {
         .map((p) => ({ chave: (p.valor as { campo: string }).campo, rotulo: p.rotuloElemento ?? p.titulo, tipo: 'texto' as const, obrigatorio: true, pergunta: `Qual é ${p.rotuloElemento ?? 'o valor'}?` }));
   const leituras = f.passos.filter((p) => p.tipo === 'leitura' && p.gera).map((p) => p.gera!);
   const segundos = Math.max(10, f.passos.length * 4);
+  const pede = campos.length ? ` Precisa de: ${emLista(campos.map((c) => minusculaInicial(c.rotulo)))}.` : '';
   return {
     nome: f.nome,
-    descricao: `Faz “${f.nome}” na tela do ${nomeSistema}, repetindo o fluxo gravado.`,
+    descricao: `Faz “${f.nome}” na tela do ${nomeSistema}, repetindo o fluxo gravado.${pede}`,
     quandoUsar: `Use quando a pessoa pedir para ${f.nome.toLowerCase()}.`,
-    exemplos: [],
+    exemplos: exemplosDoNome(f.nome),
     campos,
     caminho: 'navegador',
     fluxoId: f.id,
@@ -518,7 +538,7 @@ function definicaoPadrao(f: LinhaFluxo, nomeSistema: string): TarefaDefinicao {
     confirmacao: true,
     desfazerMinutos: 0,
     perfisPermitidos: [],
-    tituloRecibo: leituras.length ? `${f.nome}: {${leituras[0]}}` : `${f.nome} concluída`,
+    tituloRecibo: leituras.length ? `${f.nome}: {${leituras[0]}}` : `${f.nome}: feito`,
     tituloConfirmacao: `Confirme: ${f.nome}`,
     proximosPassos: [],
     contextos: [],

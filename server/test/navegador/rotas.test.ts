@@ -6,6 +6,7 @@ import type { Fluxo, GravacaoEstado, TarefaDefinicao } from '@copiloto/shared';
 import type { Contexto } from '../../src/contexto.ts';
 import type { EventoConsole } from '../../src/eventos.ts';
 import { salvarPrint } from '../../src/navegador/prints.ts';
+import { exemplosDoNome } from '../../src/rotas/console/fluxos.ts';
 import type { Navegador, PedidoExecucaoNavegador, ResultadoNavegador } from '../../src/navegador/tipos.ts';
 import { entrarComo } from '../ajuda.ts';
 import { AdaptadorTelas, LINHA_DIGITAVEL, criarAmbienteNavegador, eventosBoleto, subirTelas } from './ajuda-navegador.ts';
@@ -307,6 +308,13 @@ describe('fluxos no console', () => {
     const def = a.ctx.catalogo.rascunho(tarefaId)!.definicao;
     expect(def).toMatchObject({ nome: 'Segunda via de boleto', caminho: 'navegador', fluxoId: fluxo.id, confirmacao: true });
     expect(def.campos.map((c) => c.chave)).toEqual(['cpf_cnpj_pagador', 'competencia']);
+    // Pronta para o copiloto reconhecer o pedido: exemplos pelo nome e os dados que a tarefa pede.
+    expect(def.exemplos).toEqual(['segunda via de boleto']);
+    expect(exemplosDoNome('Abrir chamado')).toEqual(['abrir chamado', 'abre chamado', 'pode abrir chamado para mim?']);
+    expect(exemplosDoNome('Cadastrar cliente')[1]).toBe('cadastra cliente');
+    expect(def.descricao).toContain('Precisa de: CPF/CNPJ do pagador e competência.');
+    expect(def.campos[1].pergunta).toBe('Qual é a competência: 10/2026 ou 09/2026?');
+    expect(def.tituloRecibo).toBe('Segunda via de boleto: {linha_digitavel}');
     expect((await a.pedir('GET', `/api/console/fluxos/${fluxo.id}`)).json<Fluxo>().tarefaId).toBe(tarefaId);
     expect((await a.pedir('POST', `/api/console/fluxos/${fluxo.id}/criar-tarefa`)).statusCode).toBe(409);
   });
