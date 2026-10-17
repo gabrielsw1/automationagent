@@ -54,6 +54,10 @@ export interface Config {
   cadastroAberto: boolean;
   /** E-mails de quem vê o painel da plataforma com todas as empresas (COPILOTO_ADMINS, separados por vírgula). */
   adminsPlataforma: string[];
+  /** Provedor de e-mail (SMTP_URL, ex.: smtps://usuario:senha@smtp.provedor.com:465). Sem ele, os e-mails ficam em DATA_DIR/caixa-de-saida. */
+  smtpUrl: string;
+  /** Remetente dos e-mails (EMAIL_REMETENTE). */
+  emailRemetente: string;
   /** Exige a assinatura do usuário no snippet do widget. */
   exigirAssinatura: boolean;
   /** Mostra o navegador do Playwright (só para depurar fluxos). */
@@ -95,6 +99,8 @@ export function lerConfig(): Config {
       .split(',')
       .map((e) => e.trim().toLowerCase())
       .filter(Boolean),
+    smtpUrl: env('SMTP_URL', ''),
+    emailRemetente: env('EMAIL_REMETENTE', 'Copiloto Starta <nao-responda@starta.site>'),
     exigirAssinatura: env('WIDGET_EXIGIR_ASSINATURA', '1') !== '0',
     navegadorVisivel: env('NAVEGADOR_VISIVEL', '0') === '1',
     chromiumPath: process.env.CHROMIUM_PATH || undefined,

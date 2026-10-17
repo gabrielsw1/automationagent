@@ -8,6 +8,7 @@
 //   sessões e o índice e-mail → empresas.
 // - Tokens que chegam sem sessão (gravação de fluxo, convite) começam com o ID da empresa
 //   (`<empresa>.<aleatório>`), e o token do widget leva a empresa assinada.
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import type { ConectorSistema, FaixaUsuarios, ModoAcesso } from '@copiloto/shared';
@@ -16,6 +17,7 @@ import { hashSenha, verificarSenha } from '../auth/senha.ts';
 import type { Config } from '../config.ts';
 import { criarContexto, trocarSistema, type Contexto } from '../contexto.ts';
 import { Banco, agoraIso, json } from '../db/banco.ts';
+import { criarCorreio, type Correio } from '../email/index.ts';
 import type { Llm } from '../llm/tipos.ts';
 import type { Navegador } from '../navegador/tipos.ts';
 import { novoId, tokenAleatorio } from '../util/ids.ts';
@@ -56,7 +58,25 @@ export interface Conta {
   email: string;
   nome: string | null;
   ultimaEmpresaId: string | null;
+  /** Confirmou o e-mail com o código (contas de convite e da semente já nascem confirmadas). */
+  emailConfirmado: boolean;
 }
+
+/** Resultado de conferir o código de confirmação do e-mail. */
+export type ConferenciaCodigo = { ok: true } | { ok: false; motivo: 'incorreto'; restantes: number } | { ok: false; motivo: 'expirado' };
+
+/** Senhas erradas seguidas até bloquear a entrada, e por quanto tempo. */
+export const TENTATIVAS_ENTRADA = 5;
+export const MINUTOS_BLOQUEIO = 15;
+/** Código do e-mail: validade, tentativas e espera para reenviar. */
+export const MINUTOS_CODIGO = 10;
+export const TENTATIVAS_CODIGO = 5;
+export const SEGUNDOS_REENVIO_CODIGO = 45;
+/** Link de senha nova: validade e espera para pedir outro. */
+export const MINUTOS_LINK_SENHA = 60;
+export const SEGUNDOS_REENVIO_LINK = 60;
+
+const hash = (t: string) => crypto.createHash('sha256').update(t).digest('hex');
 
 export interface SessaoPlataforma {
   token: string;
@@ -75,6 +95,8 @@ export interface OpcoesPlataforma {
   llm?: (empresa: Empresa) => Llm | undefined;
   adaptador?: (empresa: Empresa) => AdaptadorSistema | undefined;
   navegador?: (empresa: Empresa) => Navegador | undefined;
+  /** E-mails (testes: CaixaLocal sem pasta). Padrão: SMTP_URL ou DATA_DIR/caixa-de-saida. */
+  correio?: Correio;
 }
 
 const DIAS_SESSAO = 7;
@@ -155,6 +177,7 @@ export function hostDe(url: string): string | null {
 export class Plataforma {
   readonly banco: Banco;
   readonly cofre: Cofre;
+  readonly correio: Correio;
   private readonly contextos = new Map<string, Contexto>();
   private cacheDominios: Set<string> | null = null;
 
@@ -164,6 +187,7 @@ export class Plataforma {
   ) {
     this.banco = new Banco(opcoes.emMemoria ? ':memory:' : path.join(config.dirDados, 'plataforma.db'), MIGRACOES_PLATAFORMA);
     this.cofre = new Cofre(config.chaveMestra);
+    this.correio = opcoes.correio ?? criarCorreio(config);
   }
 
   // ---------------------------------------------------------------- empresas
@@ -340,30 +364,169 @@ export class Plataforma {
   // ---------------------------------------------------------------- contas e vínculos
 
   conta(email: string): Conta | undefined {
-    const l = this.banco.um<{ id: string; email: string; nome: string | null; ultima_empresa_id: string | null }>(
-      'SELECT id, email, nome, ultima_empresa_id FROM contas WHERE email = ?',
-      email.trim().toLowerCase(),
-    );
-    return l ? { id: l.id, email: l.email, nome: l.nome, ultimaEmpresaId: l.ultima_empresa_id } : undefined;
+    const l = this.banco.um<{ id: string }>('SELECT id FROM contas WHERE email = ?', email.trim().toLowerCase());
+    return l ? this.contaPorId(l.id) : undefined;
   }
 
-  criarConta(d: { email: string; nome: string | null; senha: string }): Conta {
+  contaPorId(id: string): Conta | undefined {
+    const l = this.banco.um<{ id: string; email: string; nome: string | null; ultima_empresa_id: string | null; email_confirmado_em: string | null }>(
+      'SELECT id, email, nome, ultima_empresa_id, email_confirmado_em FROM contas WHERE id = ?',
+      id,
+    );
+    return l
+      ? { id: l.id, email: l.email, nome: l.nome, ultimaEmpresaId: l.ultima_empresa_id, emailConfirmado: !!l.email_confirmado_em }
+      : undefined;
+  }
+
+  /** `emailConfirmado: false` só no cadastro: o código chega por e-mail (convite e semente já provam o e-mail). */
+  criarConta(d: { email: string; nome: string | null; senha: string; emailConfirmado?: boolean }): Conta {
     const id = novoId('cta');
+    const agora = agoraIso();
     this.banco.inserir('contas', {
       id,
       email: d.email.trim().toLowerCase(),
       nome: d.nome,
       senha_hash: hashSenha(d.senha),
-      criado_em: agoraIso(),
+      email_confirmado_em: d.emailConfirmado === false ? null : agora,
+      criado_em: agora,
     });
-    return this.conta(d.email)!;
+    return this.contaPorId(id)!;
   }
 
-  /** Conta com esta senha, ou null. */
+  /** Conta com esta senha, ou null. Não conta tentativas: quem entra usa `entrarComSenha`. */
   conferirSenha(email: string, senha: string): Conta | null {
     const l = this.banco.um<{ senha_hash: string }>('SELECT senha_hash FROM contas WHERE email = ?', email.trim().toLowerCase());
     if (!l || !verificarSenha(senha, l.senha_hash)) return null;
     return this.conta(email)!;
+  }
+
+  /**
+   * Entrada com e-mail e senha, com bloqueio: depois de 5 senhas erradas seguidas, a conta fica
+   * 15 minutos sem entrar com senha (o link de senha nova continua valendo e destrava).
+   */
+  entrarComSenha(email: string, senha: string): { conta: Conta } | { conta: null; bloqueadaAte: string | null } {
+    const e = email.trim().toLowerCase();
+    const l = this.banco.um<{ id: string; senha_hash: string; falhas_entrada: number; bloqueada_ate: string | null }>(
+      'SELECT id, senha_hash, falhas_entrada, bloqueada_ate FROM contas WHERE email = ?',
+      e,
+    );
+    if (!l) return { conta: null, bloqueadaAte: null };
+    const agora = agoraIso();
+    if (l.bloqueada_ate && l.bloqueada_ate > agora) return { conta: null, bloqueadaAte: l.bloqueada_ate };
+    if (verificarSenha(senha, l.senha_hash)) {
+      this.banco.executar('UPDATE contas SET falhas_entrada = 0, bloqueada_ate = NULL WHERE id = ?', l.id);
+      return { conta: this.contaPorId(l.id)! };
+    }
+    const falhas = (l.bloqueada_ate ? 0 : l.falhas_entrada) + 1;
+    const bloqueadaAte = falhas >= TENTATIVAS_ENTRADA ? new Date(Date.now() + MINUTOS_BLOQUEIO * 60_000).toISOString() : null;
+    this.banco.executar('UPDATE contas SET falhas_entrada = ?, bloqueada_ate = ? WHERE id = ?', bloqueadaAte ? 0 : falhas, bloqueadaAte, l.id);
+    return { conta: null, bloqueadaAte };
+  }
+
+  /** Senha nova (link de "Esqueci a senha"): destrava a entrada e confirma o e-mail, que o link provou. */
+  trocarSenha(contaId: string, senha: string) {
+    const agora = agoraIso();
+    this.banco.executar(
+      'UPDATE contas SET senha_hash = ?, falhas_entrada = 0, bloqueada_ate = NULL, email_confirmado_em = COALESCE(email_confirmado_em, ?) WHERE id = ?',
+      hashSenha(senha),
+      agora,
+      contaId,
+    );
+  }
+
+  // ---------------------------------------------------------------- confirmação do e-mail
+
+  /** Gera e guarda um código de 6 dígitos (só o hash fica no banco). O anterior deixa de valer. */
+  novoCodigoEmail(contaId: string): string {
+    const codigo = String(crypto.randomInt(0, 1_000_000)).padStart(6, '0');
+    this.banco.executar(
+      `INSERT INTO codigos_email (conta_id, codigo_hash, expira_em, tentativas_restantes, enviado_em) VALUES (?, ?, ?, ?, ?)
+       ON CONFLICT (conta_id) DO UPDATE SET codigo_hash = excluded.codigo_hash, expira_em = excluded.expira_em,
+         tentativas_restantes = excluded.tentativas_restantes, enviado_em = excluded.enviado_em`,
+      contaId,
+      hash(`${contaId}:${codigo}`),
+      new Date(Date.now() + MINUTOS_CODIGO * 60_000).toISOString(),
+      TENTATIVAS_CODIGO,
+      agoraIso(),
+    );
+    return codigo;
+  }
+
+  codigoEmail(contaId: string): { expiraEm: string; enviadoEm: string; tentativasRestantes: number } | undefined {
+    const l = this.banco.um<{ expira_em: string; enviado_em: string; tentativas_restantes: number }>(
+      'SELECT expira_em, enviado_em, tentativas_restantes FROM codigos_email WHERE conta_id = ?',
+      contaId,
+    );
+    return l ? { expiraEm: l.expira_em, enviadoEm: l.enviado_em, tentativasRestantes: l.tentativas_restantes } : undefined;
+  }
+
+  /** Confere o código: certo, confirma o e-mail; errado, gasta uma tentativa; sem tentativas ou vencido, expirou. */
+  conferirCodigoEmail(contaId: string, codigo: string): ConferenciaCodigo {
+    const l = this.banco.um<{ codigo_hash: string; expira_em: string; tentativas_restantes: number }>(
+      'SELECT codigo_hash, expira_em, tentativas_restantes FROM codigos_email WHERE conta_id = ?',
+      contaId,
+    );
+    if (!l || l.expira_em < agoraIso() || l.tentativas_restantes <= 0) return { ok: false, motivo: 'expirado' };
+    const esperado = Buffer.from(l.codigo_hash);
+    const obtido = Buffer.from(hash(`${contaId}:${codigo.replace(/\D/g, '')}`));
+    if (esperado.length === obtido.length && crypto.timingSafeEqual(esperado, obtido)) {
+      this.banco.executar('DELETE FROM codigos_email WHERE conta_id = ?', contaId);
+      this.banco.executar('UPDATE contas SET email_confirmado_em = ? WHERE id = ?', agoraIso(), contaId);
+      return { ok: true };
+    }
+    const restantes = l.tentativas_restantes - 1;
+    this.banco.executar('UPDATE codigos_email SET tentativas_restantes = ? WHERE conta_id = ?', restantes, contaId);
+    return restantes > 0 ? { ok: false, motivo: 'incorreto', restantes } : { ok: false, motivo: 'expirado' };
+  }
+
+  /** Antes de confirmar, a pessoa pode corrigir o e-mail digitado no cadastro. */
+  trocarEmailNaoConfirmado(contaId: string, novo: string) {
+    const conta = this.contaPorId(contaId);
+    if (!conta || conta.emailConfirmado) throw new Error('Só dá para trocar o e-mail antes de confirmar.');
+    const email = novo.trim().toLowerCase();
+    this.banco.transacao(() => {
+      this.banco.executar('UPDATE contas SET email = ? WHERE id = ?', email, contaId);
+      this.banco.executar('UPDATE vinculos SET email = ? WHERE email = ?', email, conta.email);
+    });
+    for (const e of this.empresasDe(email)) {
+      this.contexto(e.id).banco.executar('UPDATE equipe SET email = ? WHERE lower(email) = ?', email, conta.email);
+    }
+  }
+
+  // ---------------------------------------------------------------- senha nova
+
+  /** Link de uso único, válido por 1 hora. Devolve o token (só o hash fica no banco). */
+  novoLinkSenha(contaId: string): string {
+    const token = tokenAleatorio(32);
+    this.banco.inserir('links_senha', {
+      token_hash: hash(token),
+      conta_id: contaId,
+      expira_em: new Date(Date.now() + MINUTOS_LINK_SENHA * 60_000).toISOString(),
+      usado_em: null,
+      criado_em: agoraIso(),
+    });
+    return token;
+  }
+
+  /** Quando foi pedido o último link desta conta (para o "Reenviar em 60 s"). */
+  ultimoLinkSenha(contaId: string): string | null {
+    return this.banco.um<{ em: string | null }>('SELECT MAX(criado_em) AS em FROM links_senha WHERE conta_id = ?', contaId)?.em ?? null;
+  }
+
+  /** Link válido: conta e validade. Vencido, usado ou desconhecido: undefined. */
+  linkSenha(token: string): { conta: Conta; expiraEm: string } | undefined {
+    const l = this.banco.um<{ conta_id: string; expira_em: string; usado_em: string | null }>(
+      'SELECT conta_id, expira_em, usado_em FROM links_senha WHERE token_hash = ?',
+      hash(token),
+    );
+    if (!l || l.usado_em || l.expira_em < agoraIso()) return undefined;
+    const conta = this.contaPorId(l.conta_id);
+    return conta ? { conta, expiraEm: l.expira_em } : undefined;
+  }
+
+  /** Senha trocada: o link usado e os outros pedidos da mesma conta deixam de valer. */
+  usarLinksSenha(contaId: string) {
+    this.banco.executar('UPDATE links_senha SET usado_em = ? WHERE conta_id = ? AND usado_em IS NULL', agoraIso(), contaId);
   }
 
   temContas(): boolean {
@@ -379,14 +542,48 @@ export class Plataforma {
     );
   }
 
-  /** Saiu da equipe: some do "Trocar de empresa" e as sessões abertas nessa empresa acabam. */
-  desvincular(email: string, empresaId: string) {
+  /**
+   * Saiu da equipe: some do "Trocar de empresa" e as sessões abertas nessa empresa acabam. Com
+   * `aviso`, a pessoa lê o motivo na próxima vez que escolher a empresa.
+   */
+  desvincular(email: string, empresaId: string, aviso?: string) {
     const e = email.trim().toLowerCase();
     this.banco.executar('DELETE FROM vinculos WHERE email = ? AND empresa_id = ?', e, empresaId);
     this.banco.executar(
       'DELETE FROM sessoes WHERE empresa_id = ? AND conta_id IN (SELECT id FROM contas WHERE email = ?)',
       empresaId,
       e,
+    );
+    if (aviso) this.banco.inserir('avisos_conta', { email: e, texto: aviso, criado_em: agoraIso() });
+  }
+
+  /** Avisos guardados para a conta (lidos uma vez só). */
+  lerAvisos(email: string): string[] {
+    const e = email.trim().toLowerCase();
+    const avisos = this.banco.todos<{ texto: string }>('SELECT texto FROM avisos_conta WHERE email = ? ORDER BY id', e).map((l) => l.texto);
+    if (avisos.length) this.banco.executar('DELETE FROM avisos_conta WHERE email = ?', e);
+    return avisos;
+  }
+
+  /** Quando a conta abriu esta empresa pela última vez ("Escolher a empresa"). */
+  ultimoAcesso(email: string, empresaId: string): string | null {
+    return (
+      this.banco.um<{ ultimo_acesso: string | null }>(
+        'SELECT ultimo_acesso FROM vinculos WHERE email = ? AND empresa_id = ?',
+        email.trim().toLowerCase(),
+        empresaId,
+      )?.ultimo_acesso ?? null
+    );
+  }
+
+  private marcarAcesso(contaId: string, empresaId: string) {
+    const agora = agoraIso();
+    this.banco.executar('UPDATE contas SET ultima_empresa_id = ?, ultimo_acesso = ? WHERE id = ?', empresaId, agora, contaId);
+    this.banco.executar(
+      'UPDATE vinculos SET ultimo_acesso = ? WHERE empresa_id = ? AND email = (SELECT email FROM contas WHERE id = ?)',
+      agora,
+      empresaId,
+      contaId,
     );
   }
 
@@ -407,32 +604,32 @@ export class Plataforma {
     const token = tokenAleatorio(32);
     const expira = new Date(Date.now() + DIAS_SESSAO * 86400_000);
     this.banco.inserir('sessoes', { token, conta_id: contaId, empresa_id: empresaId, criado_em: agoraIso(), expira_em: expira.toISOString() });
-    this.banco.executar('UPDATE contas SET ultima_empresa_id = ?, ultimo_acesso = ? WHERE id = ?', empresaId, agoraIso(), contaId);
+    this.marcarAcesso(contaId, empresaId);
     return { token, expira };
   }
 
   lerSessao(token: string | undefined): SessaoPlataforma | undefined {
     if (!token) return undefined;
-    const l = this.banco.um<{ conta_id: string; empresa_id: string; expira_em: string; email: string; nome: string | null; ultima_empresa_id: string | null }>(
-      `SELECT s.conta_id, s.empresa_id, s.expira_em, c.email, c.nome, c.ultima_empresa_id
-       FROM sessoes s JOIN contas c ON c.id = s.conta_id WHERE s.token = ?`,
+    const l = this.banco.um<{ conta_id: string; empresa_id: string; expira_em: string }>(
+      'SELECT conta_id, empresa_id, expira_em FROM sessoes WHERE token = ?',
       token,
     );
-    if (!l || l.expira_em < agoraIso()) return undefined;
-    return {
-      token,
-      conta: { id: l.conta_id, email: l.email, nome: l.nome, ultimaEmpresaId: l.ultima_empresa_id },
-      empresaId: l.empresa_id,
-    };
+    const conta = l && l.expira_em >= agoraIso() ? this.contaPorId(l.conta_id) : undefined;
+    return conta ? { token, conta, empresaId: l!.empresa_id } : undefined;
   }
 
   trocarEmpresa(token: string, contaId: string, empresaId: string) {
     this.banco.executar('UPDATE sessoes SET empresa_id = ? WHERE token = ?', empresaId, token);
-    this.banco.executar('UPDATE contas SET ultima_empresa_id = ? WHERE id = ?', empresaId, contaId);
+    this.marcarAcesso(contaId, empresaId);
   }
 
   encerrarSessao(token: string | undefined) {
     if (token) this.banco.executar('DELETE FROM sessoes WHERE token = ?', token);
+  }
+
+  /** "Sair de todos os outros aparelhos": encerra as sessões da conta. */
+  encerrarSessoesDaConta(contaId: string) {
+    this.banco.executar('DELETE FROM sessoes WHERE conta_id = ?', contaId);
   }
 
   // ---------------------------------------------------------------- encerrar

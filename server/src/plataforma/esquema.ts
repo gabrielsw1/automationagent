@@ -57,4 +57,38 @@ export const MIGRACOES_PLATAFORMA: string[] = [
   );
   CREATE INDEX sessoes_conta ON sessoes(conta_id);
   `,
+  // 2: acesso completo. E-mail confirmado por código (contas antigas já contam como confirmadas),
+  // bloqueio depois de 5 senhas erradas, links de senha nova, último acesso por empresa e avisos
+  // para a próxima entrada ("Seu acesso à Vetor CRM foi removido").
+  `
+  ALTER TABLE contas ADD COLUMN email_confirmado_em TEXT;
+  UPDATE contas SET email_confirmado_em = criado_em;
+  ALTER TABLE contas ADD COLUMN falhas_entrada INTEGER NOT NULL DEFAULT 0;
+  ALTER TABLE contas ADD COLUMN bloqueada_ate TEXT;
+  ALTER TABLE vinculos ADD COLUMN ultimo_acesso TEXT;
+
+  CREATE TABLE codigos_email (
+    conta_id TEXT PRIMARY KEY REFERENCES contas(id) ON DELETE CASCADE,
+    codigo_hash TEXT NOT NULL,
+    expira_em TEXT NOT NULL,
+    tentativas_restantes INTEGER NOT NULL,
+    enviado_em TEXT NOT NULL
+  );
+
+  CREATE TABLE links_senha (
+    token_hash TEXT PRIMARY KEY,
+    conta_id TEXT NOT NULL REFERENCES contas(id) ON DELETE CASCADE,
+    expira_em TEXT NOT NULL,
+    usado_em TEXT,
+    criado_em TEXT NOT NULL
+  );
+  CREATE INDEX links_senha_conta ON links_senha(conta_id);
+
+  CREATE TABLE avisos_conta (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    email TEXT NOT NULL,
+    texto TEXT NOT NULL,
+    criado_em TEXT NOT NULL
+  );
+  `,
 ];

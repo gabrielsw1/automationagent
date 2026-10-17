@@ -62,7 +62,7 @@ export async function criarApp(plataforma: Plataforma, opcoes: OpcoesApp = {}): 
 
   app.setErrorHandler((erro, request, reply) => {
     if (erro instanceof ErroHttp) {
-      const corpo: ErroApi = { erro: erro.codigo, mensagem: erro.message };
+      const corpo: ErroApi = { erro: erro.codigo, mensagem: erro.message, ...erro.extra };
       return reply.status(erro.status).send(corpo);
     }
     if (erro instanceof SemChaveClaude) {

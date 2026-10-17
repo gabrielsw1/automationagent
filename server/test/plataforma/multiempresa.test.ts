@@ -2,13 +2,13 @@
 // dados (console, widget, gravação, links de arquivo, CORS) e o segredo do widget de cada uma.
 import crypto from 'node:crypto';
 import { afterEach, describe, expect, it } from 'vitest';
-import type { Canais, EmpresaPlataforma, Eu, SistemaEmpresa } from '@copiloto/shared';
+import type { Canais, EmpresaPlataforma, Entrada, Eu, SistemaEmpresa } from '@copiloto/shared';
 import { textoAssinado } from '@copiloto/shared';
 import { assinarArquivo } from '../../src/execucao/motor.ts';
 import { assinarUsuario } from '../../src/auth/widget.ts';
 import { Cofre } from '../../src/plataforma/cofre.ts';
 import { empresaDoToken, slugDe, tokenDaEmpresa } from '../../src/plataforma/index.ts';
-import { criarAmbiente, entrarComo, type Ambiente } from '../ajuda.ts';
+import { codigoEnviado, criarAmbiente, entrarComo, type Ambiente } from '../ajuda.ts';
 
 let amb: Ambiente | undefined;
 afterEach(async () => {
@@ -35,8 +35,16 @@ function cookieDe(r: { headers: Record<string, unknown> }): string {
   return String(r.headers['set-cookie']).split(';')[0];
 }
 
+/** Etapa 1 do cadastro. Conta nova já confirma o e-mail com o código que chegou (os testes de acesso cobrem o código). */
 async function cadastrar(a: Ambiente, corpo: object = CADASTRO, cookie?: string) {
-  return a.app.inject({ method: 'POST', url: '/api/console/auth/cadastro', payload: corpo, headers: cookie ? { cookie } : {} });
+  const r = await a.app.inject({ method: 'POST', url: '/api/console/auth/cadastro', payload: corpo, headers: cookie ? { cookie } : {} });
+  const email = (corpo as { pessoa?: { email: string } }).pessoa?.email;
+  const codigo = email && !cookie && r.statusCode === 200 ? codigoEnviado(a, email) : undefined;
+  if (codigo && !r.json<Eu>().emailConfirmado) {
+    const c = await a.app.inject({ method: 'POST', url: '/api/console/auth/email/confirmar', headers: { cookie: cookieDe(r) }, payload: { codigo } });
+    expect(c.statusCode, c.body).toBe(200);
+  }
+  return r;
 }
 
 /** Etapas 1 e 2: cria o espaço e liga o sistema. Devolve o cookie e o "Eu". */
@@ -129,7 +137,7 @@ describe('cadastro de empresa', () => {
       expect(r.statusCode).toBe(400);
       return r.json().mensagem as string;
     };
-    expect(await erro({ pessoa: { ...CADASTRO.pessoa, senha: 'curta1' } })).toBe('A senha precisa de pelo menos 10 caracteres.');
+    expect(await erro({ pessoa: { ...CADASTRO.pessoa, senha: 'curta1' } })).toBe('A senha precisa de pelo menos 8 caracteres.');
     expect(await erro({ pessoa: { ...CADASTRO.pessoa, senha: 'so-letras-aqui' } })).toBe('Use letras e números na senha.');
     expect(await erro({ pessoa: { ...CADASTRO.pessoa, senha: 'Pedra Branca Distribuidora 1' } })).toBe('A senha precisa ser diferente do nome da empresa.');
     expect(await erro({ pessoa: { ...CADASTRO.pessoa, email: 'luana@gmail.com' } })).toBe('Use o e-mail da empresa, por exemplo nome@suaempresa.com.br.');
@@ -201,9 +209,11 @@ describe('isolamento entre empresas', () => {
     expect(empresaDoToken(token)).toBe(amb.ctx.empresa.id);
     const aberto = (await amb.app.inject({ method: 'GET', url: `/api/console/auth/convite/${token}` })).json();
     expect(aberto).toMatchObject({ email: 'luana@pedrabranca.com.br', perfil: 'editor', empresa: 'Horizonte', contaExistente: true });
-    const errada = await amb.app.inject({ method: 'POST', url: `/api/console/auth/convite/${token}`, payload: { senha: 'nao-e-essa-1' } });
-    expect(errada.statusCode).toBe(401);
-    const aceito = await amb.app.inject({ method: 'POST', url: `/api/console/auth/convite/${token}`, payload: { senha: CADASTRO.pessoa.senha } });
+    // Quem já tem conta não cria outra pelo convite: entra e aceita.
+    const criar = await amb.app.inject({ method: 'POST', url: `/api/console/auth/convite/${token}`, payload: { nome: 'Luana', senha: 'outra-senha-9' } });
+    expect(criar.statusCode).toBe(409);
+    expect(criar.json()).toMatchObject({ erro: 'conta_existente', mensagem: 'Você já tem conta com este e-mail. Entre para aceitar o convite.' });
+    const aceito = await pedir(amb, luana, 'POST', `/auth/convite/${token}/aceitar`);
     expect(aceito.statusCode, aceito.body).toBe(200);
     expect(aceito.json<Eu>()).toMatchObject({ perfil: 'editor', empresa: { id: amb.ctx.empresa.id } });
     expect(aceito.json<Eu>().empresas).toHaveLength(2);
@@ -223,9 +233,12 @@ describe('isolamento entre empresas', () => {
     expect((await pedir(amb, luana, 'POST', '/auth/empresa', { empresaId: outra.id })).statusCode).toBe(404);
     expect((await pedir(amb, luana, 'GET', '/auth/eu')).json<Eu>().empresa.id).toBe(pedraId);
 
-    // Entrar de novo volta para a última empresa aberta.
+    // Entrar de novo volta para a última empresa aberta, e a lista vem com ela primeiro.
     const login = await amb.app.inject({ method: 'POST', url: '/api/console/auth/entrar', payload: { email: 'luana@pedrabranca.com.br', senha: CADASTRO.pessoa.senha } });
-    expect(login.json<Eu>().empresa.id).toBe(pedraId);
+    const entrada = login.json<Entrada>();
+    expect(entrada.eu?.empresa.id).toBe(pedraId);
+    expect(entrada.empresas.map((e) => e.nome)).toEqual(['Pedra Branca Distribuidora', 'Horizonte']);
+    expect(entrada.empresas[1]).toMatchObject({ perfil: 'editor', demo: true });
   });
 
   it('quem sai da equipe perde o acesso àquela empresa na hora, e só a ela', async () => {
@@ -234,8 +247,9 @@ describe('isolamento entre empresas', () => {
     const r = await cadastrar(amb);
     const luana = cookieDe(r);
     const { linkConvite } = (await pedir(amb, admin.cookie, 'POST', '/equipe/convites', { email: CADASTRO.pessoa.email, perfil: 'leitor' })).json();
-    const aceito = await amb.app.inject({ method: 'POST', url: `/api/console/auth/convite/${linkConvite.split('/convite/')[1]}`, payload: { senha: CADASTRO.pessoa.senha } });
-    const sessaoHorizonte = cookieDe(aceito);
+    const login = await amb.app.inject({ method: 'POST', url: '/api/console/auth/entrar', payload: { email: CADASTRO.pessoa.email, senha: CADASTRO.pessoa.senha } });
+    const sessaoHorizonte = cookieDe(login);
+    expect((await pedir(amb, sessaoHorizonte, 'POST', `/auth/convite/${linkConvite.split('/convite/')[1]}/aceitar`)).statusCode).toBe(200);
     expect((await pedir(amb, sessaoHorizonte, 'GET', '/auth/eu')).statusCode).toBe(200);
 
     const membro = amb.ctx.banco.um<{ id: string }>('SELECT id FROM equipe WHERE email = ?', CADASTRO.pessoa.email)!;
@@ -254,8 +268,10 @@ describe('isolamento entre empresas', () => {
     amb.plataforma.banco.executar("UPDATE empresas SET status = 'suspensa' WHERE id = ?", empresa.id);
     expect((await pedir(amb, cookie, 'GET', '/auth/eu')).statusCode).toBe(401);
     const login = await amb.app.inject({ method: 'POST', url: '/api/console/auth/entrar', payload: { email: CADASTRO.pessoa.email, senha: CADASTRO.pessoa.senha } });
-    expect(login.statusCode).toBe(403);
-    expect(login.json().erro).toBe('sem_empresa');
+    // A senha confere, mas não há empresa ativa para abrir: nenhuma sessão.
+    expect(login.statusCode).toBe(200);
+    expect(login.json<Entrada>()).toMatchObject({ eu: null, empresas: [] });
+    expect(login.headers['set-cookie']).toBeUndefined();
     const segredo = amb.plataforma.segredoWidget(empresa);
     const widget = await amb.app.inject({
       method: 'POST',

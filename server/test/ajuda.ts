@@ -8,6 +8,7 @@ import { COOKIE_SESSAO } from '../src/auth/console.ts';
 import { lerConfig, type Config } from '../src/config.ts';
 import type { Contexto } from '../src/contexto.ts';
 import { agoraIso } from '../src/db/banco.ts';
+import { CaixaLocal } from '../src/email/index.ts';
 import type { Llm } from '../src/llm/tipos.ts';
 import { LlmSimulado } from '../src/llm/simulado.ts';
 import type { Navegador } from '../src/navegador/tipos.ts';
@@ -149,6 +150,8 @@ export interface Ambiente {
   adaptador: AdaptadorFalso;
   config: Config;
   plataforma: Plataforma;
+  /** E-mails que o servidor "enviou" (ficam na memória, nada sai). */
+  correio: CaixaLocal;
   /** Com `semear`: o que a semente da demonstração gravou. */
   seed?: ResumoSeed;
 }
@@ -171,8 +174,10 @@ export interface OpcoesAmbiente {
 export async function criarAmbiente(opcoes: OpcoesAmbiente = {}): Promise<Ambiente> {
   const config: Config = { ...lerConfig(), llmSimulado: true, dirDados: opcoes.dirDados ?? '/tmp/copiloto-teste-inexistente' };
   const adaptador = (opcoes.adaptador as AdaptadorFalso | undefined) ?? new AdaptadorFalso();
+  const correio = new CaixaLocal(null);
   const plataforma = new Plataforma(config, {
     emMemoria: true,
+    correio,
     llm: (e) => (e.demo && opcoes.llm) || new LlmSimulado(),
     adaptador: (e) => (e.demo ? adaptador : undefined),
     navegador: (e) => (e.demo ? opcoes.navegador : undefined),
@@ -190,7 +195,7 @@ export async function criarAmbiente(opcoes: OpcoesAmbiente = {}): Promise<Ambien
   app.addHook('onClose', async () => {
     for (const c of plataforma.abertos()) if (c !== ctx) await c.navegador.fechar().catch(() => {});
   });
-  return { ctx, app, adaptador, config: ctx.config, plataforma, seed };
+  return { ctx, app, adaptador, config: ctx.config, plataforma, correio, seed };
 }
 
 /**
@@ -211,4 +216,14 @@ export function entrarComo(
   plataforma.vincular(mail, ctx.empresa.id);
   const { token } = plataforma.criarSessao(conta.id, ctx.empresa.id);
   return { cookie: `${COOKIE_SESSAO}=${token}`, membroId: id, email: mail };
+}
+
+/** Último e-mail que o servidor mandou para `para` com este assunto (os testes não enviam nada de verdade). */
+export function ultimoEmail(a: Ambiente, para: string, assunto?: string) {
+  return a.correio.enviados.filter((e) => e.para === para && (!assunto || e.assunto === assunto)).at(-1);
+}
+
+/** O código de 6 dígitos do último e-mail de confirmação mandado para `para`. */
+export function codigoEnviado(a: Ambiente, para: string): string | undefined {
+  return ultimoEmail(a, para, 'Seu código do Copiloto Starta')?.texto.match(/\b(\d{6})\b/)?.[1];
 }
