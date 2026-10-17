@@ -2,7 +2,7 @@
 // Starta (starta_sessao), separado do cookie do console das empresas. O formato dos erros é o
 // mesmo do console, então as telas reaproveitam ErroApiCliente, EstadoErro e useAcao.
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { AcessoSuporteResumo, ErroApi, FaixaUsuarios } from '@copiloto/shared';
+import type { AcessoSuporteResumo, ContatoRecebido, ErroApi } from '@copiloto/shared';
 import { ErroApiCliente } from './cliente.ts';
 import type { EstadoApi } from './hooks.ts';
 
@@ -32,7 +32,10 @@ async function pedir<T>(metodo: string, caminho: string, corpo?: unknown): Promi
   if (!resposta.ok) {
     const e = (dados ?? {}) as Partial<ErroApi>;
     if (resposta.status === 401 && !caminho.startsWith('/auth/')) aoSessaoExpirar();
-    throw new ErroApiCliente(resposta.status, e.erro ?? 'erro', e.mensagem ?? 'Não foi possível concluir. Tente de novo.', e.ref);
+    throw new ErroApiCliente(resposta.status, e.erro ?? 'erro', e.mensagem ?? 'Não foi possível concluir. Tente de novo.', e.ref, {
+      ate: e.ate,
+      restantes: e.restantes,
+    });
   }
   return dados as T;
 }
@@ -74,52 +77,12 @@ export function useApiPlataforma<T>(caminho: string | null): EstadoApi<T> {
   return { dados, erro, carregando, recarregar: carregar, definir: (fn) => setDados((d) => fn(d)) };
 }
 
-// ---------- Contratos que chegam com o PR do site do produto ----------
-// `Plano` e `ContatoRecebido` são de shared/src/publico.ts, que vem num PR paralelo. Até ele chegar,
-// estes tipos espelham só os campos que a Plataforma usa; depois, troque pelos de @copiloto/shared.
-
-/** Plano da tabela de planos (GET /planos). Preços em centavos; null é "Sob consulta". */
-export interface PlanoStarta {
-  id: string;
-  nome: string;
-  ordem: number;
-  descricao: string;
-  usuariosMin: number;
-  usuariosMax: number | null;
-  creditosIncluidos: number | null;
-  precoMensalCentavos: number | null;
-  taxaImplantacaoCentavos: number | null;
-  precoCreditoExtraCentavos: number | null;
-  atualizadoEm: string;
-}
-
-export type PrecosPlanoStarta = Pick<PlanoStarta, 'precoMensalCentavos' | 'taxaImplantacaoCentavos' | 'precoCreditoExtraCentavos'>;
-
-export type OrigemContato = 'demonstracao' | 'vendas' | 'piloto';
-
-export const ROTULO_ORIGEM: Record<OrigemContato, string> = {
-  demonstracao: 'Agendar demonstração',
-  vendas: 'Falar com vendas',
-  piloto: 'Começar piloto',
-};
-
-/** Pedido de contato vindo do site do produto. */
-export interface ContatoSite {
-  id: string;
-  nome: string;
-  email: string;
-  empresa: string;
-  telefone: string | null;
-  faixa: FaixaUsuarios;
-  mensagem: string | null;
-  origem: OrigemContato;
-  criadoEm: string;
-}
+// ---------- Respostas sem tipo próprio no shared ----------
 
 /** GET /suporte */
 export interface SuportePlataforma {
   acessos: AcessoSuporteResumo[];
-  contatos: ContatoSite[];
+  contatos: ContatoRecebido[];
   desde: string;
 }
 

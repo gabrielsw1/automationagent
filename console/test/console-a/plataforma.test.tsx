@@ -2,7 +2,7 @@
 // números da API, filtros, busca, painel da empresa, "Entrar como suporte", "Nova empresa" e preços.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
-import type { DetalheEmpresaStarta, EuStarta, LinhaEmpresaStarta, PainelEmpresas, SaudeFluxo } from '@copiloto/shared';
+import type { DetalheEmpresaStarta, EuStarta, LinhaEmpresaStarta, PainelEmpresas, Plano, SaudeFluxo, UsoPlataforma } from '@copiloto/shared';
 import { recarregar } from '../../src/componentes/sessao.tsx';
 import AreaPlataforma from '../../src/paginas/plataforma/AreaPlataforma.tsx';
 import { campoParaCentavos, centavosParaCampo } from '../../src/paginas/plataforma/Configuracoes.tsx';
@@ -23,6 +23,7 @@ function linha(p: Partial<LinhaEmpresaStarta>): LinhaEmpresaStarta {
     id: 'emp_x',
     nome: 'X',
     iniciais: 'X',
+    cnpj: null,
     demo: false,
     situacao: 'ativo',
     fase: 'ativo',
@@ -60,6 +61,7 @@ const EMPRESAS = [
     id: 'emp_clinica',
     nome: 'Clínica Mais Agenda',
     iniciais: 'CM',
+    cnpj: '11222333000181',
     situacao: 'piloto',
     fase: 'piloto',
     plano: { id: 'piloto', nome: 'Piloto' },
@@ -98,10 +100,10 @@ const SAUDE: SaudeFluxo[] = [
 const DETALHE: DetalheEmpresaStarta = {
   ...EMPRESAS[1],
   dominio: 'agenda.clinicamais.com.br',
-  cnpj: '11222333000181',
   faixaUsuarios: 'ate_200',
   limiteUsuarios: 200,
   acesso: 'sessao',
+  conector: 'tela',
   adminEmpresa: { nome: 'Patrícia Nunes', email: 'patricia@clinicamais.com.br' },
   criadoEm: '2026-09-20T12:00:00.000Z',
   metaTarefas: 5,
@@ -206,6 +208,11 @@ describe('Plataforma Starta › Empresas clientes', () => {
     fireEvent.change(busca, { target: { value: 'Gabriel' } });
     await waitFor(() => expect(within(tabela()).getByText('Horizonte')).toBeTruthy());
     expect(within(tabela()).getAllByRole('row')).toHaveLength(2);
+    // E pelo CNPJ, com ou sem pontuação.
+    fireEvent.change(busca, { target: { value: '11.222.333' } });
+    await waitFor(() => expect(within(tabela()).getByText('Clínica Mais Agenda')).toBeTruthy());
+    expect(within(tabela()).getAllByRole('row')).toHaveLength(2);
+    expect(busca.getAttribute('placeholder')).toBe('Buscar empresa, CNPJ ou responsável');
     fireEvent.change(busca, { target: { value: 'nada disso' } });
     expect(await within(tabela()).findByText('Nenhuma empresa encontrada para “nada disso”.')).toBeTruthy();
   });
@@ -334,7 +341,7 @@ describe('Plataforma Starta › Configurações', () => {
   });
 
   it('salva os preços do plano em centavos', async () => {
-    const plano = {
+    const plano: Plano = {
       id: 'piloto',
       nome: 'Piloto',
       ordem: 1,
@@ -345,6 +352,9 @@ describe('Plataforma Starta › Configurações', () => {
       precoMensalCentavos: null,
       taxaImplantacaoCentavos: null,
       precoCreditoExtraCentavos: 40,
+      notaPreco: 'por mês',
+      destaques: [],
+      botao: 'cadastro',
       atualizadoEm: '2026-10-10T12:00:00.000Z',
     };
     const { pedidos } = abrirPlataforma('/plataforma/configuracoes?aba=planos', {
@@ -358,5 +368,35 @@ describe('Plataforma Starta › Configurações', () => {
     fireEvent.click(within(cartao).getByRole('button', { name: 'Salvar preços' }));
     expect(await screen.findByText('Preços do plano Piloto salvos.')).toBeTruthy();
     expect(pedidos.find((p) => p.metodo === 'PUT')?.corpo).toEqual({ precoMensalCentavos: 199000 });
+  });
+});
+
+describe('Plataforma Starta › painel e uso', () => {
+  it('empresa ligada pela API mostra o acesso certo', async () => {
+    abrirPlataforma('/plataforma?empresa=emp_clinica', {
+      'GET /api/plataforma/empresas/emp_clinica': { ...DETALHE, conector: 'api', acesso: 'nenhum' },
+    });
+    const painel = await screen.findByRole('complementary', { name: 'Clínica Mais Agenda' });
+    expect(await within(painel).findByText('Pela API do sistema')).toBeTruthy();
+    expect(within(painel).queryByText('Sem login')).toBeNull();
+  });
+
+  it('Uso e custos marca a demonstração pela linha do uso e troca o período', async () => {
+    const valores = { execucoes: 3010, creditos: 3490, creditosRoteiro: 2600, creditosConserto: 890, custoIa: 41.2, custoNavegador: 12.5, receitaCreditos: null };
+    const uso: UsoPlataforma = {
+      desde: '2026-09-17T15:00:00.000Z',
+      ate: '2026-10-17T15:00:00.000Z',
+      // A demonstração vem marcada no próprio uso, mesmo fora da lista de empresas.
+      empresas: [{ empresaId: 'emp_outra_demo', nome: 'Demo Avulsa', demo: true, ...valores }],
+      total: valores,
+    };
+    const { pedidos } = abrirPlataforma('/plataforma/uso', { 'GET /api/plataforma/uso': uso });
+    const tabelaUso = await screen.findByRole('table', { name: 'Uso e custos por empresa' });
+    const linhaDemo = within(tabelaUso).getByRole('link', { name: 'Demo Avulsa' }).closest('tr')!;
+    expect(within(linhaDemo).getByText('Demonstração')).toBeTruthy();
+    expect(within(linhaDemo).getByText('3.490')).toBeTruthy();
+    expect(pedidos.some((p) => p.caminho === '/api/plataforma/uso?dias=30')).toBe(true);
+    fireEvent.click(screen.getByRole('button', { name: '7 dias' }));
+    await waitFor(() => expect(pedidos.some((p) => p.caminho === '/api/plataforma/uso?dias=7')).toBe(true));
   });
 });

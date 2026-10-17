@@ -39,6 +39,13 @@ const semAcento = (s: string) =>
     .replace(/[̀-ͯ]/g, '')
     .toLowerCase();
 
+/** Busca por nome, responsável, plano ou CNPJ (com ou sem pontuação; a partir de 3 dígitos). */
+function achou(e: LinhaEmpresaStarta, busca: string): boolean {
+  if ([e.nome, e.responsavel?.nome ?? '', e.plano?.nome ?? ''].some((t) => semAcento(t).includes(busca))) return true;
+  const digitos = busca.replace(/\D/g, '');
+  return digitos.length >= 3 && /^[\d./\s-]+$/.test(busca) && !!e.cnpj?.includes(digitos);
+}
+
 function Resumo({ resumo }: { resumo: ResumoPlataforma }) {
   const alem = [
     resumo.emImplantacao ? `${fmt.numero(resumo.emImplantacao)} em implantação` : null,
@@ -123,7 +130,7 @@ function TabelaEmpresas({ linhas, aberta, aoAbrir, vazio }: { linhas: LinhaEmpre
               Tarefas ativas
             </th>
             <th scope="col" className="t-right">
-              Execuções 30 d
+              Execuções 30&nbsp;d
             </th>
             <th scope="col" className="t-right">
               Sucesso
@@ -236,13 +243,7 @@ export default function Empresas() {
     for (const e of empresas ?? []) for (const f of Object.keys(FILTROS) as Filtro[]) if (FILTROS[f](e)) c[f]++;
     return c;
   }, [empresas]);
-  const linhas = useMemo(
-    () =>
-      (empresas ?? []).filter(
-        (e) => FILTROS[filtro](e) && (!busca || semAcento(e.nome).includes(busca) || semAcento(e.responsavel?.nome ?? '').includes(busca) || semAcento(e.plano?.nome ?? '').includes(busca)),
-      ),
-    [empresas, filtro, busca],
-  );
+  const linhas = useMemo(() => (empresas ?? []).filter((e) => FILTROS[filtro](e) && (!busca || achou(e, busca))), [empresas, filtro, busca]);
   const linhaAberta = empresas?.find((e) => e.id === aberta);
 
   return (

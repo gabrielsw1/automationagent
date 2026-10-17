@@ -1,7 +1,7 @@
 // Peças comuns das telas da Plataforma Starta: selo da situação da empresa, etapas da implantação,
 // link para copiar com o aviso de como o e-mail saiu, e formatação de dinheiro e listas.
 import { useState, type ReactNode } from 'react';
-import { fmt, ROTULO_SITUACAO, type EtapaImplantacao, type ModoAcesso, type SituacaoEmpresa } from '@copiloto/shared';
+import { fmt, ROTULO_SITUACAO, type ConectorSistema, type EtapaImplantacao, type ModoAcesso, type SituacaoEmpresa } from '@copiloto/shared';
 import { Botao } from '../../componentes/Botao.tsx';
 import { Icone } from '../../componentes/icones.tsx';
 
@@ -31,11 +31,16 @@ export function SeloDemo() {
   );
 }
 
-export const ROTULO_ACESSO: Record<ModoAcesso, string> = {
+const ROTULO_ACESSO: Record<ModoAcesso, string> = {
   sessao: 'Sessão de quem pede',
   conta: 'Conta de serviço',
   nenhum: 'Sem login',
 };
+
+/** "Acesso ao sistema" no painel: pela API não há login de pessoa; pelas telas, o modo de acesso. */
+export function rotuloAcesso(e: { conector: ConectorSistema; acesso: ModoAcesso }): string {
+  return e.conector === 'api' ? 'Pela API do sistema' : ROTULO_ACESSO[e.acesso];
+}
 
 /** "A", "A e B", "A, B e C". */
 export function listaE(itens: string[]): string {

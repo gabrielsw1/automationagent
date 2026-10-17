@@ -2,16 +2,15 @@
 // do navegador, a receita dos créditos quando o plano tem preço e a margem. Período escolhido.
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { CREDITOS_COM_CONSERTO, CREDITOS_POR_ROTEIRO, fmt, type UsoEmpresa, type UsoPlataforma } from '@copiloto/shared';
+import { CREDITOS_COM_CONSERTO, CREDITOS_POR_ROTEIRO, fmt, type UsoPlataforma } from '@copiloto/shared';
 import { useApiPlataforma } from '../../api/plataforma.ts';
 import { Carregando, EstadoErro } from '../../componentes/estados.tsx';
 import { CabecalhoPagina, Segmentado } from '../../componentes/formulario.tsx';
-import { useEmpresasDemo } from './contexto.tsx';
 import { reais, SeloDemo } from './pecas.tsx';
 
 type Dias = '7' | '30' | '90';
 
-type Valores = Omit<UsoEmpresa, 'empresaId' | 'nome'>;
+type Valores = UsoPlataforma['total'];
 
 const margem = (u: Valores): number | null => (u.receitaCreditos === null ? null : Math.round((u.receitaCreditos - u.custoIa - u.custoNavegador) * 100) / 100);
 
@@ -86,7 +85,6 @@ function Resumo({ uso }: { uso: UsoPlataforma }) {
 export default function UsoCustos() {
   const [dias, setDias] = useState<Dias>('30');
   const uso = useApiPlataforma<UsoPlataforma>(`/uso?dias=${dias}`);
-  const demo = useEmpresasDemo();
   const dados = uso.dados;
 
   return (
@@ -160,7 +158,7 @@ export default function UsoCustos() {
                           <Link to={`/plataforma?empresa=${encodeURIComponent(u.empresaId)}`} className="strong">
                             {u.nome}
                           </Link>
-                          {demo.has(u.empresaId) ? <SeloDemo /> : null}
+                          {u.demo ? <SeloDemo /> : null}
                         </span>
                       </td>
                       <Celulas u={u} />

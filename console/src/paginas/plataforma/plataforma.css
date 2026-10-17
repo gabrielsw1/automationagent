@@ -10,7 +10,8 @@
 .cp-reticencias { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cp-topbar { position: sticky; top: 0; z-index: 20; flex-wrap: nowrap; }
 .cp-topbar .crumbs { min-width: 0; white-space: nowrap; }
-.cp-busca-topo { width: 280px; }
+/* 320 px: o texto "Buscar empresa, CNPJ ou responsável" cabe inteiro (com 280 px, como no design, cortava); encolhe em telas médias. */
+.cp-busca-topo { flex: 0 1 320px; min-width: 200px; }
 .cp-so-celular { display: none !important; }
 
 /* Celular: como no design, o menu vira a faixa de cima (rola de lado) e a busca desce para a página. */

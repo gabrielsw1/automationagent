@@ -30,6 +30,8 @@ const Equipe = lazy(() => import('./paginas/equipe/Equipe.tsx'));
 const Sistema = lazy(() => import('./paginas/sistema/Sistema.tsx'));
 // Plataforma Starta: moldura e sessão próprias (a equipe Starta), fora do console das empresas.
 const AreaPlataforma = lazy(() => import('./paginas/plataforma/AreaPlataforma.tsx'));
+const EntrarPlataforma = lazy(() => import('./paginas/plataforma/EntrarPlataforma.tsx'));
+const AtivarPlataforma = lazy(() => import('./paginas/plataforma/AtivarPlataforma.tsx'));
 
 function AreaLogada() {
   const navegar = useNavigate();
@@ -118,6 +120,8 @@ export default function App() {
       <ProvedorToast>
         <Suspense fallback={<Carregando />}>
           <Routes>
+            <Route path="/plataforma/entrar" element={<EntrarPlataforma />} />
+            <Route path="/plataforma/ativar/:token" element={<AtivarPlataforma />} />
             <Route path="/plataforma/*" element={<AreaPlataforma />} />
             <Route path="/entrar" element={<Entrar />} />
             <Route path="/entrar/empresa" element={<EscolherEmpresa />} />

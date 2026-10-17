@@ -13,7 +13,7 @@ import { ItemMenu, Menu } from '../../componentes/Menu.tsx';
 import { Confirmar } from '../../componentes/Modal.tsx';
 import { useToast } from '../../componentes/Toast.tsx';
 import { ModalAcompanhamento, ModalRegravar, ModalSuporte } from './ModaisEmpresa.tsx';
-import { Etapas, plural, ROTULO_ACESSO, SeloDemo } from './pecas.tsx';
+import { Etapas, plural, rotuloAcesso, SeloDemo } from './pecas.tsx';
 
 function desde(e: Pick<LinhaEmpresaStarta, 'situacao' | 'faseDesde' | 'suspensaEm'>): string {
   const quando = e.situacao === 'pausado' ? e.suspensaEm : e.faseDesde;
@@ -82,7 +82,7 @@ function Conteudo({ d }: { d: DetalheEmpresaStarta }) {
         <dt>Admin na empresa</dt>
         <dd title={d.adminEmpresa?.email}>{d.adminEmpresa?.nome ?? <span className="muted cp-peso-normal">Ainda sem Admin ativo</span>}</dd>
         <dt>Acesso ao sistema</dt>
-        <dd>{ROTULO_ACESSO[d.acesso]}</dd>
+        <dd>{rotuloAcesso(d)}</dd>
         <dt>Usuários</dt>
         <dd className="num">{d.limiteUsuarios !== null ? `${fmt.numero(d.usuarios)} de ${fmt.numero(d.limiteUsuarios)}` : fmt.numero(d.usuarios)}</dd>
       </dl>
