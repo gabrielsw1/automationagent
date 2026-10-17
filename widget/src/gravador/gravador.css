@@ -1,0 +1,27 @@
+/* Barra de gravação de fluxos (dentro do Shadow DOM do widget). Só var(--token). */
+:host { all: initial; }
+.cp-gravador {
+  position: fixed; top: var(--s-4); left: 50%; transform: translateX(-50%); z-index: 2147483002;
+  display: flex; flex-direction: column; gap: var(--s-1); align-items: stretch;
+  width: max-content; max-width: calc(100vw - 32px);
+  padding: var(--s-2) var(--s-2) var(--s-2) var(--s-4);
+  background: var(--white); color: var(--ink-900); border: 1px solid var(--line-strong);
+  border-radius: var(--r-xl); box-shadow: var(--sh-lg);
+  font-family: var(--font-sans); font-size: var(--fs-14); line-height: 1.4;
+  animation: cp-grav-entrar .18s ease-out;
+}
+.cp-grav-linha { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; }
+.cp-grav-ponto { width: 10px; height: 10px; border-radius: 50%; background: var(--danger-500); flex: none; animation: pulse 1.2s infinite; }
+.cp-grav-titulo { display: inline-flex; align-items: center; gap: 2px; min-width: 0; }
+.cp-grav-nome { color: var(--ink-500); max-width: 240px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cp-grav-passos { color: var(--ink-500); font-variant-numeric: tabular-nums; margin-right: var(--s-1); }
+.cp-grav-pergunta { max-width: 320px; }
+.cp-grav-dica { margin: 0; font-size: var(--fs-12); color: var(--ink-500); padding-right: var(--s-2); }
+.cp-grav-erro { margin: 0; font-size: var(--fs-12); font-weight: 600; color: var(--danger-700); padding-right: var(--s-2); }
+@keyframes cp-grav-entrar { from { opacity: 0; transform: translate(-50%, -6px); } to { opacity: 1; transform: translate(-50%, 0); } }
+@media (max-width: 480px) {
+  .cp-gravador { left: var(--s-4); right: var(--s-4); transform: none; width: auto; animation: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .cp-gravador, .cp-grav-ponto { animation: none; }
+}
