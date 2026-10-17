@@ -3,21 +3,21 @@
 import type { FastifyPluginAsync } from 'fastify';
 import { z } from 'zod';
 import { exigir } from '../../auth/console.ts';
+import { ctxDe } from '../../contexto.ts';
 import { criarTokenWidget } from '../../auth/widget.ts';
 import { naoEncontrado, pedidoInvalido } from '../../util/erros.ts';
 
 const Pedido = z.object({ usuarioId: z.string().min(1) });
 
 const rotas: FastifyPluginAsync = async (app) => {
-  const { adaptador, config } = app.ctx;
-
   app.post('/token', { preHandler: exigir('ver') }, async (request) => {
+    const { adaptador, config, empresa } = ctxDe(request);
     const r = Pedido.safeParse(request.body);
     if (!r.success) throw pedidoInvalido('Escolha um usuário do sistema para simular.');
     const usuario = await adaptador.buscarUsuario(r.data.usuarioId);
     if (!usuario) throw naoEncontrado('Usuário do sistema');
     return {
-      token: criarTokenWidget({ u: usuario.id, t: 1 }, config.segredoSessao, 4),
+      token: criarTokenWidget({ e: empresa.id, u: usuario.id, t: 1 }, config.segredoSessao, 4),
       usuario,
     };
   });

@@ -1,34 +1,135 @@
-// Dados do sistema anfitrião para o console: usuários (pré-visualização "Como Ana Ribeiro"),
-// perfis ("Quem pode executar") e rotas da API (ficha da tarefa, "Executar via API").
+// O sistema da empresa no console: como o copiloto entra nele (endereço, conta de serviço, perfis),
+// usuários (pré-visualização "Como Ana Ribeiro"), perfis ("Quem pode executar") e rotas da API
+// (ficha da tarefa, "Executar via API").
 import type { FastifyPluginAsync } from 'fastify';
-import type { UsuarioSistema } from '@copiloto/shared';
-import { exigir } from '../../auth/console.ts';
-import { ErroHttp } from '../../util/erros.ts';
+import { z } from 'zod';
+import type { SistemaEmpresa, SistemaEmpresaPedido, UsuarioSistema } from '@copiloto/shared';
+import { exigir, membro } from '../../auth/console.ts';
+import { ctxDe, type Contexto } from '../../contexto.ts';
+import type { SistemaGuardado } from '../../plataforma/index.ts';
+import { ErroHttp, pedidoInvalido } from '../../util/erros.ts';
+import { UrlSistema } from './auth.ts';
+
+const Perfil = z.string().trim().min(1).max(50, 'Cada perfil pode ter até 50 caracteres.').regex(/^[^,\n]+$/, 'Perfil não pode ter vírgula.');
+
+const Pedido = z
+  .object({
+    nome: z.string().trim().min(2, 'Diga como a equipe chama o sistema.').max(60, 'O nome do sistema pode ter até 60 caracteres.'),
+    url: UrlSistema,
+    acesso: z.object({
+      modo: z.enum(['nenhum', 'conta']),
+      urlLogin: z.string().trim().max(500),
+      usuario: z.string().trim().max(200),
+      senha: z.string().max(500).optional(),
+    }),
+    perfis: z.array(Perfil).max(50, 'Use no máximo 50 perfis.'),
+  })
+  .superRefine((d, c) => {
+    if (d.acesso.modo !== 'conta') return;
+    if (!d.acesso.urlLogin) c.addIssue({ code: 'custom', message: 'Diga em que página o copiloto entra no sistema.' });
+    else {
+      try {
+        new URL(d.acesso.urlLogin, d.url);
+      } catch {
+        c.addIssue({ code: 'custom', message: 'O endereço da página de login não é válido.' });
+      }
+    }
+    if (!d.acesso.usuario) c.addIssue({ code: 'custom', message: 'Diga o usuário da conta do copiloto.' });
+  }) satisfies z.ZodType<SistemaEmpresaPedido>;
+
+function sistemaDe(ctx: Contexto): SistemaEmpresa {
+  const { sistema, demo } = ctx.empresa;
+  return {
+    nome: sistema.nome,
+    url: sistema.conector === 'api' ? ctx.adaptador.urlBase : sistema.url,
+    conector: sistema.conector,
+    acesso: {
+      modo: sistema.acesso.modo,
+      urlLogin: sistema.acesso.urlLogin,
+      usuario: sistema.acesso.usuario,
+      temSenha: !!ctx.plataforma.senhaAcesso(ctx.empresa.id),
+    },
+    perfis: sistema.perfis,
+    editavel: !demo && sistema.conector === 'tela',
+  };
+}
 
 const rotas: FastifyPluginAsync = async (app) => {
-  const { adaptador } = app.ctx;
+  const { plataforma } = app;
 
-  const comErro = async <T>(fn: () => Promise<T>): Promise<T> => {
+  const comErro = async <T>(ctx: Contexto, fn: () => Promise<T>): Promise<T> => {
     try {
       return await fn();
     } catch {
-      throw new ErroHttp(502, 'sistema_indisponivel', `Não consegui falar com o ${adaptador.nome} agora.`);
+      throw new ErroHttp(502, 'sistema_indisponivel', `Não consegui falar com o ${ctx.adaptador.nome} agora.`);
     }
   };
 
-  app.get('/usuarios', { preHandler: exigir('ver') }, async (): Promise<UsuarioSistema[]> =>
-    comErro(() => adaptador.listarUsuarios()),
-  );
-  app.get('/perfis', { preHandler: exigir('ver') }, async (): Promise<string[]> =>
-    comErro(() => adaptador.listarPerfis()),
-  );
-  app.get('/rotas', { preHandler: exigir('editar') }, async () => comErro(() => adaptador.descreverApi()));
-  app.get('/conexao', { preHandler: exigir('ver') }, async () => ({
-    ...(await adaptador.verificarConexao()),
-    nome: adaptador.nome,
-    url: app.ctx.config.sistema.urlApi,
-    urlTelas: adaptador.urlBase,
-  }));
+  app.get('/usuarios', { preHandler: exigir('ver') }, async (request): Promise<UsuarioSistema[]> => {
+    const ctx = ctxDe(request);
+    return comErro(ctx, () => ctx.adaptador.listarUsuarios());
+  });
+  app.get('/perfis', { preHandler: exigir('ver') }, async (request): Promise<string[]> => {
+    const ctx = ctxDe(request);
+    return comErro(ctx, () => ctx.adaptador.listarPerfis());
+  });
+  app.get('/rotas', { preHandler: exigir('editar') }, async (request) => {
+    const ctx = ctxDe(request);
+    return comErro(ctx, () => ctx.adaptador.descreverApi());
+  });
+  app.get('/conexao', { preHandler: exigir('ver') }, async (request) => {
+    const { adaptador, config } = ctxDe(request);
+    return {
+      ...(await adaptador.verificarConexao()),
+      nome: adaptador.nome,
+      url: config.sistema.urlApi || adaptador.urlBase,
+      urlTelas: adaptador.urlBase,
+    };
+  });
+
+  app.get('/config', { preHandler: exigir('ver') }, async (request): Promise<SistemaEmpresa> => sistemaDe(ctxDe(request)));
+
+  app.put('/config', { preHandler: exigir('administrar') }, async (request): Promise<SistemaEmpresa> => {
+    const ctx = ctxDe(request);
+    const m = membro(request);
+    if (!sistemaDe(ctx).editavel) {
+      throw new ErroHttp(409, 'sistema_fixo', 'Na demonstração o sistema é o Horizonte, configurado no servidor.');
+    }
+    const r = Pedido.safeParse(request.body ?? {});
+    if (!r.success) throw pedidoInvalido(r.error.issues[0]?.message ?? 'Dados inválidos.');
+    const d = r.data;
+    const conta = d.acesso.modo === 'conta';
+    const senhaNova = conta ? d.acesso.senha?.trim() || undefined : null;
+    if (conta && !senhaNova && !plataforma.senhaAcesso(ctx.empresa.id)) throw pedidoInvalido('Digite a senha da conta do copiloto.');
+    const antes = ctx.empresa.sistema;
+    const sistema: SistemaGuardado = {
+      nome: d.nome,
+      url: d.url.replace(/\/+$/, ''),
+      conector: antes.conector,
+      acesso: conta ? { modo: 'conta', urlLogin: d.acesso.urlLogin, usuario: d.acesso.usuario } : { modo: 'nenhum', urlLogin: '', usuario: '' },
+      perfis: [...new Set(d.perfis)],
+    };
+    plataforma.atualizarSistema(ctx.empresa.id, sistema, senhaNova);
+    const mudancas: string[] = [];
+    if (antes.nome !== sistema.nome) mudancas.push(`nome de ${antes.nome} para ${sistema.nome}`);
+    if (antes.url !== sistema.url) mudancas.push(`endereço para ${sistema.url}`);
+    if (antes.acesso.modo !== sistema.acesso.modo) {
+      mudancas.push(conta ? `passou a entrar com a conta ${sistema.acesso.usuario}` : 'deixou de entrar com conta de serviço');
+    } else if (conta && (antes.acesso.usuario !== sistema.acesso.usuario || antes.acesso.urlLogin !== sistema.acesso.urlLogin)) {
+      mudancas.push(`conta de serviço ${sistema.acesso.usuario}`);
+    }
+    if (conta && typeof senhaNova === 'string') mudancas.push('trocou a senha da conta de serviço');
+    if (JSON.stringify(antes.perfis) !== JSON.stringify(sistema.perfis)) mudancas.push('perfis');
+    if (mudancas.length) ctx.auditoria.registrar(m.nome, 'alterou o sistema', sistema.nome, `Mudou ${mudancas.join('; ')}`);
+    return sistemaDe(ctx);
+  });
+
+  /** Abre o navegador do copiloto e entra com a conta de serviço, sem rodar fluxo. */
+  app.post('/testar-acesso', { preHandler: exigir('administrar') }, async (request) => {
+    const { navegador, adaptador } = ctxDe(request);
+    if (!navegador.testarAcesso) return { ok: false, detalhe: `O navegador deste servidor não sabe testar o acesso ao ${adaptador.nome}.` };
+    return navegador.testarAcesso();
+  });
 };
 
 export default rotas;

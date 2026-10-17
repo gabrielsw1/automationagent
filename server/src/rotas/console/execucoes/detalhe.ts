@@ -60,19 +60,21 @@ const ESTADOS_EVENTO: EventoLinhaTempo['estado'][] = ['ok', 'falhou', 'info', 'a
 
 // ---------- Usuários do sistema (para perfis e campos do tipo pessoa), com cache curto ----------
 
-let cacheUsuarios: { em: number; ctx: Contexto; lista: UsuarioSistema[] } | null = null;
+// Um cache por empresa (contexto): com várias empresas alternando, um cache só se apagaria a cada pedido.
+const cacheUsuarios = new WeakMap<Contexto, { em: number; lista: UsuarioSistema[] }>();
 
 async function usuariosDoSistema(ctx: Contexto): Promise<UsuarioSistema[]> {
-  if (cacheUsuarios && cacheUsuarios.ctx === ctx && Date.now() - cacheUsuarios.em < 60_000) return cacheUsuarios.lista;
+  const cache = cacheUsuarios.get(ctx);
+  if (cache && Date.now() - cache.em < 60_000) return cache.lista;
   try {
     const lista = await Promise.race([
       ctx.adaptador.listarUsuarios(),
       new Promise<never>((_, rej) => setTimeout(() => rej(new Error('tempo')), 1500)),
     ]);
-    cacheUsuarios = { em: Date.now(), ctx, lista };
+    cacheUsuarios.set(ctx, { em: Date.now(), lista });
     return lista;
   } catch {
-    return cacheUsuarios?.ctx === ctx ? cacheUsuarios.lista : [];
+    return cacheUsuarios.get(ctx)?.lista ?? [];
   }
 }
 

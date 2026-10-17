@@ -4,7 +4,7 @@ import type { FastifyPluginAsync, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { validarCampo, type Campo, type Fluxo, type PassoFluxo, type TarefaDefinicao } from '@copiloto/shared';
 import { exigir, membro } from '../../auth/console.ts';
-import type { Contexto } from '../../contexto.ts';
+import { ctxDe, type Contexto } from '../../contexto.ts';
 import { aprenderFluxo, pendenciaDe } from '../../navegador/aprender.ts';
 import { Fluxos, publico, type LinhaFluxo } from '../../navegador/fluxos.ts';
 import { apagarPrint, apagarPrintsDoFluxo } from '../../navegador/prints.ts';
@@ -174,44 +174,53 @@ function prepararPassos(passos: z.infer<typeof Passo>[], chaves: Set<string>): P
 const semPrints = (passos: PassoFluxo[]) => JSON.stringify(passos.map(({ printId: _p, pendencia: _q, ...p }) => p));
 
 const rotas: FastifyPluginAsync = async (app) => {
-  const { ctx } = app;
-  const { banco, auditoria, eventos, adaptador, catalogo } = ctx;
-  const fluxos = new Fluxos(banco);
   const testando = new Set<string>();
 
-  const obter = (id: string): LinhaFluxo => {
+  const obter = (fluxos: Fluxos, id: string): LinhaFluxo => {
     const f = fluxos.obter(id);
     if (!f) throw naoEncontrado('Fluxo');
     return f;
   };
   const nomeDe = (request: FastifyRequest) => membro(request).nome;
-  const avisar = (f: LinhaFluxo) => eventos.emitirConsole({ tipo: 'fluxo', fluxoId: f.id, etapa: f.etapa, passos: f.passos.length });
-  const respostaGravacao = (f: LinhaFluxo): RespostaGravacao => ({
+  const avisar = ({ eventos }: Contexto, f: LinhaFluxo) => eventos.emitirConsole({ tipo: 'fluxo', fluxoId: f.id, etapa: f.etapa, passos: f.passos.length });
+  const respostaGravacao = ({ adaptador, config }: Contexto, f: LinhaFluxo): RespostaGravacao => ({
     fluxo: publico(f),
     token: f.tokenGravacao!,
-    urlGravacao: urlDeGravacao(adaptador.urlBase, f.urlInicial ?? '/', f.tokenGravacao!, ctx.config.urlPublica),
+    urlGravacao: urlDeGravacao(adaptador.urlBase, f.urlInicial ?? '/', f.tokenGravacao!, config.urlPublica),
   });
-  const tarefaExiste = (id: string | null | undefined) => {
+  const tarefaExiste = ({ catalogo }: Contexto, id: string | null | undefined) => {
     if (id && !catalogo.obter(id)) throw pedidoInvalido('A tarefa escolhida não existe mais. Escolha outra.');
   };
 
-  app.get('/', { preHandler: exigir('ver') }, async (): Promise<Fluxo[]> => fluxos.listar().map(publico));
+  app.get('/', { preHandler: exigir('ver') }, async (request): Promise<Fluxo[]> => {
+    const ctx = ctxDe(request);
+    return new Fluxos(ctx.banco, ctx.empresa.id).listar().map(publico);
+  });
 
   app.post('/', { preHandler: exigir('editar') }, async (request): Promise<RespostaGravacao> => {
+    const ctx = ctxDe(request);
+    const { auditoria, adaptador } = ctx;
+    const fluxos = new Fluxos(ctx.banco, ctx.empresa.id);
     const r = PedidoCriar.safeParse(request.body);
     if (!r.success) throw pedidoInvalido(primeiraMensagem(r.error, 'Informe o nome do fluxo e a página onde a tarefa começa.'));
-    tarefaExiste(r.data.tarefaId);
+    tarefaExiste(ctx, r.data.tarefaId);
     const urlInicial = caminhoInicial(adaptador.urlBase, r.data.urlInicial, adaptador.nome);
     const f = fluxos.criar({ nome: r.data.nome, tarefaId: r.data.tarefaId ?? null, urlInicial, por: nomeDe(request) });
     auditoria.registrar(nomeDe(request), 'começou a gravar o fluxo', f.nome, `Página inicial ${urlInicial}`);
-    avisar(f);
-    return respostaGravacao(f);
+    avisar(ctx, f);
+    return respostaGravacao(ctx, f);
   });
 
-  app.get<{ Params: { id: string } }>('/:id', { preHandler: exigir('ver') }, async (request): Promise<Fluxo> => publico(obter(request.params.id)));
+  app.get<{ Params: { id: string } }>('/:id', { preHandler: exigir('ver') }, async (request): Promise<Fluxo> => {
+    const ctx = ctxDe(request);
+    return publico(obter(new Fluxos(ctx.banco, ctx.empresa.id), request.params.id));
+  });
 
   app.put<{ Params: { id: string } }>('/:id', { preHandler: exigir('editar') }, async (request): Promise<Fluxo> => {
-    const f = obter(request.params.id);
+    const ctx = ctxDe(request);
+    const { auditoria, adaptador } = ctx;
+    const fluxos = new Fluxos(ctx.banco, ctx.empresa.id);
+    const f = obter(fluxos, request.params.id);
     const r = PedidoAtualizar.safeParse(request.body);
     if (!r.success) throw pedidoInvalido(primeiraMensagem(r.error, 'Os passos do fluxo vieram em formato inválido.'));
     const d = r.data;
@@ -222,7 +231,7 @@ const rotas: FastifyPluginAsync = async (app) => {
     if (f.status === 'gravando' && (d.passos !== undefined || d.camposSugeridos !== undefined)) {
       throw conflito('A gravação ainda está em andamento. Conclua a gravação antes de revisar os passos.');
     }
-    tarefaExiste(d.tarefaId);
+    tarefaExiste(ctx, d.tarefaId);
     const campos: Record<string, unknown> = {};
     if (d.nome !== undefined) campos.nome = d.nome;
     if (d.tarefaId !== undefined) campos.tarefa_id = d.tarefaId;
@@ -242,12 +251,15 @@ const rotas: FastifyPluginAsync = async (app) => {
     if (mudaConteudo) {
       auditoria.registrar(nomeDe(request), 'editou o fluxo', atualizado.nome, d.passos ? `${passos.length} passos` : null);
     }
-    avisar(atualizado);
+    avisar(ctx, atualizado);
     return publico(atualizado);
   });
 
   app.delete<{ Params: { id: string } }>('/:id', { preHandler: exigir('editar') }, async (request) => {
-    const f = obter(request.params.id);
+    const ctx = ctxDe(request);
+    const { banco, auditoria, eventos, catalogo } = ctx;
+    const fluxos = new Fluxos(banco, ctx.empresa.id);
+    const f = obter(fluxos, request.params.id);
     const usando: string[] = [];
     for (const t of catalogo.listar()) {
       const versoes = [catalogo.publicada(t.id), catalogo.rascunho(t.id)].filter(Boolean);
@@ -266,52 +278,66 @@ const rotas: FastifyPluginAsync = async (app) => {
   // ---------- Gravação ----------
 
   app.get<{ Params: { id: string } }>('/:id/gravacao', { preHandler: exigir('editar') }, async (request): Promise<RespostaGravacao> => {
-    const f = obter(request.params.id);
+    const ctx = ctxDe(request);
+    const f = obter(new Fluxos(ctx.banco, ctx.empresa.id), request.params.id);
     if (f.status !== 'gravando' || !f.tokenGravacao) throw conflito('Este fluxo não está em gravação agora.');
-    return respostaGravacao(f);
+    return respostaGravacao(ctx, f);
   });
 
   /** Grava de novo. Num fluxo publicado, cria uma versão nova (a publicada continua valendo). */
   app.post<{ Params: { id: string } }>('/:id/gravar', { preHandler: exigir('editar') }, async (request): Promise<RespostaGravacao> => {
-    let f = obter(request.params.id);
+    const ctx = ctxDe(request);
+    const { banco, auditoria, adaptador } = ctx;
+    const fluxos = new Fluxos(banco, ctx.empresa.id);
+    let f = obter(fluxos, request.params.id);
     const corpo = z.object({ urlInicial: z.string().trim().min(1).max(2000).optional() }).safeParse(request.body ?? {});
     const urlInicial = corpo.success && corpo.data.urlInicial ? caminhoInicial(adaptador.urlBase, corpo.data.urlInicial, adaptador.nome) : undefined;
     if (f.status === 'publicado') f = fluxos.novaVersao(f, nomeDe(request));
     apagarPrintsDoFluxo(banco, ctx.config.dirDados, f.id);
     const regravado = fluxos.regravar(f.id, nomeDe(request), urlInicial);
     auditoria.registrar(nomeDe(request), 'começou a gravar de novo o fluxo', regravado.nome, `versão ${regravado.versao}`);
-    avisar(regravado);
-    return respostaGravacao(regravado);
+    avisar(ctx, regravado);
+    return respostaGravacao(ctx, regravado);
   });
 
   app.post<{ Params: { id: string } }>('/:id/concluir-gravacao', { preHandler: exigir('editar') }, async (request): Promise<Fluxo> => {
-    const f = obter(request.params.id);
+    const ctx = ctxDe(request);
+    const f = obter(new Fluxos(ctx.banco, ctx.empresa.id), request.params.id);
     if (f.status !== 'gravando') throw conflito('Este fluxo não está em gravação.');
     return publico(concluirGravacao(ctx, f));
   });
 
   app.post<{ Params: { id: string } }>('/:id/cancelar-gravacao', { preHandler: exigir('editar') }, async (request): Promise<Fluxo> => {
-    const f = obter(request.params.id);
+    const ctx = ctxDe(request);
+    const { auditoria } = ctx;
+    const fluxos = new Fluxos(ctx.banco, ctx.empresa.id);
+    const f = obter(fluxos, request.params.id);
     if (f.status !== 'gravando') throw conflito('Este fluxo não está em gravação.');
     const atualizado = fluxos.atualizar(f.id, { status: 'rascunho', etapa: 'gravar', eventos_gravados: [], passos: [] });
     auditoria.registrar(nomeDe(request), 'cancelou a gravação do fluxo', f.nome);
-    avisar(atualizado);
+    avisar(ctx, atualizado);
     return publico(atualizado);
   });
 
   app.post<{ Params: { id: string } }>('/:id/nova-versao', { preHandler: exigir('editar') }, async (request): Promise<Fluxo> => {
-    const f = obter(request.params.id);
+    const ctx = ctxDe(request);
+    const { auditoria } = ctx;
+    const fluxos = new Fluxos(ctx.banco, ctx.empresa.id);
+    const f = obter(fluxos, request.params.id);
     if (f.status !== 'publicado') throw conflito('Só um fluxo publicado ganha versão nova. Este ainda é um rascunho: edite direto.');
     const nova = fluxos.novaVersao(f, nomeDe(request));
     auditoria.registrar(nomeDe(request), 'criou uma nova versão do fluxo', nova.nome, `versão ${nova.versao}`);
-    avisar(nova);
+    avisar(ctx, nova);
     return publico(nova);
   });
 
   // ---------- Aprender, testar, publicar ----------
 
   app.post<{ Params: { id: string } }>('/:id/aprender', { preHandler: exigir('editar') }, async (request): Promise<Fluxo> => {
-    const f = obter(request.params.id);
+    const ctx = ctxDe(request);
+    const { auditoria } = ctx;
+    const fluxos = new Fluxos(ctx.banco, ctx.empresa.id);
+    const f = obter(fluxos, request.params.id);
     if (f.status === 'gravando') throw conflito('A gravação ainda está em andamento. Conclua a gravação primeiro.');
     if (f.status === 'publicado') throw conflito('Este fluxo já está publicado. Crie uma nova versão para mudar os passos.');
     if (f.eventosGravados.length === 0) throw conflito('Este fluxo não tem gravação para aprender. Grave a tarefa na tela primeiro.');
@@ -331,24 +357,30 @@ const rotas: FastifyPluginAsync = async (app) => {
       ultimo_teste: null,
     });
     auditoria.registrar(nomeDe(request), 'pediu ao Claude para organizar o fluxo', f.nome, `${r.passos.length} passos`);
-    avisar(atualizado);
+    avisar(ctx, atualizado);
     return publico(atualizado);
   });
 
   app.post<{ Params: { id: string } }>('/:id/criar-tarefa', { preHandler: exigir('editar') }, async (request) => {
-    const f = obter(request.params.id);
+    const ctx = ctxDe(request);
+    const { auditoria, adaptador, catalogo } = ctx;
+    const fluxos = new Fluxos(ctx.banco, ctx.empresa.id);
+    const f = obter(fluxos, request.params.id);
     if (f.tarefaId && catalogo.obter(f.tarefaId)) throw conflito('Este fluxo já está ligado a uma tarefa.');
     if (f.camposSugeridos.length === 0 && f.passos.length === 0) throw conflito('Grave o fluxo antes de criar a tarefa.');
     const definicao = definicaoPadrao(f, adaptador.nome);
     const tarefa = catalogo.criar(definicao, nomeDe(request));
     const atualizado = fluxos.atualizar(f.id, { tarefa_id: tarefa.id });
     auditoria.registrar(nomeDe(request), 'criou a tarefa a partir do fluxo', definicao.nome, `Fluxo “${f.nome}”`);
-    avisar(atualizado);
+    avisar(ctx, atualizado);
     return { fluxo: publico(atualizado), tarefaId: tarefa.id };
   });
 
   app.post<{ Params: { id: string } }>('/:id/testar', { preHandler: exigir('editar') }, async (request, reply): Promise<RespostaTesteFluxo> => {
-    const f = obter(request.params.id);
+    const ctx = ctxDe(request);
+    const { banco, auditoria, adaptador, catalogo } = ctx;
+    const fluxos = new Fluxos(banco, ctx.empresa.id);
+    const f = obter(fluxos, request.params.id);
     const r = PedidoTestar.safeParse(request.body ?? {});
     if (!r.success) throw pedidoInvalido(primeiraMensagem(r.error, 'Informe os valores do teste e o usuário do sistema.'));
     if (f.status === 'gravando') throw conflito('A gravação ainda está em andamento. Conclua a gravação antes de testar.');
@@ -417,7 +449,7 @@ const rotas: FastifyPluginAsync = async (app) => {
       f.nome,
       resultado.ok ? `Deu certo como ${usuario.nome}` : `Falhou no passo ${resultado.passo ?? '-'}: ${resultado.mensagem}`,
     );
-    avisar(atualizado);
+    avisar(ctx, atualizado);
     return {
       fluxo: publico(atualizado),
       resultado: resultado.ok
@@ -446,7 +478,10 @@ const rotas: FastifyPluginAsync = async (app) => {
   });
 
   app.post<{ Params: { id: string } }>('/:id/publicar', { preHandler: exigir('editar') }, async (request) => {
-    const f = obter(request.params.id);
+    const ctx = ctxDe(request);
+    const { auditoria, catalogo } = ctx;
+    const fluxos = new Fluxos(ctx.banco, ctx.empresa.id);
+    const f = obter(fluxos, request.params.id);
     if (f.status === 'gravando') throw conflito('A gravação ainda está em andamento. Conclua, revise e teste antes de publicar.');
     if (f.status === 'publicado') throw conflito('Este fluxo já está publicado.');
     if (f.passos.length === 0) throw conflito('Este fluxo não tem passos. Grave a tarefa na tela primeiro.');
@@ -466,7 +501,7 @@ const rotas: FastifyPluginAsync = async (app) => {
       }
     }
     auditoria.registrar(quem, 'publicou o fluxo', f.nome, tarefa ? `Versão ${f.versao}, ligado ao rascunho da tarefa “${tarefa.nome}”` : `Versão ${f.versao}`);
-    avisar(atualizado);
+    avisar(ctx, atualizado);
     return { fluxo: publico(atualizado), tarefa };
   });
 };

@@ -1,7 +1,6 @@
 // Dados de exemplo: números do painel e da lista de tarefas iguais aos do design, e a numeração
 // das execuções reais continuando depois das de exemplo.
 import { afterEach, describe, expect, it } from 'vitest';
-import { semear } from '../../src/seed/index.ts';
 import { criarAmbiente, type Ambiente } from '../ajuda.ts';
 
 let amb: Ambiente | undefined;
@@ -22,9 +21,8 @@ async function entrar(a: Ambiente): Promise<string> {
 
 describe('seed', () => {
   it('grava 1.284 execuções com as taxas do design e o login de exemplo funciona', async () => {
-    amb = await criarAmbiente();
-    const r = semear(amb.ctx);
-    expect(r.tarefas).toBe(6);
+    amb = await criarAmbiente({ semear: true });
+    expect(amb.seed?.tarefas).toBe(6);
     const cookie = await entrar(amb);
 
     const painel = (await amb.app.inject({ method: 'GET', url: '/api/console/painel?periodo=30d', headers: { cookie } })).json();

@@ -6,30 +6,20 @@ import os from 'node:os';
 import path from 'node:path';
 import type { AddressInfo } from 'node:net';
 import type { EventoGravado } from '@copiloto/shared';
-import { criarApp } from '../../src/app.ts';
-import { lerConfig, type Config } from '../../src/config.ts';
-import { criarContexto, type OpcoesContexto } from '../../src/contexto.ts';
-import { LlmSimulado } from '../../src/llm/simulado.ts';
 import type { AdaptadorSistema, ChamadaApi, SessaoNavegador } from '../../src/adaptadores/tipos.ts';
-import { AdaptadorFalso, type Ambiente } from '../ajuda.ts';
+import { AdaptadorFalso, criarAmbiente, type Ambiente, type OpcoesAmbiente } from '../ajuda.ts';
 
 export function pastaTemporaria(prefixo = 'copiloto-nav-'): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), prefixo));
 }
 
-/** Como `criarAmbiente`, mas com DATA_DIR numa pasta temporária (prints e arquivos de verdade). */
-export async function criarAmbienteNavegador(opcoes: OpcoesContexto & { dirDados?: string } = {}): Promise<Ambiente & { dirDados: string }> {
-  const dirDados = opcoes.dirDados ?? pastaTemporaria();
-  const config: Config = { ...lerConfig(), llmSimulado: true, dirDados };
-  const adaptador = (opcoes.adaptador as AdaptadorFalso | undefined) ?? new AdaptadorFalso();
-  const ctx = criarContexto(config, {
-    arquivoBanco: ':memory:',
-    llm: opcoes.llm ?? new LlmSimulado(),
-    adaptador,
-    navegador: opcoes.navegador,
-  });
-  const app = await criarApp(ctx);
-  return { ctx, app, adaptador, config, dirDados };
+/**
+ * Como `criarAmbiente`, mas com DATA_DIR numa pasta temporária (prints e arquivos de verdade).
+ * `dirDados` devolvido é a pasta da empresa de demonstração, onde ficam prints e arquivos.
+ */
+export async function criarAmbienteNavegador(opcoes: OpcoesAmbiente = {}): Promise<Ambiente & { dirDados: string }> {
+  const amb = await criarAmbiente({ ...opcoes, dirDados: opcoes.dirDados ?? pastaTemporaria() });
+  return { ...amb, dirDados: amb.ctx.config.dirDados };
 }
 
 /** Adaptador falso cujas telas ficam num servidor local (urlBase trocada). */

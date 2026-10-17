@@ -2,13 +2,20 @@
 import type { Guia } from '@copiloto/shared';
 import type { Contexto } from '../contexto.ts';
 
-let cacheConexao: { em: number; ok: boolean; detalhe: string } | null = null;
+// Uma conferência por empresa a cada 30 s (o guia e o resumo pedem a cada tela).
+const cacheConexao = new WeakMap<Contexto, { em: number; ok: boolean; detalhe: string }>();
 
 export async function conexaoSistema(ctx: Contexto): Promise<{ ok: boolean; detalhe: string }> {
-  if (cacheConexao && Date.now() - cacheConexao.em < 30_000) return cacheConexao;
+  const guardada = cacheConexao.get(ctx);
+  if (guardada && Date.now() - guardada.em < 30_000) return guardada;
   const r = await ctx.adaptador.verificarConexao();
-  cacheConexao = { em: Date.now(), ...r };
+  cacheConexao.set(ctx, { em: Date.now(), ...r });
   return r;
+}
+
+/** O sistema da empresa mudou: a próxima tela confere a conexão de novo. */
+export function esquecerConexao(ctx: Contexto) {
+  cacheConexao.delete(ctx);
 }
 
 export async function calcularGuia(ctx: Contexto): Promise<Guia> {
@@ -72,6 +79,6 @@ export async function calcularGuia(ctx: Contexto): Promise<Guia> {
     feitos: passos.filter((p) => p.feito).length,
     total: passos.length,
     passos,
-    sistema: { conectado: conexao.ok, url: ctx.config.sistema.urlApi, nome: adaptador.nome },
+    sistema: { conectado: conexao.ok, url: ctx.config.sistema.urlApi || adaptador.urlBase, nome: adaptador.nome },
   };
 }

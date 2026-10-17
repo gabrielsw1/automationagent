@@ -36,6 +36,87 @@ export interface Eu {
   email: string;
   perfil: PerfilEquipe;
   iniciais: string;
+  /** Empresa aberta no console agora. Cada empresa cliente tem dados, equipe e widget próprios. */
+  empresa: EmpresaResumo;
+  /** Todas as empresas em que esta pessoa está na equipe (para trocar no menu da conta). */
+  empresas: EmpresaResumo[];
+}
+
+// ---------- Empresas (SaaS: cada empresa cliente com o próprio espaço) ----------
+
+export interface EmpresaResumo {
+  id: string;
+  nome: string;
+  /** Empresa de demonstração (Horizonte), com dados de exemplo. */
+  demo: boolean;
+}
+
+/**
+ * Como o copiloto fala com o sistema da empresa:
+ * - `tela`: só pelas telas, com fluxos gravados (padrão para empresas novas; o cliente não abre API).
+ * - `api`: adaptador de API, como o do Horizonte (demonstração).
+ */
+export type ConectorSistema = 'tela' | 'api';
+
+export interface SistemaEmpresa {
+  nome: string;
+  /** Endereço das telas do sistema (onde o widget é instalado e o navegador do copiloto entra). */
+  url: string;
+  conector: ConectorSistema;
+  /** Como o navegador do copiloto entra no sistema para executar fluxos. */
+  acesso: {
+    /** `nenhum`: as telas abrem sem login. `conta`: entra com uma conta de serviço antes de cada fluxo. */
+    modo: 'nenhum' | 'conta';
+    urlLogin: string;
+    usuario: string;
+    /** A senha nunca volta para o console; só se ela já foi guardada. */
+    temSenha: boolean;
+  };
+  /** Perfis de acesso do sistema, para "Quem pode executar". Também entram os vistos no widget. */
+  perfis: string[];
+  /** false na empresa de demonstração, que usa a API do Horizonte. */
+  editavel: boolean;
+}
+
+export interface SistemaEmpresaPedido {
+  nome: string;
+  url: string;
+  acesso: {
+    modo: 'nenhum' | 'conta';
+    urlLogin: string;
+    usuario: string;
+    /** Vazio mantém a senha guardada. */
+    senha?: string;
+  };
+  perfis: string[];
+}
+
+/** Cadastro de uma empresa nova (tela "Criar conta da empresa"). */
+export interface CadastroEmpresaPedido {
+  empresa: { nome: string; sistemaNome: string; sistemaUrl: string };
+  /** Quem cria. Dispensado quando já há sessão: a empresa nova fica com quem está logado. */
+  pessoa?: { nome: string; email: string; senha: string };
+}
+
+export interface PrimeiroAcesso {
+  /** Ninguém tem acesso ainda: a tela de entrada mostra o cadastro da primeira empresa. */
+  precisaCriarAdmin: boolean;
+  demo: boolean;
+  /** Qualquer pessoa pode criar a conta de uma empresa nova (COPILOTO_CADASTRO). */
+  cadastroAberto: boolean;
+}
+
+export interface ConviteAberto {
+  email: string;
+  perfil: PerfilEquipe;
+  empresa: string;
+  /** O e-mail já tem acesso a outra empresa: aceitar pede a senha atual, não uma nova. */
+  contaExistente: boolean;
+}
+
+/** Segredo do widget (só Admin): assina o usuário no snippet. */
+export interface SegredoWidget {
+  segredo: string;
 }
 
 /** Contadores do menu lateral e faixas globais. */
@@ -256,6 +337,11 @@ export interface Canais {
   chavePublica: string;
   urlScript: string;
   instalacao: null | { origem: string; vistoEm: string };
+  /**
+   * `tela`: o snippet leva nome, e-mail e perfis da pessoa (assinados), porque o copiloto não
+   * consulta usuários por API. `api`: só o ID, e o resto vem da API do sistema.
+   */
+  conector: ConectorSistema;
 }
 
 // ---------- Equipe, limites e segurança (C9) ----------

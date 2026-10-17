@@ -6,10 +6,10 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fmt, type TarefaDefinicao, type CampoExibido, type MensagemWidget } from '@copiloto/shared';
-import { hashSenha } from '../auth/senha.ts';
 import type { Banco } from '../db/banco.ts';
 import type { Contexto } from '../contexto.ts';
 import { camposExibidos } from '../execucao/motor.ts';
+import { tokenDaEmpresa, type Empresa, type Plataforma } from '../plataforma/index.ts';
 import { novoId } from '../util/ids.ts';
 import { semearConhecimento } from './conhecimento.ts';
 import { fluxosExemplo } from './fluxos.ts';
@@ -1086,28 +1086,28 @@ function semearConversa(
 
 // ------------------------------------------------------------------ equipe, pedidos, auditoria
 
-function semearEquipe(banco: Banco, agora: number) {
-  const senha = hashSenha(SENHA_PADRAO);
-  const membros: { nome: string | null; email: string; perfil: string; status: string; acesso: number | null; criado: number }[] = [
-    { nome: 'Rafael Lima', email: 'rafael.lima@seusistema.com.br', perfil: 'admin', status: 'ativo', acesso: agora - 2 * MIN, criado: 75 },
-    { nome: 'Júlia Martins', email: 'julia.martins@seusistema.com.br', perfil: 'admin', status: 'ativo', acesso: agora - 3 * HORA, criado: 70 },
-    { nome: 'Camila Souza', email: 'camila.souza@seusistema.com.br', perfil: 'suporte', status: 'ativo', acesso: agora - 70 * MIN, criado: 40 },
-    { nome: 'Bruno Costa', email: 'bruno.costa@seusistema.com.br', perfil: 'leitor', status: 'ativo', acesso: agora - 3 * DIA, criado: 25 },
-    { nome: null, email: 'leticia.prado@seusistema.com.br', perfil: 'suporte', status: 'convidado', acesso: null, criado: 2 },
-  ];
-  for (const m of membros) {
+/** Equipe da demonstração. Quem está ativo entra com SENHA_PADRAO (conta da plataforma). */
+const EQUIPE_DEMO: { nome: string | null; email: string; perfil: string; status: string; acesso: number | null; criado: number }[] = [
+  { nome: 'Rafael Lima', email: 'rafael.lima@seusistema.com.br', perfil: 'admin', status: 'ativo', acesso: 2 * MIN, criado: 75 },
+  { nome: 'Júlia Martins', email: 'julia.martins@seusistema.com.br', perfil: 'admin', status: 'ativo', acesso: 3 * HORA, criado: 70 },
+  { nome: 'Camila Souza', email: 'camila.souza@seusistema.com.br', perfil: 'suporte', status: 'ativo', acesso: 70 * MIN, criado: 40 },
+  { nome: 'Bruno Costa', email: 'bruno.costa@seusistema.com.br', perfil: 'leitor', status: 'ativo', acesso: 3 * DIA, criado: 25 },
+  { nome: null, email: 'leticia.prado@seusistema.com.br', perfil: 'suporte', status: 'convidado', acesso: null, criado: 2 },
+];
+
+function semearEquipe(ctx: Contexto, agora: number) {
+  for (const m of EQUIPE_DEMO) {
     const convidado = m.status === 'convidado';
-    banco.inserir('equipe', {
+    ctx.banco.inserir('equipe', {
       id: novoId('mbr'),
       nome: m.nome,
       email: m.email,
       perfil: m.perfil,
       status: m.status,
-      senha_hash: convidado ? null : senha,
-      convite_token: convidado ? crypto.randomBytes(18).toString('base64url') : null,
+      convite_token: convidado ? tokenDaEmpresa(ctx.empresa.id, 18) : null,
       convite_enviado_em: convidado ? iso(agora - 2 * DIA) : null,
       convite_expira_em: convidado ? iso(agora + 5 * DIA) : null,
-      ultimo_acesso: m.acesso ? iso(m.acesso) : null,
+      ultimo_acesso: m.acesso ? iso(agora - m.acesso) : null,
       criado_em: iso(agora - m.criado * DIA),
     });
   }
@@ -1194,12 +1194,48 @@ export function semear(ctx: Contexto, opcoes: { agora?: Date; semente?: number }
   const a = aleatorio(opcoes.semente ?? 20431);
   const b = aleatorio((opcoes.semente ?? 20431) + 1);
   return ctx.banco.transacao(() => {
-    semearEquipe(ctx.banco, agora);
+    semearEquipe(ctx, agora);
     const tarefas = semearTarefas(ctx.banco, agora);
     const execucoes = semearExecucoes(ctx, tarefas, agora, a, b);
     semearPedidos(ctx.banco, agora, a);
     semearAuditoria(ctx.banco, agora, tarefas);
     const conhecimento = semearConhecimento(ctx.banco, new Date(agora));
-    return { equipe: 5, tarefas: tarefas.size, execucoes, fontes: conhecimento.fontes };
+    return { equipe: EQUIPE_DEMO.length, tarefas: tarefas.size, execucoes, fontes: conhecimento.fontes };
   });
+}
+
+/** Plataforma sem nenhuma empresa: primeiro início, precisa de seed. */
+export function plataformaVazia(plataforma: Plataforma): boolean {
+  return plataforma.listarEmpresas().length === 0;
+}
+
+/**
+ * Cria a empresa de demonstração (o Horizonte, ligado pela API do sistema de exemplo), grava os
+ * dados de exemplo no banco dela e cria as contas da equipe com SENHA_PADRAO.
+ */
+export function semearPlataforma(
+  plataforma: Plataforma,
+  opcoes: { agora?: Date; semente?: number } = {},
+): ResumoSeed & { empresa: Empresa } {
+  const { config } = plataforma;
+  const empresa = plataforma.criarEmpresa({
+    nome: config.sistema.nome,
+    demo: true,
+    chavePublica: process.env.WIDGET_CHAVE_PUBLICA || 'pk_local_horizonte',
+    sistema: {
+      nome: config.sistema.nome,
+      url: config.sistema.urlBase,
+      conector: 'api',
+      acesso: { modo: 'nenhum', urlLogin: '', usuario: '' },
+      perfis: [],
+    },
+  });
+  const ctx = plataforma.contexto(empresa.id);
+  const resumo = semear(ctx, opcoes);
+  for (const m of EQUIPE_DEMO) {
+    if (m.status !== 'ativo') continue;
+    if (!plataforma.conta(m.email)) plataforma.criarConta({ email: m.email, nome: m.nome, senha: SENHA_PADRAO });
+    plataforma.vincular(m.email, empresa.id);
+  }
+  return { ...resumo, empresa };
 }

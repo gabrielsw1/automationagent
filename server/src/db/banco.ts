@@ -10,17 +10,18 @@ export type Linha = Record<string, unknown>;
 export class Banco {
   readonly db: DatabaseSync;
 
-  constructor(arquivo: string) {
+  /** `migracoes`: as do banco de uma empresa (padrão) ou as do banco da plataforma. */
+  constructor(arquivo: string, migracoes: string[] = MIGRACOES) {
     if (arquivo !== ':memory:') fs.mkdirSync(path.dirname(arquivo), { recursive: true });
     this.db = new DatabaseSync(arquivo);
     this.db.exec('PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON; PRAGMA busy_timeout = 5000;');
-    this.migrar();
+    this.migrar(migracoes);
   }
 
-  private migrar() {
+  private migrar(migracoes: string[]) {
     this.db.exec('CREATE TABLE IF NOT EXISTS _migracoes (n INTEGER PRIMARY KEY, em TEXT NOT NULL)');
     const feitas = new Set(this.todos<{ n: number }>('SELECT n FROM _migracoes').map((r) => r.n));
-    MIGRACOES.forEach((sql, i) => {
+    migracoes.forEach((sql, i) => {
       if (feitas.has(i)) return;
       this.transacao(() => {
         this.db.exec(sql);

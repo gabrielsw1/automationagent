@@ -1,16 +1,19 @@
-// Ajuda para testes do servidor: contexto com banco em memória, modelo simulado e um
-// adaptador falso que imita a API do Horizonte (sem rede).
+// Ajuda para testes do servidor: plataforma com bancos em memória, modelo simulado e uma empresa
+// de demonstração cujo adaptador falso imita a API do Horizonte (sem rede).
 import type { FastifyInstance } from 'fastify';
 import type { PerfilEquipe, UsuarioSistema } from '@copiloto/shared';
 import { cnpjValido, somenteDigitos } from '@copiloto/shared';
 import { criarApp } from '../src/app.ts';
-import { COOKIE_SESSAO, criarSessao } from '../src/auth/console.ts';
-import { hashSenha } from '../src/auth/senha.ts';
+import { COOKIE_SESSAO } from '../src/auth/console.ts';
 import { lerConfig, type Config } from '../src/config.ts';
-import { criarContexto, type Contexto, type OpcoesContexto } from '../src/contexto.ts';
+import type { Contexto } from '../src/contexto.ts';
 import { agoraIso } from '../src/db/banco.ts';
+import type { Llm } from '../src/llm/tipos.ts';
 import { LlmSimulado } from '../src/llm/simulado.ts';
+import type { Navegador } from '../src/navegador/tipos.ts';
 import type { AdaptadorSistema, ChamadaApi, RespostaApi, RotaApi, SessaoNavegador } from '../src/adaptadores/tipos.ts';
+import { Plataforma } from '../src/plataforma/index.ts';
+import { semearPlataforma, type ResumoSeed } from '../src/seed/index.ts';
 import { novoId } from '../src/util/ids.ts';
 
 export const USUARIOS_TESTE: UsuarioSistema[] = [
@@ -140,38 +143,72 @@ export class AdaptadorFalso implements AdaptadorSistema {
 }
 
 export interface Ambiente {
+  /** Contexto da empresa de demonstração (a que os testes usam). */
   ctx: Contexto;
   app: FastifyInstance;
   adaptador: AdaptadorFalso;
   config: Config;
+  plataforma: Plataforma;
+  /** Com `semear`: o que a semente da demonstração gravou. */
+  seed?: ResumoSeed;
 }
 
-/** App completo com banco em memória, modelo simulado e adaptador falso. Feche com `app.close()`. */
-export async function criarAmbiente(opcoes: OpcoesContexto = {}): Promise<Ambiente> {
-  const config: Config = { ...lerConfig(), llmSimulado: true, dirDados: '/tmp/copiloto-teste-inexistente' };
+export interface OpcoesAmbiente {
+  llm?: Llm;
+  adaptador?: AdaptadorSistema;
+  navegador?: Navegador;
+  /** Pasta de dados da plataforma (cada empresa fica em empresas/<id>). */
+  dirDados?: string;
+  /** Cria a demonstração como no primeiro início (semente e contas da equipe com a senha padrão). */
+  semear?: boolean;
+}
+
+/**
+ * App completo com bancos em memória e modelo simulado. A empresa de demonstração usa o
+ * adaptador falso; empresas criadas pelo cadastro nos testes usam os adaptadores de verdade.
+ * Feche com `app.close()`.
+ */
+export async function criarAmbiente(opcoes: OpcoesAmbiente = {}): Promise<Ambiente> {
+  const config: Config = { ...lerConfig(), llmSimulado: true, dirDados: opcoes.dirDados ?? '/tmp/copiloto-teste-inexistente' };
   const adaptador = (opcoes.adaptador as AdaptadorFalso | undefined) ?? new AdaptadorFalso();
-  const ctx = criarContexto(config, {
-    arquivoBanco: ':memory:',
-    llm: opcoes.llm ?? new LlmSimulado(),
-    adaptador,
-    navegador: opcoes.navegador,
+  const plataforma = new Plataforma(config, {
+    emMemoria: true,
+    llm: (e) => (e.demo && opcoes.llm) || new LlmSimulado(),
+    adaptador: (e) => (e.demo ? adaptador : undefined),
+    navegador: (e) => (e.demo ? opcoes.navegador : undefined),
   });
-  const app = await criarApp(ctx);
-  return { ctx, app, adaptador, config };
+  const seed = opcoes.semear ? semearPlataforma(plataforma) : undefined;
+  const empresa =
+    seed?.empresa ??
+    plataforma.criarEmpresa({
+      nome: 'Horizonte',
+      demo: true,
+      sistema: { nome: 'Horizonte', url: config.sistema.urlBase, conector: 'api', acesso: { modo: 'nenhum', urlLogin: '', usuario: '' }, perfis: [] },
+    });
+  const ctx = plataforma.contexto(empresa.id);
+  const app = await criarApp(plataforma);
+  app.addHook('onClose', async () => {
+    for (const c of plataforma.abertos()) if (c !== ctx) await c.navegador.fechar().catch(() => {});
+  });
+  return { ctx, app, adaptador, config: ctx.config, plataforma, seed };
 }
 
-/** Cria um membro da equipe com sessão e devolve o cabeçalho de cookie para `app.inject`. */
-export function entrarComo(ctx: Contexto, perfil: PerfilEquipe = 'admin', nome = 'Rafael Lima'): { cookie: string; membroId: string } {
+/**
+ * Pessoa na equipe da empresa, com conta na plataforma e sessão aberta nessa empresa. Devolve o
+ * cabeçalho de cookie para `app.inject`.
+ */
+export function entrarComo(
+  ctx: Contexto,
+  perfil: PerfilEquipe = 'admin',
+  nome = 'Rafael Lima',
+  email?: string,
+): { cookie: string; membroId: string; email: string } {
   const id = novoId('mbr');
-  ctx.banco.inserir('equipe', {
-    id,
-    nome,
-    email: `${id.toLowerCase()}@teste.com.br`,
-    perfil,
-    status: 'ativo',
-    senha_hash: hashSenha('copiloto123'),
-    criado_em: agoraIso(),
-  });
-  const { token } = criarSessao(ctx.banco, id);
-  return { cookie: `${COOKIE_SESSAO}=${token}`, membroId: id };
+  const mail = email ?? `${id.toLowerCase()}@teste.com.br`;
+  ctx.banco.inserir('equipe', { id, nome, email: mail, perfil, status: 'ativo', criado_em: agoraIso() });
+  const { plataforma } = ctx;
+  const conta = plataforma.conta(mail) ?? plataforma.criarConta({ email: mail, nome, senha: 'copiloto123' });
+  plataforma.vincular(mail, ctx.empresa.id);
+  const { token } = plataforma.criarSessao(conta.id, ctx.empresa.id);
+  return { cookie: `${COOKIE_SESSAO}=${token}`, membroId: id, email: mail };
 }

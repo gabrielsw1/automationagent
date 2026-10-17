@@ -34,11 +34,14 @@ interface Esquema {
 
 export type ChaveConfig = keyof Esquema;
 
-export function widgetPadrao(nomeSistema: string, dominios: string[]): ConfigWidget {
+/** Widget de uma empresa nova; `demo` traz as boas-vindas e sugestões do Horizonte. */
+export function widgetPadrao(nomeSistema: string, dominios: string[], demo = true): ConfigWidget {
   return {
     nome: 'Copiloto',
-    boasVindas: `Oi! Posso cadastrar clientes, alterar planos, emitir relatórios e tirar dúvidas sobre o ${nomeSistema}. Antes de gravar qualquer coisa, eu mostro tudo para você conferir.`,
-    sugestoes: ['Cadastrar cliente', 'Emitir relatório de vendas', 'Como emitir segunda via?'],
+    boasVindas: demo
+      ? `Oi! Posso cadastrar clientes, alterar planos, emitir relatórios e tirar dúvidas sobre o ${nomeSistema}. Antes de gravar qualquer coisa, eu mostro tudo para você conferir.`
+      : `Oi! Posso fazer tarefas no ${nomeSistema} por você e tirar dúvidas. Antes de gravar qualquer coisa, eu mostro tudo para você conferir.`,
+    sugestoes: demo ? ['Cadastrar cliente', 'Emitir relatório de vendas', 'Como emitir segunda via?'] : [],
     cor: '#FA276B',
     posicao: 'direita',
     atalho: true,
@@ -53,9 +56,9 @@ export class Configuracoes {
 
   constructor(
     private readonly banco: Banco,
-    opcoes: { nomeSistema: string; dominiosPadrao: string[]; chavePublicaPadrao: string },
+    opcoes: { nomeSistema: string; dominiosPadrao: string[]; chavePublicaPadrao: string; demo: boolean },
   ) {
-    const widget = widgetPadrao(opcoes.nomeSistema, opcoes.dominiosPadrao);
+    const widget = widgetPadrao(opcoes.nomeSistema, opcoes.dominiosPadrao, opcoes.demo);
     this.padroes = {
       widget_publicado: widget,
       widget_rascunho: widget,

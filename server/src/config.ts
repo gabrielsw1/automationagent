@@ -33,7 +33,9 @@ export interface Config {
   cotacaoDolar: number;
   /** Custo estimado de um minuto de navegador na nuvem, em R$. */
   custoNavegadorMinuto: number;
+  /** Adaptador do conector `api` (a demonstração usa o do Horizonte). Empresas novas usam `tela`. */
   adaptador: string;
+  /** Sistema da empresa. No servidor, vale para a demonstração; cada empresa tem o seu (plataforma). */
   sistema: {
     nome: string;
     urlBase: string;
@@ -44,6 +46,10 @@ export interface Config {
   segredoWidget: string;
   /** Segredo das sessões do console e dos tokens do widget. */
   segredoSessao: string;
+  /** Cifra os segredos das empresas no banco (COPILOTO_CHAVE_MESTRA; sem ela, deriva do SESSAO_SEGREDO). */
+  chaveMestra: string;
+  /** Qualquer pessoa pode criar a conta de uma empresa nova pela tela de entrada (COPILOTO_CADASTRO=fechado desliga). */
+  cadastroAberto: boolean;
   /** Exige a assinatura do usuário no snippet do widget. */
   exigirAssinatura: boolean;
   /** Mostra o navegador do Playwright (só para depurar fluxos). */
@@ -56,6 +62,7 @@ export function lerConfig(): Config {
   const porta = numeroEnv('PORT', 3000);
   const urlSistema = env('SISTEMA_URL', 'http://localhost:4000');
   const chave = process.env.ANTHROPIC_API_KEY ?? process.env.ANTHROPIC_AUTH_TOKEN ?? '';
+  const segredoSessao = env('SESSAO_SEGREDO', 'segredo-sessao-local-troque-em-producao');
   return {
     porta,
     host: env('HOST', '0.0.0.0'),
@@ -76,7 +83,9 @@ export function lerConfig(): Config {
       chaveServico: env('SISTEMA_CHAVE_SERVICO', 'chave-servico-local'),
     },
     segredoWidget: env('WIDGET_SEGREDO', 'segredo-widget-local'),
-    segredoSessao: env('SESSAO_SEGREDO', 'segredo-sessao-local-troque-em-producao'),
+    segredoSessao,
+    chaveMestra: env('COPILOTO_CHAVE_MESTRA', segredoSessao),
+    cadastroAberto: env('COPILOTO_CADASTRO', 'aberto') !== 'fechado',
     exigirAssinatura: env('WIDGET_EXIGIR_ASSINATURA', '1') !== '0',
     navegadorVisivel: env('NAVEGADOR_VISIVEL', '0') === '1',
     chromiumPath: process.env.CHROMIUM_PATH || undefined,

@@ -310,4 +310,16 @@ export const MIGRACOES: string[] = [
   ALTER TABLE execucoes ADD COLUMN interno TEXT NOT NULL DEFAULT '{}';
   ALTER TABLE execucao_eventos ADD COLUMN candidato TEXT;
   `,
+  // 3: SaaS. Este banco passa a ser de uma empresa só (DATA_DIR/empresas/<id>/copiloto.db).
+  // Senhas e sessões do console foram para o banco da plataforma: equipe.senha_hash e a tabela
+  // sessoes ficam sem uso. usuarios_sistema guarda quem chegou pelo snippet assinado (conector só pela tela).
+  `
+  CREATE TABLE usuarios_sistema (
+    id TEXT PRIMARY KEY,
+    nome TEXT NOT NULL,
+    email TEXT,
+    perfis TEXT NOT NULL DEFAULT '[]',
+    visto_em TEXT NOT NULL
+  );
+  `,
 ];

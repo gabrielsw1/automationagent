@@ -8,7 +8,7 @@ import { chromium, errors, type Browser, type BrowserContext, type Locator, type
 import { casarOpcao, interpretarHora, somenteDigitos, type PassoFluxo } from '@copiloto/shared';
 import type { Config } from '../config.ts';
 import type { Banco } from '../db/banco.ts';
-import type { AdaptadorSistema, CookieNavegador } from '../adaptadores/tipos.ts';
+import type { AdaptadorSistema, CookieNavegador, SessaoNavegador } from '../adaptadores/tipos.ts';
 import type { Llm } from '../llm/tipos.ts';
 import type {
   ArquivoGerado,
@@ -138,6 +138,41 @@ export class NavegadorPlaywright implements Navegador {
     }
   }
 
+  /** Entra no sistema com a conta de serviço da empresa, sem rodar fluxo (botão "Testar acesso" do console). */
+  async testarAcesso(): Promise<{ ok: boolean; detalhe: string }> {
+    const { adaptador } = this.deps;
+    let sessao: SessaoNavegador;
+    try {
+      sessao = await adaptador.sessaoNavegador('');
+    } catch (e) {
+      return { ok: false, detalhe: e instanceof Error ? e.message : String(e) };
+    }
+    if (!sessao.login) {
+      return { ok: true, detalhe: `Sem conta de serviço: o navegador abre as telas do ${adaptador.nome} sem entrar.` };
+    }
+    let browser: Browser;
+    try {
+      browser = await this.obterBrowser();
+    } catch (e) {
+      return { ok: false, detalhe: this.ultimaFalha?.detalhe ?? explicarFalhaAbertura(e) };
+    }
+    this.ativos++;
+    if (this.relogioOcioso) clearTimeout(this.relogioOcioso);
+    const contexto = await browser.newContext({ viewport: this.opcoes.janela, locale: 'pt-BR', timezoneId: 'America/Sao_Paulo' });
+    try {
+      await contexto.route(/\/copiloto\.js(\?.*)?$/, (r) => r.abort());
+      const page = await contexto.newPage();
+      await entrarComConta(page, sessao.login, adaptador.nome, this.opcoes);
+      return { ok: true, detalhe: `Entrou no ${adaptador.nome} como ${sessao.login.usuario}. Depois de entrar, a tela era ${caminhoCurto(page.url())}.` };
+    } catch (e) {
+      return { ok: false, detalhe: e instanceof Error ? e.message : String(e) };
+    } finally {
+      await contexto.close().catch(() => {});
+      this.ativos--;
+      this.agendarFechamento();
+    }
+  }
+
   async fechar(): Promise<void> {
     if (this.relogioOcioso) clearTimeout(this.relogioOcioso);
     this.relogioOcioso = null;
@@ -202,6 +237,51 @@ function explicarFalhaAbertura(e: unknown): string {
     return 'O Chromium não está instalado. Rode “npx playwright install chromium” no servidor (ou defina CHROMIUM_PATH) e reinicie.';
   }
   return 'O Chromium não abriu neste servidor. Confira a instalação do Playwright e reinicie o servidor.';
+}
+
+const CAMPO_USUARIO = 'input:is([type="email"], [type="text"], [type="tel"], :not([type])):visible';
+
+/**
+ * Entra no sistema com a conta de serviço: abre a página de login, preenche o primeiro campo de
+ * texto do formulário da senha e a senha, envia e espera o campo de senha sumir.
+ */
+export async function entrarComConta(
+  page: Page,
+  login: NonNullable<SessaoNavegador['login']>,
+  sistema: string,
+  opcoes: Pick<Required<OpcoesNavegador>, 'tempoElementoMs' | 'tempoNavegacaoMs'>,
+): Promise<void> {
+  const conferir = `Confira em Sistema, no console, a página de login, o usuário e a senha da conta do copiloto.`;
+  try {
+    await page.goto(login.url, { waitUntil: 'load', timeout: opcoes.tempoNavegacaoMs });
+  } catch {
+    throw new FalhaPasso('sessao_expirada', `Não consegui abrir a página de login do ${sistema} (${caminhoCurto(login.url)}). ${conferir}`);
+  }
+  const senha = page.locator('input[type="password"]:visible').first();
+  try {
+    await senha.waitFor({ state: 'visible', timeout: opcoes.tempoElementoMs });
+  } catch {
+    throw new FalhaPasso('sessao_expirada', `A página ${caminhoCurto(page.url())} do ${sistema} não tem campo de senha. ${conferir}`);
+  }
+  const formulario = page.locator('form', { has: page.locator('input[type="password"]') }).first();
+  const escopo = (await formulario.count()) > 0 ? formulario : page.locator('body');
+  const usuario = escopo.locator(CAMPO_USUARIO).first();
+  if ((await usuario.count()) === 0) {
+    throw new FalhaPasso('sessao_expirada', `Na página de login do ${sistema} não achei o campo do usuário. ${conferir}`);
+  }
+  await usuario.fill(login.usuario);
+  await senha.fill(login.senha);
+  const enviar = escopo.locator('button[type="submit"]:visible, input[type="submit"]:visible, button:not([type]):visible').first();
+  if ((await enviar.count()) > 0) await enviar.click();
+  else await senha.press('Enter');
+  try {
+    await senha.waitFor({ state: 'hidden', timeout: opcoes.tempoNavegacaoMs });
+    await page.waitForLoadState('load', { timeout: opcoes.tempoNavegacaoMs }).catch(() => {});
+  } catch {
+    const avisos = await lerAvisosDaPagina(page);
+    const motivo = avisos.length ? ` A tela disse: “${encurtar(avisos.join(' · '), 160)}”.` : '';
+    throw new FalhaPasso('sessao_expirada', `O ${sistema} não aceitou a conta do copiloto (${login.usuario}).${motivo} ${conferir}`);
+  }
 }
 
 function cancelado(p: PedidoExecucaoNavegador, passo: number | null, inicio: number): ResultadoNavegador {
@@ -314,10 +394,23 @@ class ExecucaoFluxo {
     this.page = await this.contexto.newPage();
     this.page.setDefaultTimeout(this.opcoes.tempoElementoMs);
     this.page.setDefaultNavigationTimeout(this.opcoes.tempoNavegacaoMs);
+    if (sessao.login) {
+      // Conector só pela tela: o navegador entra com a conta de serviço que a empresa cadastrou.
+      await entrarComConta(this.page, sessao.login, this.sistema, this.opcoes);
+      this.verificarCancelamento();
+      this.emitir({
+        tipo: 'login',
+        titulo: `Entrou no ${this.sistema} com a conta do copiloto`,
+        detalhe: `Usou a conta de serviço ${sessao.login.usuario}, cadastrada pela empresa. O pedido foi de ${this.nomePessoa}.`,
+      });
+      return;
+    }
     this.emitir({
       tipo: 'login',
-      titulo: `Entrou no ${this.sistema} com a sessão de ${this.nomePessoa}`,
-      detalhe: `O navegador usa as permissões de ${this.nomePessoa}, sem senha. A sessão vale só para esta execução.`,
+      titulo: sessao.cookies.length ? `Entrou no ${this.sistema} com a sessão de ${this.nomePessoa}` : `Abriu o ${this.sistema}`,
+      detalhe: sessao.cookies.length
+        ? `O navegador usa as permissões de ${this.nomePessoa}, sem senha. A sessão vale só para esta execução.`
+        : `O navegador abre as telas do ${this.sistema} sem entrar com nenhuma conta.`,
     });
   }
 

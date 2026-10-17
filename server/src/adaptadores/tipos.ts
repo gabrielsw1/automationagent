@@ -1,6 +1,7 @@
 // Camada de adaptadores: o único ponto do copiloto que conhece o sistema da empresa.
-// Para ligar o copiloto ao sistema real, implemente esta interface numa pasta nova
-// (ex.: adaptadores/meu-sistema) e aponte ADAPTADOR=meu-sistema. Nada mais muda.
+// Empresas novas usam o conector só pela tela (adaptadores/tela.ts), que não precisa de API.
+// Para um sistema com API, implemente esta interface numa pasta nova (ex.: adaptadores/meu-sistema),
+// aponte ADAPTADOR=meu-sistema e use o conector `api` na empresa. Nada mais muda.
 import type { MetodoHttp, UsuarioSistema } from '@copiloto/shared';
 
 export interface ChamadaApi {
@@ -42,10 +43,15 @@ export interface CookieNavegador {
 }
 
 export interface SessaoNavegador {
-  /** Cookies que deixam o navegador logado como a pessoa (o navegador nunca usa senha). */
+  /** Cookies que deixam o navegador logado como a pessoa (o navegador nunca usa a senha dela). */
   cookies: CookieNavegador[];
   /** Cabeçalhos extras, se o sistema autentica por cabeçalho. */
   cabecalhos?: Record<string, string>;
+  /**
+   * Conta de serviço da empresa (conector só pela tela): o navegador abre a página de login e
+   * entra com ela antes do fluxo. A senha vem do cofre e só é digitada no campo de senha.
+   */
+  login?: { url: string; usuario: string; senha: string };
 }
 
 /** Rota da API do sistema, para o console sugerir chamadas ao criar uma tarefa. */
@@ -82,6 +88,12 @@ export interface AdaptadorSistema {
 
   /** Sessão autenticada como o usuário, para o caminho navegador (Playwright). */
   sessaoNavegador(usuarioId: string): Promise<SessaoNavegador>;
+
+  /**
+   * Opcional (conector só pela tela): guarda quem chegou pelo snippet assinado, com nome, e-mail
+   * e perfis, para `buscarUsuario` e `listarUsuarios` acharem essa pessoa depois.
+   */
+  aprenderUsuario?(usuario: UsuarioSistema): Promise<void>;
 
   /**
    * Opcional: baixa um arquivo que a API devolveu como link (ex.: arquivo_url de um relatório),

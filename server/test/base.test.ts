@@ -13,7 +13,7 @@ describe('servidor', () => {
     const r = await amb.app.inject({ method: 'GET', url: '/api/saude' });
     expect(r.statusCode).toBe(200);
     // urlConsole: a extensão do navegador abre o "Aprender fluxo" por aqui.
-    expect(r.json()).toMatchObject({ ok: true, modoSimulado: true, sistema: 'Horizonte', urlConsole: amb.config.urlConsole });
+    expect(r.json()).toMatchObject({ ok: true, modoSimulado: true, sistema: 'Copiloto', urlConsole: amb.config.urlConsole });
   });
 
   it('exige sessão no console e devolve o resumo para quem entrou', async () => {

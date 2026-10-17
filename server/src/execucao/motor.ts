@@ -1427,8 +1427,9 @@ export class Motor {
 
   /** Link assinado para baixar um arquivo gerado pela execução (abre direto do recibo). */
   linkArquivo(execucaoId: string, nome: string): string {
-    const chave = assinarArquivo(execucaoId, nome, this.ctx.config.segredoSessao);
-    return `${this.ctx.config.urlPublica}/api/widget/execucoes/${encodeURIComponent(execucaoId)}/arquivos/${encodeURIComponent(nome)}?chave=${chave}`;
+    const empresa = this.ctx.empresa.id;
+    const chave = assinarArquivo(empresa, execucaoId, nome, this.ctx.config.segredoSessao);
+    return `${this.ctx.config.urlPublica}/api/widget/execucoes/${encodeURIComponent(execucaoId)}/arquivos/${encodeURIComponent(nome)}?e=${encodeURIComponent(empresa)}&chave=${chave}`;
   }
 
   /** Custo do Claude atribuído à execução: o turno que montou o cartão e o que for da própria execução. */
@@ -1555,8 +1556,9 @@ export class Motor {
 }
 
 /** Assinatura do link de um arquivo gerado (HMAC do id da execução e do nome do arquivo). */
-export function assinarArquivo(execucaoId: string, nome: string, segredo: string): string {
-  return crypto.createHmac('sha256', segredo).update(`arquivo.${execucaoId}.${nome}`).digest('base64url').slice(0, 32);
+/** Assinatura do link de um arquivo gerado (vale sem sessão, só para esta empresa, execução e arquivo). */
+export function assinarArquivo(empresaId: string, execucaoId: string, nome: string, segredo: string): string {
+  return crypto.createHmac('sha256', segredo).update(`arquivo.${empresaId}.${execucaoId}.${nome}`).digest('base64url').slice(0, 32);
 }
 
 /** Caminho do arquivo gerado no disco, ou null se não existir. */

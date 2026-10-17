@@ -1,20 +1,25 @@
-// Identidade no widget. O sistema anfitrião assina o ID do usuário logado com o segredo do widget
+// Identidade no widget. O sistema anfitrião assina o ID do usuário logado (ou o ID com nome, e-mail
+// e perfis, ver `textoAssinado` em shared/src/widget.ts) com o segredo do widget da empresa
 // (HMAC-SHA256) e passa no snippet (data-assinatura). Com isso ninguém se passa por outra pessoa
-// trocando o data-usuario no HTML. O servidor devolve um token curto usado nas demais rotas.
+// trocando o data-usuario no HTML. O servidor devolve um token curto, que leva a empresa, usado
+// nas demais rotas.
 import crypto from 'node:crypto';
 
-export function assinarUsuario(usuarioId: string, segredo: string): string {
-  return crypto.createHmac('sha256', segredo).update(usuarioId).digest('hex');
+/** HMAC-SHA256 em hex de `texto` (o ID, ou o `textoAssinado` com a identidade). */
+export function assinarUsuario(texto: string, segredo: string): string {
+  return crypto.createHmac('sha256', segredo).update(texto).digest('hex');
 }
 
-export function assinaturaValida(usuarioId: string, assinatura: string | undefined, segredo: string): boolean {
-  if (!assinatura) return false;
-  const esperado = Buffer.from(assinarUsuario(usuarioId, segredo), 'hex');
+export function assinaturaValida(texto: string, assinatura: string | undefined, segredo: string): boolean {
+  if (!assinatura || !/^[0-9a-f]{64}$/i.test(assinatura)) return false;
+  const esperado = Buffer.from(assinarUsuario(texto, segredo), 'hex');
   const obtido = Buffer.from(assinatura, 'hex');
   return obtido.length === esperado.length && crypto.timingSafeEqual(obtido, esperado);
 }
 
 export interface TokenWidget {
+  /** Empresa dona do widget. */
+  e: string;
   /** ID do usuário no sistema anfitrião. */
   u: string;
   /** Modo de teste do console: usa rascunhos e não grava nada no sistema. */

@@ -3,6 +3,7 @@ import type { FastifyPluginAsync } from 'fastify';
 import { z } from 'zod';
 import type { Painel } from '@copiloto/shared';
 import { exigir } from '../../auth/console.ts';
+import { ctxDe } from '../../contexto.ts';
 import { montarPainel } from '../../tarefas/painel.ts';
 import { pedidoInvalido } from '../../util/erros.ts';
 
@@ -12,7 +13,7 @@ const rotas: FastifyPluginAsync = async (app) => {
   app.get('/', { preHandler: exigir('ver') }, async (request): Promise<Painel> => {
     const r = Consulta.safeParse(request.query ?? {});
     if (!r.success) throw pedidoInvalido('Escolha o período: 7 dias, 30 dias ou mês atual.');
-    return montarPainel(app.ctx, r.data.periodo);
+    return montarPainel(ctxDe(request), r.data.periodo);
   });
 };
 

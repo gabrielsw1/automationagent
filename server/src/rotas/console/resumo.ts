@@ -1,14 +1,15 @@
 // Contadores do menu lateral e faixas globais do console.
 import type { FastifyPluginAsync } from 'fastify';
 import type { ResumoConsole } from '@copiloto/shared';
-import { exigir, membro } from '../../auth/console.ts';
+import { euDe, exigir, membro } from '../../auth/console.ts';
+import { ctxDe } from '../../contexto.ts';
 import { inicioDoDia } from '../../servicos/gastos.ts';
 import { calcularGuia } from '../../servicos/guia.ts';
 
 const rotas: FastifyPluginAsync = async (app) => {
-  const { banco, gastos, llm, adaptador } = app.ctx;
-
   app.get('/resumo', { preHandler: exigir('ver') }, async (request): Promise<ResumoConsole> => {
+    const ctx = ctxDe(request);
+    const { banco, gastos, llm, adaptador } = ctx;
     const m = membro(request);
     const hoje = inicioDoDia().toISOString();
     const atencao = banco.um<{ n: number }>(
@@ -18,11 +19,11 @@ const rotas: FastifyPluginAsync = async (app) => {
       hoje,
     )!.n;
     const aprovacoes = banco.um<{ n: number }>("SELECT COUNT(*) AS n FROM aprovacoes WHERE estado = 'enviada'")!.n;
-    const guia = await calcularGuia(app.ctx);
+    const guia = await calcularGuia(ctx);
     const limites = gastos.limites();
     const percentual = limites.mensal > 0 ? limites.usoMes / limites.mensal : 0;
     return {
-      eu: { id: m.id, nome: m.nome, email: m.email, perfil: m.perfil, iniciais: m.iniciais },
+      eu: euDe(ctx, m),
       execucoesAtencao: atencao,
       aprovacoesPendentes: aprovacoes,
       guia: { feitos: guia.feitos, total: guia.total },
