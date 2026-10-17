@@ -15,6 +15,7 @@ import { codigoRef } from './util/ids.ts';
 import rotasWidget from './rotas/widget.ts';
 import rotasGravacao from './rotas/gravacao.ts';
 import rotasConsole from './rotas/console/index.ts';
+import rotasPlataforma from './rotas/plataforma/index.ts';
 
 declare module 'fastify' {
   interface FastifyInstance {
@@ -97,6 +98,7 @@ export async function criarApp(plataforma: Plataforma, opcoes: OpcoesApp = {}): 
   await app.register(rotasWidget, { prefix: '/api/widget' });
   await app.register(rotasGravacao, { prefix: '/api/gravacao' });
   await app.register(rotasConsole, { prefix: '/api/console' });
+  await app.register(rotasPlataforma, { prefix: '/api/plataforma' });
 
   // copiloto.js (script do widget). Em dev, `npm run dev` recompila widget/dist a cada mudança.
   const distWidget = path.join(RAIZ_REPO, 'widget', 'dist');

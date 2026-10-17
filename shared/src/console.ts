@@ -1,5 +1,6 @@
 // Contrato entre o console de administração e o servidor. Rotas em /api/console,
 // autenticadas por cookie de sessão (POST /api/console/auth/entrar).
+import type { ModoSuporte } from './plataforma.ts';
 import type {
   CasoDeTeste,
   Fluxo,
@@ -40,10 +41,12 @@ export interface Eu {
   empresa: EmpresaResumo;
   /** Todas as empresas em que esta pessoa está na equipe (para trocar no menu da conta). */
   empresas: EmpresaResumo[];
-  /** Pode ver o painel da plataforma (todas as empresas clientes). Vem de COPILOTO_ADMINS. */
+  /** Tem conta ativa na equipe Starta (o menu mostra o atalho para a Plataforma, que pede a entrada dela). */
   adminPlataforma: boolean;
   /** Confirmou o e-mail com o código. Sem isso, o console só mostra a tela "Confirme o seu e-mail". */
   emailConfirmado: boolean;
+  /** Alguém da Starta entrou como suporte: o console mostra a faixa com o motivo e "Sair do modo suporte". */
+  modoSuporte?: ModoSuporte;
 }
 
 /** Empresa na tela "Em qual empresa você quer entrar?" (A2). */

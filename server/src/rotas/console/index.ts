@@ -13,7 +13,6 @@ import execucoes from './execucoes.ts';
 import fluxos from './fluxos.ts';
 import guia from './guia.ts';
 import painel from './painel.ts';
-import plataforma from './plataforma.ts';
 import prints from './prints.ts';
 import resumo from './resumo.ts';
 import sistema from './sistema.ts';
@@ -24,7 +23,7 @@ const rotas: FastifyPluginAsync = async (app) => {
   app.addHook('onRequest', async (request) => {
     const lida = lerSessaoConsole(app.plataforma, request.cookies[COOKIE_SESSAO]);
     if (!lida) return;
-    request.sessaoConsole = lida.sessao;
+    if (lida.sessao) request.sessaoConsole = lida.sessao;
     request.ctx = lida.ctx;
     request.membro = lida.membro;
   });
@@ -44,7 +43,6 @@ const rotas: FastifyPluginAsync = async (app) => {
   await app.register(canais, { prefix: '/canais' });
   await app.register(busca, { prefix: '/busca' });
   await app.register(equipe);
-  await app.register(plataforma, { prefix: '/plataforma' });
 };
 
 export default rotas;

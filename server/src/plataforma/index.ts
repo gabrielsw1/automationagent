@@ -11,7 +11,7 @@
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
-import type { ConectorSistema, FaixaUsuarios, ModoAcesso } from '@copiloto/shared';
+import type { ConectorSistema, FaixaUsuarios, FaseEmpresa, ModoAcesso } from '@copiloto/shared';
 import type { AdaptadorSistema } from '../adaptadores/tipos.ts';
 import { hashSenha, verificarSenha } from '../auth/senha.ts';
 import type { Config } from '../config.ts';
@@ -23,6 +23,7 @@ import type { Navegador } from '../navegador/tipos.ts';
 import { novoId, tokenAleatorio } from '../util/ids.ts';
 import { Cofre } from './cofre.ts';
 import { MIGRACOES_PLATAFORMA } from './esquema.ts';
+import { EquipeStarta } from './starta.ts';
 
 /** Como o copiloto fala com o sistema da empresa (a senha da conta de serviço fica no cofre). */
 export interface SistemaGuardado {
@@ -51,6 +52,25 @@ export interface Empresa {
   faixaUsuarios: FaixaUsuarios | null;
   criadoPor: string | null;
   criadoEm: string;
+  /** Acompanhamento da Starta: implantação, piloto ou ativo (a pausa é o status suspensa). */
+  fase: FaseEmpresa;
+  faseDesde: string | null;
+  planoId: string | null;
+  /** Pessoa da equipe Starta que cuida da empresa. */
+  responsavelStarta: string | null;
+  /** Quantas tarefas a implantação combinou publicar ("Tarefas publicadas: 3 de 5"). */
+  metaTarefas: number | null;
+  avaliacaoPilotoEm: string | null;
+  suspensaEm: string | null;
+}
+
+/** O que a equipe Starta ajusta no acompanhamento de uma empresa. */
+export interface Acompanhamento {
+  fase?: FaseEmpresa;
+  planoId?: string | null;
+  responsavelStarta?: string | null;
+  metaTarefas?: number | null;
+  avaliacaoPilotoEm?: string | null;
 }
 
 export interface Conta {
@@ -116,6 +136,13 @@ interface LinhaEmpresa {
   faixa_usuarios: FaixaUsuarios | null;
   criado_por: string | null;
   criado_em: string;
+  fase: FaseEmpresa;
+  fase_desde: string | null;
+  plano_id: string | null;
+  responsavel_starta: string | null;
+  meta_tarefas: number | null;
+  avaliacao_piloto_em: string | null;
+  suspensa_em: string | null;
 }
 
 function lerSistema(l: LinhaEmpresa): SistemaGuardado {
@@ -138,6 +165,13 @@ function deLinha(l: LinhaEmpresa): Empresa {
     faixaUsuarios: l.faixa_usuarios,
     criadoPor: l.criado_por,
     criadoEm: l.criado_em,
+    fase: l.fase,
+    faseDesde: l.fase_desde,
+    planoId: l.plano_id,
+    responsavelStarta: l.responsavel_starta,
+    metaTarefas: l.meta_tarefas,
+    avaliacaoPilotoEm: l.avaliacao_piloto_em,
+    suspensaEm: l.suspensa_em,
   };
 }
 
@@ -178,6 +212,7 @@ export class Plataforma {
   readonly banco: Banco;
   readonly cofre: Cofre;
   readonly correio: Correio;
+  readonly starta: EquipeStarta;
   private readonly contextos = new Map<string, Contexto>();
   private cacheDominios: Set<string> | null = null;
 
@@ -188,6 +223,7 @@ export class Plataforma {
     this.banco = new Banco(opcoes.emMemoria ? ':memory:' : path.join(config.dirDados, 'plataforma.db'), MIGRACOES_PLATAFORMA);
     this.cofre = new Cofre(config.chaveMestra);
     this.correio = opcoes.correio ?? criarCorreio(config);
+    this.starta = new EquipeStarta(this.banco, this.cofre);
   }
 
   // ---------------------------------------------------------------- empresas
@@ -235,6 +271,8 @@ export class Plataforma {
       termos_aceitos_em: d.termosAceitos ? agoraIso() : null,
       criado_por: d.criadoPor ?? null,
       criado_em: agoraIso(),
+      fase: d.demo ? 'ativo' : 'implantacao',
+      fase_desde: agoraIso(),
     });
     this.cacheDominios = null;
     return this.empresa(id)!;
@@ -287,14 +325,60 @@ export class Plataforma {
 
   /** Suspende ou reativa a empresa. Suspensa, ninguém entra no console nem no widget dela. */
   mudarStatus(empresaId: string, status: Empresa['status']) {
-    this.banco.executar('UPDATE empresas SET status = ? WHERE id = ?', status, empresaId);
-    if (status === 'suspensa') this.banco.executar('DELETE FROM sessoes WHERE empresa_id = ?', empresaId);
+    this.banco.executar(
+      'UPDATE empresas SET status = ?, suspensa_em = ? WHERE id = ?',
+      status,
+      status === 'suspensa' ? agoraIso() : null,
+      empresaId,
+    );
+    if (status === 'suspensa') {
+      this.banco.executar('DELETE FROM sessoes WHERE empresa_id = ?', empresaId);
+      this.banco.executar('UPDATE acessos_suporte SET encerrado_em = ? WHERE empresa_id = ? AND encerrado_em IS NULL', agoraIso(), empresaId);
+    }
     this.cacheDominios = null;
   }
 
-  /** Pode ver o painel da plataforma (COPILOTO_ADMINS). */
+  /** Fase, plano, responsável e metas da implantação (Plataforma › Empresas). */
+  acompanhar(empresaId: string, a: Acompanhamento) {
+    const atual = this.empresa(empresaId);
+    if (!atual) throw new Error(`Empresa ${empresaId} não existe.`);
+    const dados: Record<string, unknown> = {};
+    if (a.fase !== undefined && a.fase !== atual.fase) {
+      dados.fase = a.fase;
+      dados.fase_desde = agoraIso();
+    }
+    if (a.planoId !== undefined) dados.plano_id = a.planoId;
+    if (a.responsavelStarta !== undefined) dados.responsavel_starta = a.responsavelStarta;
+    if (a.metaTarefas !== undefined) dados.meta_tarefas = a.metaTarefas;
+    if (a.avaliacaoPilotoEm !== undefined) dados.avaliacao_piloto_em = a.avaliacaoPilotoEm;
+    if (Object.keys(dados).length) this.banco.atualizar('empresas', empresaId, dados);
+    return this.empresa(empresaId)!;
+  }
+
+  /** Tem conta ativa na equipe da Starta (o console mostra o atalho para a Plataforma). */
   adminDaPlataforma(email: string): boolean {
-    return this.config.adminsPlataforma.includes(email.trim().toLowerCase());
+    const p = this.starta.porEmail(email);
+    return !!p?.ativa && p.ativada;
+  }
+
+  /**
+   * Primeiro início com COPILOTO_ADMINS: cria as pessoas da equipe Starta que ainda não existem e
+   * devolve o link de ativação de cada uma (o servidor mostra no log e manda por e-mail).
+   */
+  prepararEquipeStarta(): { nome: string; email: string; link: string; expiraEm: string }[] {
+    const criados: { nome: string; email: string; link: string; expiraEm: string }[] = [];
+    for (const email of this.config.adminsPlataforma) {
+      if (this.starta.porEmail(email)) continue;
+      const nome = email.split('@')[0].replace(/[._-]+/g, ' ').replace(/\b\p{L}/gu, (c) => c.toUpperCase());
+      const pessoa = this.starta.criar({ nome, email, criadoPor: 'COPILOTO_ADMINS' });
+      const { token, expiraEm } = this.starta.novaAtivacao(pessoa.id);
+      criados.push({ nome, email: pessoa.email, link: this.linkAtivacaoStarta(token), expiraEm });
+    }
+    return criados;
+  }
+
+  linkAtivacaoStarta(token: string): string {
+    return `${this.config.urlConsole.replace(/\/+$/, '')}/plataforma/ativar/${token}`;
   }
 
   /** Guarda os domínios do widget publicado (o CORS consulta antes de saber a empresa). */

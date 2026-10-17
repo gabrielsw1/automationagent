@@ -2,7 +2,7 @@
 // dados (console, widget, gravação, links de arquivo, CORS) e o segredo do widget de cada uma.
 import crypto from 'node:crypto';
 import { afterEach, describe, expect, it } from 'vitest';
-import type { Canais, EmpresaPlataforma, Entrada, Eu, SistemaEmpresa } from '@copiloto/shared';
+import type { Canais, Entrada, Eu, SistemaEmpresa } from '@copiloto/shared';
 import { textoAssinado } from '@copiloto/shared';
 import { assinarArquivo } from '../../src/execucao/motor.ts';
 import { assinarUsuario } from '../../src/auth/widget.ts';
@@ -478,48 +478,6 @@ describe('sistema da empresa', () => {
     expect(await ctx.adaptador.descreverApi()).toEqual([]);
     const chamada = await ctx.adaptador.chamar({ metodo: 'GET', caminho: '/v1/x', usuarioId: '1' });
     expect(chamada).toMatchObject({ status: 501, corpo: { erro: 'sem_api' } });
-  });
-});
-
-describe('painel da plataforma', () => {
-  it('só quem está em COPILOTO_ADMINS vê as empresas, com métricas e sem conteúdo, e pode suspender', async () => {
-    amb = await criarAmbiente({ semear: true });
-    const { cookie: luana } = await cadastrarComSistema(amb);
-    const gabriel = entrarComo(amb.ctx, 'admin', 'Gabriel Moreno', 'gabriel@starta.com.br');
-    expect((await pedir(amb, gabriel.cookie, 'GET', '/plataforma/empresas')).statusCode).toBe(403);
-    expect((await pedir(amb, gabriel.cookie, 'GET', '/auth/eu')).json<Eu>().adminPlataforma).toBe(false);
-
-    amb.plataforma.config.adminsPlataforma = ['gabriel@starta.com.br'];
-    expect((await pedir(amb, gabriel.cookie, 'GET', '/auth/eu')).json<Eu>().adminPlataforma).toBe(true);
-    const lista = (await pedir(amb, gabriel.cookie, 'GET', '/plataforma/empresas')).json<EmpresaPlataforma[]>();
-    expect(lista.map((e) => e.nome)).toEqual(['Horizonte', 'Pedra Branca Distribuidora']);
-    const [horizonte, pedra] = lista;
-    expect(horizonte).toMatchObject({ demo: true, status: 'ativa', sistema: { conector: 'api' }, tarefasAtivas: 4 });
-    expect(horizonte.execucoes30d).toBeGreaterThan(1000);
-    expect(horizonte.sucesso30d).toBeGreaterThan(0.9);
-    expect(pedra).toMatchObject({
-      demo: false,
-      equipe: 1,
-      usuarios: 0,
-      execucoes30d: 0,
-      sucesso30d: null,
-      cnpj: '11222333000181',
-      faixaUsuarios: 'ate_200',
-      criadoPor: 'luana@pedrabranca.com.br',
-      sistema: { nome: 'ERP Pedra Branca', url: 'https://erp.pedrabranca.com.br', conector: 'tela', acesso: 'sessao' },
-    });
-    expect(JSON.stringify(lista)).not.toMatch(/conversa|mensagens|segredo|sw_/);
-
-    // Suspender derruba as sessões da empresa; reativar devolve o acesso (entrando de novo).
-    const suspensa = await pedir(amb, gabriel.cookie, 'PUT', `/plataforma/empresas/${pedra.id}/status`, { status: 'suspensa' });
-    expect(suspensa.json<EmpresaPlataforma>().status).toBe('suspensa');
-    expect((await pedir(amb, luana, 'GET', '/auth/eu')).statusCode).toBe(401);
-    await pedir(amb, gabriel.cookie, 'PUT', `/plataforma/empresas/${pedra.id}/status`, { status: 'ativa' });
-    const login = await amb.app.inject({ method: 'POST', url: '/api/console/auth/entrar', payload: { email: CADASTRO.pessoa.email, senha: CADASTRO.pessoa.senha } });
-    expect(login.statusCode).toBe(200);
-    const auditoria = amb.plataforma.contexto(pedra.id).auditoria.listar();
-    expect(auditoria.slice(0, 2).map((x) => x.acao)).toEqual(['reativou a empresa', 'suspendeu a empresa']);
-    expect(auditoria[0].ator).toBe('Gabriel Moreno (plataforma)');
   });
 });
 

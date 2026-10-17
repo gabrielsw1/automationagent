@@ -8,6 +8,7 @@ import { COOKIE_SESSAO } from '../src/auth/console.ts';
 import { lerConfig, type Config } from '../src/config.ts';
 import type { Contexto } from '../src/contexto.ts';
 import { agoraIso } from '../src/db/banco.ts';
+import { codigoTotp } from '../src/auth/totp.ts';
 import { CaixaLocal } from '../src/email/index.ts';
 import type { Llm } from '../src/llm/tipos.ts';
 import { LlmSimulado } from '../src/llm/simulado.ts';
@@ -226,4 +227,19 @@ export function ultimoEmail(a: Ambiente, para: string, assunto?: string) {
 /** O código de 6 dígitos do último e-mail de confirmação mandado para `para`. */
 export function codigoEnviado(a: Ambiente, para: string): string | undefined {
   return ultimoEmail(a, para, 'Seu código do Copiloto Starta')?.texto.match(/\b(\d{6})\b/)?.[1];
+}
+
+/**
+ * Pessoa da equipe Starta já ativada (senha e autenticador) e com a sessão completa na Plataforma.
+ * Devolve o cookie, o segredo do autenticador (para gerar códigos) e a senha.
+ */
+export async function entrarNaPlataforma(a: Ambiente, nome = 'Gabriel Moreno', email = 'gabriel@starta.com.br') {
+  const senha = 'senha-da-starta-1';
+  const pessoa = a.plataforma.starta.porEmail(email) ?? a.plataforma.starta.criar({ nome, email });
+  const { token } = a.plataforma.starta.novaAtivacao(pessoa.id);
+  const segredo = a.plataforma.starta.ativacao(token)!.segredo;
+  const r = await a.app.inject({ method: 'POST', url: `/api/plataforma/auth/ativar/${token}`, payload: { senha, codigo: codigoTotp(segredo) } });
+  if (r.statusCode !== 200) throw new Error(`Ativação falhou: ${r.body}`);
+  const cookie = String(r.headers['set-cookie']).split(';')[0];
+  return { cookie, segredo, senha, pessoaId: pessoa.id, codigos: r.json<{ codigosRecuperacao: string[] }>().codigosRecuperacao };
 }

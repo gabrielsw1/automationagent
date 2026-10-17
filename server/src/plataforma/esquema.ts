@@ -91,4 +91,78 @@ export const MIGRACOES_PLATAFORMA: string[] = [
     criado_em TEXT NOT NULL
   );
   `,
+  // 3: equipe da Starta (contas separadas das empresas, com verificação em duas etapas), modo
+  // suporte e o acompanhamento de cada empresa no painel (fase, plano, responsável, implantação).
+  `
+  CREATE TABLE pessoas_starta (
+    id TEXT PRIMARY KEY,
+    nome TEXT NOT NULL,
+    email TEXT NOT NULL UNIQUE,
+    -- Sem senha e sem segredo até ativar pelo link (e de novo depois de "Redefinir acesso").
+    senha_hash TEXT,
+    -- Segredo do aplicativo autenticador, cifrado com a chave mestra.
+    totp_segredo TEXT,
+    -- Último intervalo de 30 s aceito: o mesmo código não entra duas vezes.
+    totp_ultimo_passo INTEGER,
+    ativa INTEGER NOT NULL DEFAULT 1,
+    falhas_entrada INTEGER NOT NULL DEFAULT 0,
+    bloqueada_ate TEXT,
+    criado_por TEXT,
+    criado_em TEXT NOT NULL,
+    ativado_em TEXT,
+    ultimo_acesso TEXT
+  );
+  CREATE TABLE ativacoes_starta (
+    token_hash TEXT PRIMARY KEY,
+    pessoa_id TEXT NOT NULL REFERENCES pessoas_starta(id) ON DELETE CASCADE,
+    -- Segredo proposto no QR code, cifrado; vira o da pessoa quando ela confirma um código.
+    segredo_pendente TEXT NOT NULL,
+    expira_em TEXT NOT NULL,
+    usado_em TEXT,
+    criado_em TEXT NOT NULL
+  );
+  CREATE TABLE recuperacao_starta (
+    pessoa_id TEXT NOT NULL REFERENCES pessoas_starta(id) ON DELETE CASCADE,
+    codigo_hash TEXT NOT NULL,
+    usado_em TEXT,
+    PRIMARY KEY (pessoa_id, codigo_hash)
+  );
+  -- Etapa 'codigo': a senha conferiu e falta o código do autenticador.
+  CREATE TABLE sessoes_starta (
+    token_hash TEXT PRIMARY KEY,
+    pessoa_id TEXT NOT NULL REFERENCES pessoas_starta(id) ON DELETE CASCADE,
+    etapa TEXT NOT NULL CHECK (etapa IN ('codigo', 'completa')),
+    tentativas_restantes INTEGER NOT NULL,
+    criado_em TEXT NOT NULL,
+    expira_em TEXT NOT NULL
+  );
+  CREATE TABLE aparelhos_starta (
+    token_hash TEXT PRIMARY KEY,
+    pessoa_id TEXT NOT NULL REFERENCES pessoas_starta(id) ON DELETE CASCADE,
+    criado_em TEXT NOT NULL,
+    expira_em TEXT NOT NULL
+  );
+  -- "Entrar como suporte": quem, em qual empresa, por quê e até quando. O cookie do console
+  -- leva o token (sup.<token>); o hash fica aqui.
+  CREATE TABLE acessos_suporte (
+    id TEXT PRIMARY KEY,
+    token_hash TEXT NOT NULL UNIQUE,
+    pessoa_id TEXT NOT NULL REFERENCES pessoas_starta(id) ON DELETE CASCADE,
+    empresa_id TEXT NOT NULL REFERENCES empresas(id) ON DELETE CASCADE,
+    motivo TEXT NOT NULL,
+    inicio TEXT NOT NULL,
+    expira_em TEXT NOT NULL,
+    encerrado_em TEXT
+  );
+  CREATE INDEX acessos_suporte_empresa ON acessos_suporte(empresa_id, inicio);
+  ALTER TABLE empresas ADD COLUMN fase TEXT NOT NULL DEFAULT 'implantacao';
+  ALTER TABLE empresas ADD COLUMN fase_desde TEXT;
+  ALTER TABLE empresas ADD COLUMN plano_id TEXT;
+  ALTER TABLE empresas ADD COLUMN responsavel_starta TEXT;
+  ALTER TABLE empresas ADD COLUMN meta_tarefas INTEGER;
+  ALTER TABLE empresas ADD COLUMN avaliacao_piloto_em TEXT;
+  ALTER TABLE empresas ADD COLUMN suspensa_em TEXT;
+  UPDATE empresas SET fase = 'ativo', fase_desde = criado_em WHERE demo = 1;
+  UPDATE empresas SET fase_desde = criado_em WHERE fase_desde IS NULL;
+  `,
 ];
