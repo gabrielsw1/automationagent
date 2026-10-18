@@ -246,6 +246,8 @@ Para um sistema com API, dá para escrever um adaptador em `server/src/adaptador
 | `COPILOTO_CHAVE_MESTRA` | Cifra os segredos das empresas no banco. Sem ela, deriva do `SESSAO_SEGREDO`. Guarde-a: sem ela, as senhas das contas de serviço não abrem. |
 | `COPILOTO_ADMINS` | E-mails (separados por vírgula) da equipe Starta. Na primeira vez que o servidor sobe, cada e-mail sem conta recebe o link para ativar o acesso à Plataforma (senha e aplicativo autenticador); o link também sai no log. |
 | `COPILOTO_CADASTRO` | `fechado` desliga o cadastro de empresas novas pela tela de entrada. |
+| `SMTP_URL` | Provedor que envia os e-mails (confirmação de e-mail, convites, senha esquecida, ativação da equipe Starta, avisos de suporte e de cobrança), por exemplo `smtps://usuario:senha@smtp.provedor.com:465`. Sem ele, nenhum e-mail sai: cada um fica gravado em `DATA_DIR/caixa-de-saida`. |
+| `EMAIL_REMETENTE` | Remetente dos e-mails. Padrão: `Copiloto Starta <nao-responda@starta.site>`. |
 | `EMAIL_VENDAS` | Recebe por e-mail os pedidos de **Agendar demonstração** e **Falar com vendas** do site, os pedidos de **Mudar de plano** e, na cobrança manual, cada fatura a cobrar. Sem ela, tudo fica só no banco da plataforma. |
 | `TEXTOS_LEGAIS_DIR` | Pasta com os textos jurídicos aprovados (`termos.md`, `privacidade.md`, `contrato-lgpd.md`). O texto que faltar ali vem da minuta em `docs/legal`, com o aviso de revisão jurídica. |
 | `PUBLIC_URL` e `CONSOLE_URL` | Endereços públicos do servidor e do console (links de arquivos e de convite). A extensão só aceita o código de entrada vindo da aba de `CONSOLE_URL`. |
