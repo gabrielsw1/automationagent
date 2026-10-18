@@ -65,6 +65,8 @@ function abaDe(prefixo: string): Promise<number> {
 }
 
 const barra = (p: Page) => p.locator('copiloto-gravador');
+/** Nome do fluxo na barra de gravação (o painel dos passos também cita o botão "Abrir chamado"). */
+const nomeDoFluxo = (p: Page, nome: string) => barra(p).locator('.cp-grav-nome', { hasText: nome });
 
 /** Com COPILOTO_TELAS=<pasta>: guarda o print da página (ou do elemento) para comparar com o design. */
 const PASTA_TELAS = process.env.COPILOTO_TELAS;
@@ -239,7 +241,7 @@ describe('extensão no Chromium de verdade', { timeout: 180_000 }, () => {
     await gravando.setViewportSize({ width: 1440, height: 900 });
     await gravando.waitForURL(`${urlHorizonte}/chamados`);
     await expect.poll(() => gravando.evaluate(() => document.documentElement.getAttribute('data-copiloto-extensao'))).toBe('0.1.0');
-    await barra(gravando).getByText('Abrir chamado').waitFor();
+    await nomeDoFluxo(gravando, 'Abrir chamado').waitFor();
     const painel = barra(gravando).getByRole('region', { name: 'Passos gravados' });
     await painel.waitFor();
 
@@ -259,7 +261,7 @@ describe('extensão no Chromium de verdade', { timeout: 180_000 }, () => {
     const consulta = await siteDeConsulta();
     try {
       await gravando.goto(consulta.url);
-      await barra(gravando).getByText('Abrir chamado').waitFor();
+      await nomeDoFluxo(gravando, 'Abrir chamado').waitFor();
       await gravando.getByLabel('CNPJ').fill('12.345.678/0001-90');
       await barra(gravando).getByText('99.999.999/9999-99').waitFor();
       await foto(gravando, 'E7-pagina-balao-formato');
