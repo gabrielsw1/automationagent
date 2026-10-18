@@ -375,6 +375,7 @@ export function CartaoRecibo({ bloco }: { bloco: BlocoDe<'recibo'> }) {
   const restante = temJanela ? limite - agora : 0;
   const { min, seg } = partesTempo(restante);
   const link = bloco.link ? acoes.link(bloco.link.url) : null;
+  const comSessao = /sua sessão/i.test(bloco.resumo);
   const viaNavegador = /navegador|pela tela/i.test(bloco.resumo);
   // O código da execução vem logo depois do resumo; se o resumo já termina com ele, não repete.
   const sufixo = ` · ${bloco.execucaoId}`;
@@ -398,7 +399,7 @@ export function CartaoRecibo({ bloco }: { bloco: BlocoDe<'recibo'> }) {
         )}
         {bloco.campos.length > 0 && <ListaCampos campos={bloco.campos} />}
         <p className="row tiny muted cp-gap-6">
-          <Icone nome={viaNavegador ? 'janela' : 'codigo'} tamanho="sm" />
+          <Icone nome={comSessao ? 'cadeado' : viaNavegador ? 'janela' : 'codigo'} tamanho="sm" />
           <span>
             {resumo} · <span className="mono">{bloco.execucaoId}</span>
           </span>

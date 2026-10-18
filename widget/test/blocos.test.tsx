@@ -187,7 +187,7 @@ describe('blocos', () => {
             { rotulo: 'Assunto', valor: 'Impressora sem tinta' },
             { rotulo: 'Descrição', valor: 'A impressora do caixa parou de imprimir os cupons fiscais.' },
           ],
-          resumo: 'Feito pela tela em 9 s',
+          resumo: 'Feito com a sua sessão',
           link: { rotulo: 'Abrir o chamado', url: 'http://localhost:4000/chamados/154' },
         },
       ]),
@@ -200,6 +200,7 @@ describe('blocos', () => {
     expect(within(recibo).getByText('Impressora sem tinta')).toBeTruthy();
     expect(within(recibo).getByRole('link', { name: /Abrir o chamado/ }).getAttribute('href')).toBe('http://localhost:4000/chamados/154');
     expect(within(recibo).queryByRole('button', { name: /Desfazer/ })).toBeNull();
+    expect(within(recibo).getByText('Feito com a sua sessão', { exact: false })).toBeTruthy();
   });
 
   it('recibo sem número lido: nenhuma linha de registro (não chuta)', () => {

@@ -13,6 +13,7 @@ import type { Llm } from '../llm/tipos.ts';
 import type {
   ArquivoGerado,
   Destaque,
+  EntradaNavegador,
   EventoNavegador,
   Navegador,
   PedidoExecucaoNavegador,
@@ -348,6 +349,7 @@ class ExecucaoFluxo {
   private readonly arquivos: ArquivoGerado[] = [];
   private recuperacoes = 0;
   private nomePessoa = 'a pessoa que pediu';
+  private entrada: EntradaNavegador = 'aberto';
   private readonly sistema: string;
 
   constructor(
@@ -386,6 +388,7 @@ class ExecucaoFluxo {
         duracaoMs: Date.now() - this.inicio,
         recuperacoes: this.recuperacoes,
         registro,
+        entrada: this.entrada,
       };
     } catch (e) {
       return await this.resultadoDeFalha(e);
@@ -457,6 +460,7 @@ class ExecucaoFluxo {
       // Conector só pela tela: o navegador entra com a conta de serviço que a empresa cadastrou.
       await entrarComConta(this.page, sessao.login, this.sistema, this.opcoes);
       this.verificarCancelamento();
+      this.entrada = 'conta';
       this.emitir({
         tipo: 'login',
         titulo: `Entrou no ${this.sistema} com a conta do copiloto`,
@@ -475,6 +479,7 @@ class ExecucaoFluxo {
       if (pareceTelaDeLogin(this.page.url())) throw this.falhaSessao();
     }
     const logado = sessao.cookies.length > 0 || !!sessao.urlEntrada;
+    this.entrada = logado ? 'sessao' : 'aberto';
     this.emitir({
       tipo: 'login',
       titulo: logado ? `Entrou no ${this.sistema} com a sessão de ${this.nomePessoa}` : `Abriu o ${this.sistema}`,

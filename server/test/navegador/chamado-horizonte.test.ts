@@ -188,6 +188,8 @@ describe('Abrir chamado no Horizonte, do gravador ao recibo com o número real',
     expect(recibo.link).toEqual({ rotulo: 'Abrir o chamado', url: `${urlHorizonte}/chamados/${chamado.id}` });
     // Cliente e prioridade foram para a linha do número; o resto fica na lista.
     expect(recibo.campos.map((c) => c.rotulo)).toEqual(['Assunto', 'Descrição']);
+    // O Horizonte abre a sessão de Ana para o navegador: o recibo diz isso, como no design.
+    expect(recibo.resumo).toBe('Feito com a sua sessão');
     // O registro da execução guarda o código do chamado.
     const execucao = ok(await consoleApi('GET', `/execucoes/${cartao.execucaoId}`));
     expect(JSON.stringify(execucao)).toContain(chamado.numero);

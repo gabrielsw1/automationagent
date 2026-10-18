@@ -44,6 +44,8 @@ export interface ArquivoGerado {
   tipo: string;
 }
 
+export type EntradaNavegador = 'sessao' | 'conta' | 'aberto';
+
 export type ResultadoNavegador =
   | {
       ok: true;
@@ -55,6 +57,8 @@ export type ResultadoNavegador =
       recuperacoes: number;
       /** Número do registro criado, lido da tela depois do último passo; null quando procurou e não achou. */
       registro?: RegistroLido | null;
+      /** Como o navegador entrou no sistema: sessão de quem pediu, conta de serviço ou sem login. */
+      entrada?: EntradaNavegador;
     }
   | {
       ok: false;

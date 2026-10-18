@@ -29,7 +29,7 @@ import {
 import type { Contexto } from '../contexto.ts';
 import { agoraIso, json } from '../db/banco.ts';
 import { ErroConexaoSistema, type ChamadaApi, type RespostaApi } from '../adaptadores/tipos.ts';
-import type { EventoNavegador } from '../navegador/tipos.ts';
+import type { EntradaNavegador, EventoNavegador } from '../navegador/tipos.ts';
 import { numeroParaRecibo } from '../navegador/registro.ts';
 import type { ConversaLinha, NovaMensagem } from '../servicos/conversas.ts';
 import type { TarefaEmUso } from '../servicos/catalogo.ts';
@@ -1383,6 +1383,7 @@ export class Motor {
         gerados: res.gerados,
         arquivos: res.arquivos.map((a) => ({ nome: path.basename(a.caminho), tipo: a.tipo, rotulo: a.nome })),
         registro: res.registro ?? null,
+        entrada: res.entrada,
         caminho: 'navegador',
         simulado: false,
       });
@@ -1476,6 +1477,8 @@ export class Motor {
       recuperacoes?: number;
       /** Número do registro criado, lido da tela no fim do fluxo. */
       registro?: RegistroLido | null;
+      /** Como o navegador entrou no sistema (só pela tela). */
+      entrada?: EntradaNavegador;
     },
   ): Promise<void> {
     const agora = agoraIso();
@@ -1525,9 +1528,17 @@ export class Motor {
     for (const [k, v] of Object.entries(gerados ?? {})) campos.push({ rotulo: rotuloGerado(k), valor: v });
     const via = r.caminho === 'api' ? 'via API' : 'pela tela';
     // O código da execução vai à parte (execucaoId); quem mostra o recibo o põe depois do resumo.
+    // Pela tela com a sessão de quem pediu, o recibo diz isso (como no design); com a conta de
+    // serviço da empresa ou sem login, diz que foi pela tela. Execução aprovada por outra pessoa
+    // roda com a sessão de quem aprovou, então não é "a sua".
+    const comSuaSessao = r.entrada === 'sessao' && (!e.interno.executarComo || e.interno.executarComo === e.usuarioId);
     const resumo = r.simulado
       ? `Modo de teste: validado ${via} em ${fmt.duracao(duracao)}, nada foi gravado`
-      : `Feito ${via} em ${fmt.duracao(duracao)}`;
+      : comSuaSessao
+        ? 'Feito com a sua sessão'
+        : r.entrada === 'conta'
+          ? `Feito pela tela com a conta do copiloto em ${fmt.duracao(duracao)}`
+          : `Feito ${via} em ${fmt.duracao(duracao)}`;
 
     const resultado: ResultadoExecucao = {
       titulo,
