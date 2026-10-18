@@ -14,7 +14,7 @@ import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
 import type { AddressInfo } from 'node:net';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { fileURLToPath } from 'node:url';
 import { build as compilarVite } from 'vite';
 import { chromium, type BrowserContext, type Locator, type Page, type Worker } from 'playwright';
@@ -146,8 +146,16 @@ beforeAll(async () => {
     headless: true,
     args: [`--disable-extensions-except=${dist}`, `--load-extension=${dist}`],
   });
-  fundo = navegador.serviceWorkers()[0] ?? (await navegador.waitForEvent('serviceworker'));
+  const daExtensao = (w: Worker) => w.url().startsWith('chrome-extension://');
+  fundo = navegador.serviceWorkers().find(daExtensao) ?? (await navegador.waitForEvent('serviceworker', { predicate: daExtensao }));
   idExtensao = new URL(fundo.url()).host;
+  // No Windows o service worker às vezes aparece antes de a API da extensão estar ligada nele.
+  await vi.waitFor(
+    async () => {
+      if (!(await fundo.evaluate(() => typeof chrome !== 'undefined' && !!chrome.storage?.local))) throw new Error('A API da extensão ainda não está pronta.');
+    },
+    { timeout: 30_000, interval: 200 },
+  );
   // O servidor do copiloto nas opções da extensão, e a sessão do console no navegador.
   await fundo.evaluate((s) => chrome.storage.local.set({ servidor: s }), urlCopiloto);
   const [nome, valor] = cookieConsole.split('=');
