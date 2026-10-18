@@ -13,6 +13,8 @@ const Precos = z.object({
   precoMensalCentavos: Centavos,
   taxaImplantacaoCentavos: Centavos,
   precoCreditoExtraCentavos: Centavos,
+  /** Créditos do pacote avulso de Plano e créditos. */
+  pacoteCreditos: z.number().int('Use um número inteiro de créditos.').min(1, 'O pacote tem pelo menos 1 crédito.').max(10_000_000).optional(),
 });
 const Periodo = z.object({ dias: z.coerce.number().int().min(1).max(366).default(30) });
 

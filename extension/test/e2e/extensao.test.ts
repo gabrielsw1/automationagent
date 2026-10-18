@@ -344,18 +344,21 @@ describe('extensão no Chromium de verdade', { timeout: 180_000 }, () => {
     );
     expect(teste.resultado.ok, JSON.stringify(teste.resultado)).toBe(true);
 
-    // Publicar pelo console: o Antes de publicar mostra o outro site resolvido.
-    // O teste com sucesso leva o fluxo à etapa Publicar: a página abre nela.
+    // Publicar pelo console: o Antes de publicar mostra o outro site resolvido. O teste com sucesso
+    // leva o fluxo à etapa Publicar (a página abre nela); com o widget ligado, a tarefa é publicada junto.
     await consoleAba.reload();
-    await consoleAba.getByRole('heading', { name: 'Publicar a versão 1' }).waitFor();
-    await consoleAba.getByText('Passos em outro site resolvidos').waitFor();
-    await consoleAba.getByText(`Passos em ${consulta.host} removidos · 1 mantido como instrução`).waitFor();
-    await consoleAba.getByText('6 passos no Horizonte, sem pendência').waitFor();
+    const antesDePublicar = consoleAba.getByRole('heading', { name: 'Antes de publicar' }).locator('..');
+    await antesDePublicar.getByText('Passos em outro site resolvidos').waitFor();
+    await antesDePublicar.getByText(`Passos em ${consulta.host} removidos · 1 mantido como instrução`).waitFor();
+    await antesDePublicar.getByText('6 passos no Horizonte').waitFor();
     await foto(consoleAba, 'F3-publicar-1440');
-    await consoleAba.getByRole('button', { name: 'Publicar versão 1' }).click();
-    await consoleAba.getByText('Versão 1 publicada').waitFor();
+    await consoleAba.setViewportSize({ width: 390, height: 844 });
+    await foto(consoleAba, 'F3-publicar-390');
+    await consoleAba.setViewportSize({ width: 1440, height: 1000 });
+    await consoleAba.getByRole('button', { name: /^Publicar versão \d+$/ }).click();
+    await consoleAba.getByText(/Abrir chamado está ativa/).first().waitFor();
     await consoleAba.close();
-    const tarefa = ok(await consoleApi('POST', `/tarefas/${tarefaId}/publicar`, {}));
+    const tarefa = ok(await consoleApi('GET', `/tarefas/${tarefaId}`));
     expect(tarefa.status).toBe('ativa');
     // O copiloto conhece a instrução do outro site (vai na descrição da tarefa para o agente).
     expect(ctx.catalogo.instrucoesDoFluxo(fluxoId)).toEqual([`Clicar em Consultar (em ${consulta.host})`]);

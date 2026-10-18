@@ -1,10 +1,11 @@
-// Canais e widget (C8): rascunho da configuração do widget, publicar, descartar e instalação.
+// Canais e widget (C8): rascunho da configuração do widget, publicar, descartar, logo e instalação.
 import type { FastifyPluginAsync } from 'fastify';
 import { z } from 'zod';
 import type { Canais, ConfigWidget, SegredoWidget } from '@copiloto/shared';
 import { exigir, membro } from '../../auth/console.ts';
 import { ctxDe, type Contexto } from '../../contexto.ts';
 import { ErroHttp, pedidoInvalido } from '../../util/erros.ts';
+import { comUrlDoLogo, guardarLogo, LIMITE_LOGO, limparLogos, LogoRecusado } from '../../servicos/logo.ts';
 
 /** Domínio sem protocolo, caminho nem barra (aceita porta). Ex.: app.horizonte.com.br, localhost:4000. */
 export function normalizarDominio(entrada: string): string {
@@ -66,19 +67,32 @@ const ROTULOS: Record<keyof ConfigWidget, string> = {
   proativa: 'sugestão proativa',
   atendimentoHumano: 'horário do atendimento',
   dominios: 'domínios',
+  logo: 'logo',
 };
+
+/** O que conta como mudança em cada campo (o logo, pelo arquivo; o resto, pelo valor). */
+function valorComparado(c: ConfigWidget, k: keyof ConfigWidget): string {
+  if (k === 'logo') return c.logo?.arquivo ?? '';
+  return JSON.stringify(c[k]);
+}
 
 /** Campos que mudaram entre duas configurações, em português. */
 export function camposAlterados(a: ConfigWidget, b: ConfigWidget): string[] {
   return (Object.keys(ROTULOS) as (keyof ConfigWidget)[])
-    .filter((k) => JSON.stringify(a[k]) !== JSON.stringify(b[k]))
+    .filter((k) => valorComparado(a, k) !== valorComparado(b, k))
     .map((k) => ROTULOS[k]);
+}
+
+/** Apaga da pasta da empresa os logos que o rascunho e a publicação não usam mais. */
+function limparLogosSemUso(ctx: Contexto) {
+  const { configuracoes } = ctx;
+  limparLogos(ctx.config.dirDados, [configuracoes.ler('widget_publicado').logo?.arquivo, configuracoes.ler('widget_rascunho').logo?.arquivo]);
 }
 
 export function lerCanais(ctx: Contexto): Canais {
   const { configuracoes, config, empresa } = ctx;
-  const publicada = configuracoes.ler('widget_publicado');
-  const rascunho = configuracoes.ler('widget_rascunho');
+  const publicada = comUrlDoLogo(configuracoes.ler('widget_publicado'), config.urlPublica, empresa.chavePublica);
+  const rascunho = comUrlDoLogo(configuracoes.ler('widget_rascunho'), config.urlPublica, empresa.chavePublica);
   return {
     publicada,
     rascunho,
@@ -102,9 +116,11 @@ const rotas: FastifyPluginAsync = async (app) => {
     const r = Pedido.safeParse(request.body ?? {});
     if (!r.success) throw pedidoInvalido(r.error.issues[0]?.message ?? 'Configuração inválida.');
     const anterior = configuracoes.ler('widget_rascunho');
-    const mudou = camposAlterados(anterior, r.data.config);
+    // O logo só muda pelas rotas próprias (enviar e remover); aqui ele fica como está.
+    const nova: ConfigWidget = { ...r.data.config, logo: anterior.logo ?? null };
+    const mudou = camposAlterados(anterior, nova);
     if (mudou.length === 0) return lerCanais(ctx);
-    configuracoes.gravar('widget_rascunho', r.data.config, m.nome);
+    configuracoes.gravar('widget_rascunho', nova, m.nome);
     // O console salva o rascunho enquanto a pessoa digita: um registro por pessoa a cada 10 minutos basta.
     const recente = banco.um<{ n: number }>(
       `SELECT COUNT(*) AS n FROM auditoria WHERE ator = ? AND acao = 'editou o rascunho do widget' AND ts >= ?`,
@@ -126,6 +142,7 @@ const rotas: FastifyPluginAsync = async (app) => {
     configuracoes.gravar('widget_publicado', rascunho, m.nome);
     plataforma.atualizarDominios(ctx.empresa.id, rascunho.dominios);
     auditoria.registrar(m.nome, 'publicou a configuração do widget', 'Canais e widget', `Mudou ${mudou.join(', ')}`);
+    limparLogosSemUso(ctx);
     return lerCanais(ctx);
   });
 
@@ -138,6 +155,46 @@ const rotas: FastifyPluginAsync = async (app) => {
     if (camposAlterados(publicada, rascunho).length === 0) return lerCanais(ctx);
     configuracoes.gravar('widget_rascunho', publicada, m.nome);
     auditoria.registrar(m.nome, 'descartou as alterações do widget', 'Canais e widget');
+    limparLogosSemUso(ctx);
+    return lerCanais(ctx);
+  });
+
+  // Logo: entra no rascunho (como as outras mudanças) e vale no widget depois de "Publicar alterações".
+  app.post('/logo', { preHandler: exigir('editar') }, async (request): Promise<Canais> => {
+    const ctx = ctxDe(request);
+    const { configuracoes, auditoria } = ctx;
+    const m = membro(request);
+    let arquivo;
+    try {
+      arquivo = await request.file({ limits: { fileSize: LIMITE_LOGO + 1, files: 1 } });
+    } catch {
+      throw pedidoInvalido('Envie o logo como arquivo, no campo "arquivo".');
+    }
+    if (!arquivo || arquivo.fieldname !== 'arquivo') throw pedidoInvalido('Envie o logo como arquivo, no campo "arquivo".');
+    let conteudo: Buffer;
+    try {
+      conteudo = await arquivo.toBuffer();
+    } catch {
+      throw new LogoRecusado('O logo passa de 1 MB. O limite é 1 MB.', 413);
+    }
+    if (arquivo.file.truncated) throw new LogoRecusado('O logo passa de 1 MB. O limite é 1 MB.', 413);
+    const logo = guardarLogo(ctx.config.dirDados, conteudo, arquivo.filename);
+    const rascunho = configuracoes.ler('widget_rascunho');
+    configuracoes.gravar('widget_rascunho', { ...rascunho, logo }, m.nome);
+    auditoria.registrar(m.nome, 'enviou o logo do widget', 'Canais e widget', `${logo.nome} (${Math.max(1, Math.round(logo.tamanho / 1024))} KB)`);
+    limparLogosSemUso(ctx);
+    return lerCanais(ctx);
+  });
+
+  app.delete('/logo', { preHandler: exigir('editar') }, async (request): Promise<Canais> => {
+    const ctx = ctxDe(request);
+    const { configuracoes, auditoria } = ctx;
+    const m = membro(request);
+    const rascunho = configuracoes.ler('widget_rascunho');
+    if (!rascunho.logo) return lerCanais(ctx);
+    configuracoes.gravar('widget_rascunho', { ...rascunho, logo: null }, m.nome);
+    auditoria.registrar(m.nome, 'removeu o logo do widget', 'Canais e widget', rascunho.logo.nome);
+    limparLogosSemUso(ctx);
     return lerCanais(ctx);
   });
 

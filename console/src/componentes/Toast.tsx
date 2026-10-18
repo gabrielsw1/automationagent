@@ -4,6 +4,7 @@
 //   toast.sucesso('Rascunho salvo.');
 //   toast.erro('Não consegui salvar. Tente de novo.');
 //   toast.mostrar({ texto: 'Tarefa publicada.', acao: { rotulo: 'Desfazer', aoClicar: desfazer } });
+//   toast.mostrar({ texto: '…', acoes: [{ rotulo: 'Abrir a ficha', aoClicar: abrir }, { rotulo: 'Ver no widget', aoClicar: ver }] });
 //
 // Some em 8 s, mas não enquanto o mouse ou o foco estiverem sobre ele. O <ProvedorToast> fica no App.
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
@@ -13,6 +14,8 @@ export interface OpcoesToast {
   texto: string;
   tipo?: 'sucesso' | 'erro' | 'info';
   acao?: { rotulo: string; aoClicar: () => void };
+  /** Mais de uma ação ("Abrir a ficha da tarefa", "Ver no widget"). */
+  acoes?: { rotulo: string; aoClicar: () => void }[];
   duracaoMs?: number;
 }
 
@@ -48,7 +51,7 @@ function UmToast({ item, aoSumir }: { item: ItemToast; aoSumir: (id: number) => 
   const icone = item.tipo === 'erro' ? 'alerta' : item.tipo === 'info' ? 'info' : 'check';
   return (
     <div
-      className={`toast ca-toast ca-toast-${item.tipo ?? 'sucesso'}`}
+      className={`toast ca-toast ca-toast-${item.tipo ?? 'sucesso'}${item.acoes?.length ? ' wrap' : ''}`}
       role={item.tipo === 'erro' ? 'alert' : 'status'}
       onMouseEnter={() => setParado(true)}
       onMouseLeave={() => setParado(false)}
@@ -57,18 +60,19 @@ function UmToast({ item, aoSumir }: { item: ItemToast; aoSumir: (id: number) => 
     >
       <Icone nome={icone} className="ca-toast-icone" />
       <span className="grow small">{item.texto}</span>
-      {item.acao ? (
+      {[...(item.acao ? [item.acao] : []), ...(item.acoes ?? [])].map((a) => (
         <button
+          key={a.rotulo}
           type="button"
           className="btn btn-sm ca-toast-acao"
           onClick={() => {
-            item.acao!.aoClicar();
+            a.aoClicar();
             aoSumir(item.id);
           }}
         >
-          {item.acao.rotulo}
+          {a.rotulo}
         </button>
-      ) : null}
+      ))}
       <button type="button" className="btn btn-sm btn-icon ca-toast-fechar" aria-label="Fechar aviso" onClick={() => aoSumir(item.id)}>
         <Icone nome="fechar" tamanho="sm" />
       </button>

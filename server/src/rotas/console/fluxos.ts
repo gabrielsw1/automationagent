@@ -2,7 +2,17 @@
 // navegador e publicar. Ver docs/arquitetura.md, "Gravador de fluxos" e "API do console".
 import type { FastifyPluginAsync, FastifyRequest } from 'fastify';
 import { z } from 'zod';
-import { passoExecutavel, validarCampo, type Campo, type Fluxo, type PassoFluxo, type TarefaDefinicao } from '@copiloto/shared';
+import {
+  passoExecutavel,
+  validarCampo,
+  type Campo,
+  type Fluxo,
+  type FluxoPublicado,
+  type PassoFluxo,
+  type RegistroLido,
+  type ResultadoFluxo,
+  type TarefaDefinicao,
+} from '@copiloto/shared';
 import { exigir, membro } from '../../auth/console.ts';
 import { ctxDe, type Contexto } from '../../contexto.ts';
 import { aprenderFluxo, pendenciaDe } from '../../navegador/aprender.ts';
@@ -13,6 +23,7 @@ import { minusculaInicial } from '../../navegador/texto.ts';
 import type { EventoNavegador, ResultadoNavegador } from '../../navegador/tipos.ts';
 import { ErroLlm, RecusaDoModelo } from '../../llm/tipos.ts';
 import { agoraIso } from '../../db/banco.ts';
+import { pendenciasParaPublicar, resumirAlteracoes } from '../../tarefas/definicao.ts';
 import { ErroHttp, conflito, naoEncontrado, pedidoInvalido } from '../../util/erros.ts';
 import { camposDaTarefa, concluirGravacao, urlDoSistema } from '../gravacao.ts';
 
@@ -70,6 +81,20 @@ const PedidoCriar = z.object({
   urlInicial: z.string().trim().min(1, 'Informe a página onde a tarefa começa.').max(2000),
 });
 
+/** Onde ler o número do registro criado (Mapear campos). Tudo vazio vira null: procura no aviso. */
+const ResultadoZ = z
+  .object({
+    seletor: z.string().trim().max(500).optional(),
+    formato: z
+      .string()
+      .trim()
+      .max(60)
+      .refine((f) => !f || /[9a]/i.test(f), 'No formato do número, use 9 para cada dígito e a para cada letra. Ex.: CH-9999-9999.')
+      .optional(),
+    nome: z.string().trim().max(60).optional(),
+  })
+  .nullable();
+
 const PedidoAtualizar = z.object({
   nome: z.string().trim().min(2).max(120).optional(),
   tarefaId: z.string().nullable().optional(),
@@ -77,7 +102,27 @@ const PedidoAtualizar = z.object({
   passos: z.array(Passo).max(200).optional(),
   camposSugeridos: z.array(CampoZ).max(60).optional(),
   urlInicial: z.string().trim().min(1).max(2000).optional(),
+  resultado: ResultadoZ.optional(),
 });
+
+const PedidoPublicar = z
+  .object({
+    /** Widget ligado: além de publicar o fluxo, publica a tarefa (fica ativa no widget). */
+    ativar: z.boolean().optional(),
+    /** Quem pode usar. Vazio: todos os perfis. */
+    perfis: z.array(z.string().trim().min(1).max(120)).max(200).optional(),
+  })
+  .default({});
+
+/** Resultado sem campos vazios; null quando não sobra nada. */
+function resultadoLimpo(r: ResultadoFluxo | null): ResultadoFluxo | null {
+  if (!r) return null;
+  const limpo: ResultadoFluxo = {};
+  if (r.seletor) limpo.seletor = r.seletor;
+  if (r.formato) limpo.formato = r.formato;
+  if (r.nome) limpo.nome = r.nome;
+  return Object.keys(limpo).length ? limpo : null;
+}
 
 const PedidoTestar = z.object({
   valores: z.record(z.string(), z.union([z.string(), z.number(), z.boolean(), z.null()])).default({}),
@@ -103,6 +148,8 @@ export interface RespostaTesteFluxo {
     recuperacoes: number;
     printId?: string;
     candidato?: { texto: string; confianca: number };
+    /** Número do registro criado, lido da tela no fim do teste. */
+    registro?: RegistroLido | null;
   };
   eventos: EventoNavegador[];
 }
@@ -242,7 +289,13 @@ const rotas: FastifyPluginAsync = async (app) => {
     const r = PedidoAtualizar.safeParse(request.body);
     if (!r.success) throw pedidoInvalido(primeiraMensagem(r.error, 'Os passos do fluxo vieram em formato inválido.'));
     const d = r.data;
-    const mudaConteudo = d.nome !== undefined || d.tarefaId !== undefined || d.passos !== undefined || d.camposSugeridos !== undefined || d.urlInicial !== undefined;
+    const mudaConteudo =
+      d.nome !== undefined ||
+      d.tarefaId !== undefined ||
+      d.passos !== undefined ||
+      d.camposSugeridos !== undefined ||
+      d.urlInicial !== undefined ||
+      d.resultado !== undefined;
     if (f.status === 'publicado' && mudaConteudo) {
       throw conflito('Este fluxo já está publicado e em uso. Crie uma nova versão para mudar os passos; a atual continua valendo até você publicar a nova.');
     }
@@ -255,6 +308,7 @@ const rotas: FastifyPluginAsync = async (app) => {
     if (d.tarefaId !== undefined) campos.tarefa_id = d.tarefaId;
     if (d.etapa !== undefined) campos.etapa = d.etapa;
     if (d.urlInicial !== undefined) campos.url_inicial = caminhoInicial(adaptador.urlBase, d.urlInicial, adaptador.nome);
+    if (d.resultado !== undefined) campos.resultado = resultadoLimpo(d.resultado);
     const camposSugeridos = (d.camposSugeridos as Campo[] | undefined) ?? f.camposSugeridos;
     if (d.camposSugeridos !== undefined) campos.campos_sugeridos = camposSugeridos;
     let passos = f.passos;
@@ -507,8 +561,15 @@ const rotas: FastifyPluginAsync = async (app) => {
       if (e.passo && e.printId && passos[e.passo - 1]) passos[e.passo - 1].printId = e.printId;
     }
     const ultimoTeste: NonNullable<Fluxo['ultimoTeste']> = resultado.ok
-      ? { em: agoraIso(), ok: true }
-      : { em: agoraIso(), ok: false, passoFalhou: resultado.passo ?? undefined, erro: resultado.mensagem };
+      ? { em: agoraIso(), ok: true, duracaoMs: resultado.duracaoMs, usuarioNome: usuario.nome, registro: resultado.registro }
+      : {
+          em: agoraIso(),
+          ok: false,
+          passoFalhou: resultado.passo ?? undefined,
+          erro: resultado.mensagem,
+          duracaoMs: resultado.duracaoMs,
+          usuarioNome: usuario.nome,
+        };
     const atualizado = fluxos.atualizar(f.id, {
       passos: passos.map((p) => (p.printId ? p : (({ printId: _x, ...resto }) => resto)(p))),
       ultimo_teste: ultimoTeste,
@@ -531,6 +592,7 @@ const rotas: FastifyPluginAsync = async (app) => {
             gerados: resultado.gerados,
             arquivos: resultado.arquivos.map((a) => ({ nome: a.nome, tipo: a.tipo })),
             recuperacoes: resultado.recuperacoes,
+            registro: resultado.registro,
           }
         : {
             ok: false,
@@ -548,11 +610,14 @@ const rotas: FastifyPluginAsync = async (app) => {
     };
   });
 
-  app.post<{ Params: { id: string } }>('/:id/publicar', { preHandler: exigir('editar') }, async (request) => {
+  app.post<{ Params: { id: string } }>('/:id/publicar', { preHandler: exigir('editar') }, async (request): Promise<FluxoPublicado> => {
     const ctx = ctxDe(request);
     const { auditoria, catalogo } = ctx;
     const fluxos = new Fluxos(ctx.banco, ctx.empresa.id);
     const f = obter(fluxos, request.params.id);
+    const pedido = PedidoPublicar.safeParse(request.body ?? {});
+    if (!pedido.success) throw pedidoInvalido(primeiraMensagem(pedido.error, 'Escolha quem pode usar e onde a tarefa aparece.'));
+    const { ativar = false, perfis } = pedido.data;
     if (f.status === 'gravando') throw conflito('A gravação ainda está em andamento. Conclua, revise e teste antes de publicar.');
     if (f.status === 'publicado') throw conflito('Este fluxo já está publicado.');
     if (f.passos.length === 0) throw conflito('Este fluxo não tem passos. Grave a tarefa na tela primeiro.');
@@ -563,16 +628,54 @@ const rotas: FastifyPluginAsync = async (app) => {
     }
     if (!f.ultimoTeste?.ok) throw conflito('Teste o fluxo com sucesso antes de publicar. Depois de qualquer mudança nos passos, teste de novo.');
     const quem = nomeDe(request);
-    const atualizado = fluxos.atualizar(f.id, { status: 'publicado', etapa: 'publicar' });
-    let tarefa: { id: string; nome: string } | null = null;
-    if (f.tarefaId && catalogo.obter(f.tarefaId)) {
-      const v = catalogo.rascunho(f.tarefaId) ?? catalogo.publicada(f.tarefaId);
-      if (v) {
-        catalogo.salvarRascunho(f.tarefaId, { ...v.definicao, fluxoId: f.id }, quem);
-        tarefa = { id: f.tarefaId, nome: v.definicao.nome };
+    const tarefaId = f.tarefaId && catalogo.obter(f.tarefaId) ? f.tarefaId : null;
+    const base = tarefaId ? (catalogo.rascunho(tarefaId) ?? catalogo.publicada(tarefaId)) : null;
+    // A ficha da tarefa com este fluxo (e quem pode usar). Para ativar, ela precisa estar completa.
+    const definicao: TarefaDefinicao | null = base
+      ? { ...base.definicao, fluxoId: f.id, ...(perfis ? { perfisPermitidos: [...new Set(perfis)] } : {}) }
+      : null;
+    if (ativar && definicao) {
+      const pendencias = pendenciasParaPublicar(definicao);
+      if (pendencias.length) {
+        throw new ErroHttp(
+          422,
+          'ficha_incompleta',
+          `Antes de ativar a tarefa: ${pendencias.join(' ')} Corrija na ficha da tarefa ou desligue o widget para publicar só o fluxo.`,
+        );
       }
     }
-    auditoria.registrar(quem, 'publicou o fluxo', f.nome, tarefa ? `Versão ${f.versao}, ligado ao rascunho da tarefa “${tarefa.nome}”` : `Versão ${f.versao}`);
+    const atualizado = fluxos.atualizar(f.id, { status: 'publicado', etapa: 'publicar' });
+    let tarefa: FluxoPublicado['tarefa'] = null;
+    if (tarefaId && definicao) {
+      const anterior = catalogo.publicada(tarefaId)?.definicao ?? null;
+      const rascunho = catalogo.salvarRascunho(tarefaId, definicao, quem);
+      if (ativar) {
+        const resumo = resumirAlteracoes(anterior, definicao);
+        const v = catalogo.publicar(tarefaId, quem, resumo);
+        auditoria.registrar(quem, `publicou a versão ${v.versao} da tarefa`, definicao.nome, resumo);
+      }
+      const t = catalogo.obter(tarefaId)!;
+      const publicada = catalogo.publicada(tarefaId);
+      tarefa = {
+        id: tarefaId,
+        nome: definicao.nome,
+        status: t.status,
+        versao: ativar && publicada ? publicada.versao : rascunho.versao,
+        ativada: ativar,
+        publicadoPor: ativar ? (publicada?.publicadoPor ?? quem) : null,
+        publicadoEm: ativar ? (publicada?.publicadoEm ?? agoraIso()) : null,
+      };
+    }
+    auditoria.registrar(
+      quem,
+      'publicou o fluxo',
+      f.nome,
+      tarefa
+        ? ativar
+          ? `Versão ${f.versao}, publicada com a versão ${tarefa.versao} da tarefa “${tarefa.nome}”`
+          : `Versão ${f.versao}, ligado ao rascunho da tarefa “${tarefa.nome}”`
+        : `Versão ${f.versao}`,
+    );
     avisar(ctx, atualizado);
     return { fluxo: publico(atualizado), tarefa };
   });

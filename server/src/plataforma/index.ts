@@ -15,6 +15,7 @@ import type { ConectorSistema, ContatoPedido, ContatoRecebido, FaixaUsuarios, Fa
 import type { AdaptadorSistema } from '../adaptadores/tipos.ts';
 import { hashSenha, verificarSenha } from '../auth/senha.ts';
 import type { Config } from '../config.ts';
+import { Faturas } from '../cobranca/faturas.ts';
 import { criarContexto, trocarSistema, type Contexto } from '../contexto.ts';
 import { Banco, agoraIso, json } from '../db/banco.ts';
 import { criarCorreio, type Correio } from '../email/index.ts';
@@ -142,6 +143,8 @@ export interface OpcoesPlataforma {
   navegador?: (empresa: Empresa) => Navegador | undefined;
   /** E-mails (testes: CaixaLocal sem pasta). Padrão: SMTP_URL ou DATA_DIR/caixa-de-saida. */
   correio?: Correio;
+  /** `fetch` das chamadas ao Asaas (testes: um falso, sem rede). */
+  fetch?: typeof fetch;
 }
 
 const DIAS_SESSAO = 7;
@@ -206,11 +209,13 @@ interface LinhaContato {
   email: string;
   empresa: string;
   telefone: string | null;
-  faixa: FaixaUsuarios;
+  faixa: FaixaUsuarios | null;
   mensagem: string | null;
   origem: ContatoRecebido['origem'];
   criado_em: string;
   ip: string | null;
+  empresa_id: string | null;
+  plano_id: string | null;
 }
 
 function deContato(l: LinhaContato): ContatoRecebido {
@@ -225,6 +230,8 @@ function deContato(l: LinhaContato): ContatoRecebido {
     origem: l.origem,
     criadoEm: l.criado_em,
     ip: l.ip,
+    empresaId: l.empresa_id,
+    planoId: l.plano_id,
   };
 }
 
@@ -266,6 +273,8 @@ export class Plataforma {
   readonly cofre: Cofre;
   readonly correio: Correio;
   readonly starta: EquipeStarta;
+  /** Faturas, pacotes de créditos e o Asaas (cobranca/faturas.ts). */
+  readonly faturas: Faturas;
   private readonly contextos = new Map<string, Contexto>();
   private cacheDominios: Set<string> | null = null;
 
@@ -277,6 +286,7 @@ export class Plataforma {
     this.cofre = new Cofre(config.chaveMestra);
     this.correio = opcoes.correio ?? criarCorreio(config);
     this.starta = new EquipeStarta(this.banco, this.cofre);
+    this.faturas = new Faturas(this, opcoes.fetch);
   }
 
   // ---------------------------------------------------------------- empresas
@@ -404,7 +414,13 @@ export class Plataforma {
       dados.fase = a.fase;
       dados.fase_desde = agoraIso();
     }
-    if (a.planoId !== undefined) dados.plano_id = a.planoId;
+    if (a.planoId !== undefined) {
+      dados.plano_id = a.planoId;
+      // A cobrança mensal começa no mês em que a empresa ganha o primeiro plano.
+      if (a.planoId && !atual.demo && !this.banco.um('SELECT 1 FROM empresas WHERE id = ? AND cobranca_desde IS NOT NULL', empresaId)) {
+        dados.cobranca_desde = agoraIso();
+      }
+    }
     if (a.responsavelStarta !== undefined) dados.responsavel_starta = a.responsavelStarta;
     if (a.metaTarefas !== undefined) dados.meta_tarefas = a.metaTarefas;
     if (a.avaliacaoPilotoEm !== undefined) dados.avaliacao_piloto_em = a.avaliacaoPilotoEm;
@@ -874,10 +890,17 @@ export class Plataforma {
     return centavos == null ? null : centavos / 100;
   }
 
-  /** Muda os preços de um plano, em centavos. null volta a "Sob consulta"; o que não vier fica como está. */
-  atualizarPrecosPlano(id: string, precos: Partial<PrecosPlano>): Plano {
+  /**
+   * Muda os preços de um plano, em centavos. null volta a "Sob consulta"; o que não vier fica como
+   * está. `pacoteCreditos`: créditos do pacote avulso de Plano e créditos.
+   */
+  atualizarPrecosPlano(id: string, precos: Partial<PrecosPlano> & { pacoteCreditos?: number }): Plano {
     if (!this.plano(id)) throw new Error(`Plano ${id} não existe.`);
     const dados: Record<string, unknown> = { atualizado_em: agoraIso() };
+    if (precos.pacoteCreditos !== undefined) {
+      if (!(Number.isInteger(precos.pacoteCreditos) && precos.pacoteCreditos > 0)) throw new Error('pacoteCreditos: inteiro a partir de 1.');
+      dados.pacote_creditos = precos.pacoteCreditos;
+    }
     for (const campo of Object.keys(COLUNA_PRECO) as (keyof PrecosPlano)[]) {
       const valor = precos[campo];
       if (valor === undefined) continue;
@@ -888,8 +911,19 @@ export class Plataforma {
     return this.plano(id)!;
   }
 
-  /** Guarda o pedido de "Agendar demonstração" ou "Falar com vendas". Pedidos não mudam nem somem. */
-  registrarContato(d: ContatoPedido & { ip: string | null }): ContatoRecebido {
+  /**
+   * Guarda o pedido de "Agendar demonstração", "Falar com vendas" ou, vindo de Plano e créditos,
+   * "Mudar de plano" (com a empresa e o plano pedido). Pedidos não mudam nem somem.
+   */
+  registrarContato(
+    d: Omit<ContatoPedido, 'faixa' | 'origem'> & {
+      faixa: FaixaUsuarios | null;
+      origem: ContatoRecebido['origem'];
+      ip: string | null;
+      empresaId?: string | null;
+      planoId?: string | null;
+    },
+  ): ContatoRecebido {
     const id = novoId('ctt');
     this.banco.inserir('contatos', {
       id,
@@ -902,6 +936,8 @@ export class Plataforma {
       origem: d.origem,
       criado_em: agoraIso(),
       ip: d.ip,
+      empresa_id: d.empresaId ?? null,
+      plano_id: d.planoId ?? null,
     });
     return deContato(this.banco.um<LinhaContato>('SELECT * FROM contatos WHERE id = ?', id)!);
   }
@@ -913,7 +949,17 @@ export class Plataforma {
 
   // ---------------------------------------------------------------- encerrar
 
+  /** O último pedido de mudança de plano desta empresa. */
+  ultimoPedidoPlano(empresaId: string): ContatoRecebido | undefined {
+    const l = this.banco.um<LinhaContato>(
+      "SELECT * FROM contatos WHERE empresa_id = ? AND origem = 'mudanca_plano' ORDER BY criado_em DESC, rowid DESC LIMIT 1",
+      empresaId,
+    );
+    return l ? deContato(l) : undefined;
+  }
+
   async fechar() {
+    this.faturas.pararFechamento();
     const lista = this.abertos();
     this.contextos.clear();
     for (const ctx of lista) {

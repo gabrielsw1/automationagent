@@ -8,8 +8,17 @@ export function trechoInstalacao(urlScript: string, chave: string, conector: Con
   if (conector === 'tela') {
     linhas.push('  data-nome="NOME_DO_USUARIO"', '  data-email="EMAIL_DO_USUARIO"', '  data-perfis="PERFIS_SEPARADOS_POR_VIRGULA"');
   }
-  linhas.push(`  data-assinatura="${conector === 'tela' ? 'HMAC_DOS_DADOS_DO_USUARIO' : 'HMAC_DO_ID_DO_USUARIO'}"`, '  async></script>');
+  linhas.push('  data-assinatura="ASSINATURA_DO_SEU_SERVIDOR"', '  async></script>');
   return linhas.join('\n');
+}
+
+/** "https://app.horizonte.com.br" → "app.horizonte.com.br" ("Detectado em ..."). */
+export function hostDaOrigem(origem: string): string {
+  try {
+    return new URL(origem).host || origem;
+  } catch {
+    return origem;
+  }
 }
 
 /** Exemplo do texto assinado (calculado por `textoAssinado`, o mesmo que o servidor confere). */

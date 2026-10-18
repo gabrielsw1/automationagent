@@ -3,6 +3,7 @@
 import type { Config } from './config.ts';
 import { AdaptadorDaEmpresa, criarAdaptador, type AdaptadorSistema } from './adaptadores/index.ts';
 import { Agente } from './agente/agente.ts';
+import { Creditos } from './cobranca/creditos.ts';
 import { Conhecimento, type BaseConhecimento } from './conhecimento/index.ts';
 import { Banco } from './db/banco.ts';
 import { Eventos } from './eventos.ts';
@@ -45,6 +46,8 @@ export interface Contexto {
   adaptador: AdaptadorDaEmpresa;
   configuracoes: Configuracoes;
   auditoria: Auditoria;
+  /** Créditos do ciclo e o bloqueio quando acabam (Plano e créditos). */
+  creditos: Creditos;
   gastos: Gastos;
   conversas: Conversas;
   catalogo: Catalogo;
@@ -92,7 +95,8 @@ export function criarContexto(config: Config, opcoes: OpcoesContexto): Contexto 
     chavePublicaPadrao: empresa.chavePublica,
     demo: empresa.demo,
   });
-  const gastos = new Gastos(banco, config, configuracoes);
+  const creditos = new Creditos(banco, plataforma, empresa.id, empresa.demo, configuracoes);
+  const gastos = new Gastos(banco, config, configuracoes, creditos);
   const llm = opcoes.llm ?? criarLlm(config, gastos.registrarUso);
   const adaptador = opcoes.adaptador
     ? new AdaptadorDaEmpresa(opcoes.adaptador, true)
@@ -113,6 +117,7 @@ export function criarContexto(config: Config, opcoes: OpcoesContexto): Contexto 
     adaptador,
     configuracoes,
     auditoria,
+    creditos,
     gastos,
     conversas,
     catalogo,

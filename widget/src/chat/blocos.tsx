@@ -389,6 +389,13 @@ export function CartaoRecibo({ bloco }: { bloco: BlocoDe<'recibo'> }) {
         {bloco.desfeito && <span className="badge cp-selo">Desfeito</span>}
       </div>
       <div className="ac-body cp-gap-10">
+        {bloco.registro && (
+          // Número do registro criado, lido da tela: "Chamado #1287 · Padaria Estrela · Prioridade alta".
+          <p className="strong cp-recibo-registro">
+            {bloco.registro.nome} <span className="mono">{bloco.registro.numero}</span>
+            {bloco.registro.detalhes.map((d) => ` · ${d}`).join('')}
+          </p>
+        )}
         {bloco.campos.length > 0 && <ListaCampos campos={bloco.campos} />}
         <p className="row tiny muted cp-gap-6">
           <Icone nome={viaNavegador ? 'janela' : 'codigo'} tamanho="sm" />

@@ -5,7 +5,7 @@ import type { MensagemWidget, PaginaContexto, SugestaoProativa, WidgetInicio } f
 import { ClienteApi } from '../chat/api.ts';
 import { ControladorChat, resumoMensagem } from '../chat/controlador.ts';
 import { mesmaCor, variaveisMarca } from '../chat/cor.ts';
-import { AvatarCopiloto, Icone } from '../chat/icones.tsx';
+import { AvatarCopiloto, Icone, ProvedorLogo } from '../chat/icones.tsx';
 import { Painel } from '../chat/painel.tsx';
 import { armazenamento, ehMac } from '../chat/util.ts';
 import { lerContextoPagina, observarContextoPagina, paginaTemFormulario } from './pagina.ts';
@@ -68,7 +68,16 @@ function useProativa(inicio: WidgetInicio, api: ClienteApi, ativo: boolean) {
   return [sugestao, () => setSugestao(null)] as const;
 }
 
-export function WidgetEmbutido({ inicio, api, corPadrao }: PropsWidgetEmbutido) {
+/** O widget com o logo da empresa (quando há) no avatar do topo, das respostas e dos avisos. */
+export function WidgetEmbutido(props: PropsWidgetEmbutido) {
+  return (
+    <ProvedorLogo value={props.inicio.config.logo?.url || null}>
+      <WidgetEmbutidoMarca {...props} />
+    </ProvedorLogo>
+  );
+}
+
+function WidgetEmbutidoMarca({ inicio, api, corPadrao }: PropsWidgetEmbutido) {
   const { config } = inicio;
   const guarda = useMemo(() => armazenamento('sessao'), []);
   const [aberto, setAberto] = useState(() => guarda.ler(CHAVE_ABERTO) === '1');

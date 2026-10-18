@@ -31,6 +31,8 @@ export interface Plano extends PrecosPlano {
   usuariosMax: number | null;
   /** Créditos por mês; null: sob medida. */
   creditosIncluidos: number | null;
+  /** Créditos de um pacote avulso ("Comprar pacote" em Plano e créditos), ao preço do crédito extra. */
+  pacoteCreditos: number;
   /** Linha abaixo do preço. "{implantacao}" vira a taxa de implantação. */
   notaPreco: string;
   /** Itens da lista que vêm depois de usuários, créditos e crédito extra. */
@@ -62,13 +64,16 @@ export function precoEmReais(centavos: number | null): string | null {
 
 // ---------- Pedido de contato do site ----------
 
-/** De qual botão veio o pedido. `piloto`: "Começar piloto" com o cadastro fechado. */
+/** De qual botão do site veio o pedido. `piloto`: "Começar piloto" com o cadastro fechado. */
 export type OrigemContato = 'demonstracao' | 'vendas' | 'piloto';
+/** Origem de um pedido guardado: os botões do site e o "Mudar de plano" de Plano e créditos (Admin de uma empresa cliente). */
+export type OrigemPedido = OrigemContato | 'mudanca_plano';
 
-export const ROTULO_ORIGEM_CONTATO: Record<OrigemContato, string> = {
+export const ROTULO_ORIGEM_CONTATO: Record<OrigemPedido, string> = {
   demonstracao: 'Agendar demonstração',
   vendas: 'Falar com vendas',
   piloto: 'Começar piloto',
+  mudanca_plano: 'Mudar de plano',
 };
 
 /** POST /api/publico/contato → `{ ok: true }`. */
@@ -91,11 +96,15 @@ export interface ContatoRecebido {
   email: string;
   empresa: string;
   telefone: string | null;
-  faixa: FaixaUsuarios;
+  /** null num pedido de mudança de plano de empresa que não informou a faixa no cadastro. */
+  faixa: FaixaUsuarios | null;
   mensagem: string | null;
-  origem: OrigemContato;
+  origem: OrigemPedido;
   criadoEm: string;
   ip: string | null;
+  /** Pedido de mudança de plano: a empresa cliente e o plano pedido. */
+  empresaId?: string | null;
+  planoId?: string | null;
 }
 
 // ---------- Textos jurídicos ----------

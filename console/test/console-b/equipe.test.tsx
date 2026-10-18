@@ -22,6 +22,7 @@ const membros: MembroEquipe[] = [
 ];
 
 const limites: Limites = {
+  base: 'custo',
   mensal: 1500,
   porUsuarioDia: 50,
   alerta80: true,

@@ -5,6 +5,7 @@ import { lerSessaoStarta } from '../../auth/starta.ts';
 import auth from './auth.ts';
 import empresas from './empresas.ts';
 import equipe from './equipe.ts';
+import faturas from './faturas.ts';
 import painel from './painel.ts';
 
 const rotas: FastifyPluginAsync = async (app) => {
@@ -15,6 +16,7 @@ const rotas: FastifyPluginAsync = async (app) => {
 
   await app.register(auth, { prefix: '/auth' });
   await app.register(empresas, { prefix: '/empresas' });
+  await app.register(faturas, { prefix: '/empresas' });
   await app.register(equipe, { prefix: '/equipe' });
   await app.register(painel);
 };

@@ -1,8 +1,8 @@
 // Plataforma › Suporte: os acessos da equipe Starta ao console das empresas (quem, onde, por quê,
 // quando) e os pedidos de contato que chegaram pelo site do produto.
 import { Link } from 'react-router-dom';
-import { fmt, ROTULO_FAIXA_USUARIOS, type AcessoSuporteResumo } from '@copiloto/shared';
-import { ROTULO_ORIGEM, useApiPlataforma, type ContatoSite, type SuportePlataforma } from '../../api/plataforma.ts';
+import { fmt, ROTULO_FAIXA_USUARIOS, ROTULO_ORIGEM_CONTATO, type AcessoSuporteResumo, type ContatoRecebido } from '@copiloto/shared';
+import { useApiPlataforma, type SuportePlataforma } from '../../api/plataforma.ts';
 import { Carregando, EstadoErro } from '../../componentes/estados.tsx';
 import { CabecalhoPagina } from '../../componentes/formulario.tsx';
 import { Tabela } from '../../componentes/Tabela.tsx';
@@ -69,7 +69,7 @@ export default function Suporte() {
               Pedidos de contato do site
             </h2>
             <p className="small muted">“Agendar demonstração”, “Falar com vendas” e “Começar piloto” com o cadastro fechado. Responda pelo e-mail de cada pessoa.</p>
-            <Tabela<ContatoSite>
+            <Tabela<ContatoRecebido>
               rotulo="Pedidos de contato do site"
               linhas={dados.dados.contatos}
               chave={(c) => c.id}
@@ -89,8 +89,8 @@ export default function Suporte() {
                   ),
                 },
                 { titulo: 'Empresa', classe: 'cp-sem-quebra', celula: (c) => c.empresa },
-                { titulo: 'Usuários', classe: 'small cp-sem-quebra', celula: (c) => ROTULO_FAIXA_USUARIOS[c.faixa] ?? c.faixa },
-                { titulo: 'Pedido', celula: (c) => <span className="badge badge-outline">{ROTULO_ORIGEM[c.origem] ?? c.origem}</span> },
+                { titulo: 'Usuários', classe: 'small cp-sem-quebra', celula: (c) => (c.faixa ? (ROTULO_FAIXA_USUARIOS[c.faixa] ?? c.faixa) : '—') },
+                { titulo: 'Pedido', celula: (c) => <span className="badge badge-outline">{ROTULO_ORIGEM_CONTATO[c.origem] ?? c.origem}</span> },
                 { titulo: 'Mensagem', classe: 'small cp-texto-longo', celula: (c) => c.mensagem ?? <span className="muted">—</span> },
               ]}
             />

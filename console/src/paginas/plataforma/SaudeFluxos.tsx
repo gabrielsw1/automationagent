@@ -70,10 +70,10 @@ export default function SaudeFluxos() {
                       </span>
                     ),
                   },
-                  { titulo: 'Consertos 30 d', alinhar: 'direita', classe: 'num', celula: (f) => fmt.numero(f.consertos30d) },
-                  { titulo: 'Execuções 30 d', alinhar: 'direita', classe: 'num', celula: (f) => fmt.numero(f.execucoes30d) },
+                  { titulo: 'Consertos 30\u00a0d', alinhar: 'direita', classe: 'num', celula: (f) => fmt.numero(f.consertos30d) },
+                  { titulo: 'Execuções 30\u00a0d', alinhar: 'direita', classe: 'num', celula: (f) => fmt.numero(f.execucoes30d) },
                   {
-                    titulo: 'Falhas 30 d',
+                    titulo: 'Falhas 30\u00a0d',
                     alinhar: 'direita',
                     classe: (f) => `num${f.falhas30d > 0 ? ' text-danger' : ' muted'}`,
                     celula: (f) => fmt.numero(f.falhas30d),

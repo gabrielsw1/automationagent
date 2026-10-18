@@ -146,19 +146,21 @@ Com o `npm run dev` rodando e a extensão carregada:
    Depois clique no botão **Abrir chamado**.
 6. Clique em **Concluir** na barra. Ela mostra "Gravação enviada. Volte ao console para revisar." Pode fechar essa aba.
 7. Volte à aba do console. O fluxo está em **Revisar passos**, com um passo para cada coisa que você fez (6, neste exemplo). Clique em **Continuar para mapear**.
-8. Em **Mapear campos**, clique em **Criar tarefa com estes dados** e depois em **Continuar para testes**.
+8. Em **Mapear campos**, clique em **Criar tarefa com estes dados** e depois em **Continuar para testes**. O quadro **Número do registro criado** pode ficar em branco: sem ele, o copiloto procura o número no aviso de confirmação que o Horizonte mostra depois de abrir o chamado.
 9. Em **Testar**:
    - Em **Rodar como**, escolha **Ana Ribeiro**.
    - Preencha os valores do teste, por exemplo Assunto `Teste do copiloto`, Cliente `Padaria Estrela`, Prioridade `Baixa` e Descrição `Teste do fluxo gravado.`
    - Clique em **Rodar teste**. O teste abre um chamado de verdade no Horizonte.
-   - Quando aparecer "Deu certo", clique em **Continuar para publicar**.
-10. Em **Publicar**, clique em **Publicar versão 1** e depois em **Abrir a ficha da tarefa**.
-11. Na ficha da tarefa **Abrir chamado**, clique em **Publicar versão 1**, no topo, e confirme em **Publicar versão 1**. A tarefa fica ativa para todos os perfis, Ana inclusive.
-12. Volte ao Horizonte (como Ana Ribeiro). Abra o copiloto pelo botão no canto da tela ou com Ctrl+K e escreva:
+   - Quando aparecer "Deu certo", a linha **Registro criado** mostra o número que o Horizonte deu ao chamado, por exemplo `Chamado CH-2026-0153`. Para o copiloto ler sempre daquele lugar da tela, volte a **Mapear campos** e clique em **Usar este lugar**.
+   - Clique em **Continuar para publicar**.
+10. Em **Publicar**, confira o resumo: o que o copiloto vai pedir, como executa, o **Custo previsto** e o último teste. Deixe **Mostrar no widget** ligado e clique em **Publicar versão 1**. O fluxo e a tarefa são publicados juntos, e a tarefa fica ativa para todos os perfis, Ana inclusive. Para escolher perfis, desmarque **Todos os perfis** antes de publicar.
+11. Volte ao Horizonte (como Ana Ribeiro). Abra o copiloto pelo botão no canto da tela ou com Ctrl+K e escreva:
 
     `Abre um chamado para a Padaria Estrela sobre impressora sem tinta, prioridade alta`
-13. O copiloto confirma o assunto, a prioridade e o cliente e pergunta a descrição. Responda, por exemplo: `A impressora do caixa parou de imprimir os cupons fiscais.`
-14. Confira o cartão **Confirme: Abrir chamado** e clique em **Confirmar e executar**. O copiloto abre o chamado pela tela, com a sessão de Ana, num navegador que não aparece. Em alguns segundos, chega o recibo **Abrir chamado: feito**. Recarregue **Chamados** e o chamado novo estará no topo da lista.
+12. O copiloto confirma o assunto, a prioridade e o cliente e pergunta a descrição. Responda, por exemplo: `A impressora do caixa parou de imprimir os cupons fiscais.`
+13. Confira o cartão **Confirme: Abrir chamado** e clique em **Confirmar e executar**. O copiloto abre o chamado pela tela, com a sessão de Ana, num navegador que não aparece. Em alguns segundos, chega o recibo **Abrir chamado: feito**, com a linha **Chamado CH-2026-0154 · Padaria Estrela · Prioridade alta** (o número é o que o Horizonte deu, lido da tela) e o link **Abrir o chamado**, que abre o chamado novo no Horizonte.
+
+O mesmo caminho, sem a extensão, roda nos testes: `npx vitest run test/navegador/chamado-horizonte.test.ts`, na pasta `server`, sobe o Horizonte e o copiloto em portas livres e confere que o número do recibo é o do chamado criado.
 
 ### Publicar nas lojas
 
@@ -193,12 +195,14 @@ A cada versão nova, aumente `version` em `extension/package.json`, rode o coman
 
 O copiloto atende várias empresas no mesmo servidor. Cada empresa tem um banco só dela, em `data/empresas/<id>/copiloto.db`, com equipe, tarefas, fluxos, execuções, conversas, conhecimento, widget e auditoria. A lista de empresas, as contas e as sessões ficam em `data/plataforma.db`.
 
-- **Cadastro:** em `/criar-conta`, uma pessoa cria a conta e o espaço da empresa em 3 etapas, como no design: **Sua conta** (nome, e-mail de trabalho, senha), **Seu sistema** (endereço e como o copiloto entra) e **Sua marca** (nome do assistente, cor e primeira mensagem). Quem cria vira Admin do espaço.
+- **Cadastro:** em `/criar-conta`, uma pessoa cria a conta e o espaço da empresa em 3 etapas, como no design: **Sua conta** (nome, e-mail de trabalho, senha), **Seu sistema** (endereço e como o copiloto entra) e **Sua marca** (nome do assistente, cor, logo e primeira mensagem). Quem cria vira Admin do espaço.
 - **Uma conta, várias empresas:** a mesma pessoa pode estar em mais de uma empresa (por convite ou criando outra). O menu da conta, no topo do console, troca de empresa. Os perfis (Admin, Editor, Operador, Leitor) valem por empresa.
 - **Isolamento:** toda rota do console e do widget abre o banco da empresa da sessão ou da chave do widget. Tokens de convite, de gravação e de widget levam a empresa e não valem em outra. Os domínios liberados de uma empresa não liberam o widget de outra.
 - **Widget por empresa:** cada empresa tem a própria chave pública e o próprio segredo de assinatura (Canais e widget › Segredo, só Admin vê; dá para gerar outro). Para empresas clientes, a assinatura do snippet é sempre obrigatória.
+- **Logo do widget:** em **Sua marca** ou em **Canais e widget › Aparência**, um PNG ou SVG quadrado de até 1 MB. O servidor confere o arquivo pelo conteúdo (SVG com script, eventos ou links externos é recusado) e guarda em `data/empresas/<id>/marca/`. O widget mostra o logo no topo e ao lado das respostas depois de **Publicar alterações**; sem logo, ou se a imagem não abrir, volta ao ícone padrão.
 - **Demonstração:** a empresa Horizonte continua sendo criada pelo seed, com o sistema de exemplo configurado pelas variáveis `SISTEMA_*`. As empresas novas não mexem nela.
-- **Painel da Starta:** quem está em `COPILOTO_ADMINS` vê, no console, a página **Empresas clientes**, com todas as empresas, uso dos últimos 30 dias e o botão de suspender ou reativar. Suspender derruba as sessões da empresa e para o widget dela.
+- **Plataforma Starta (`/plataforma`):** o painel interno da equipe Starta, com contas próprias, separadas das contas das empresas. Para entrar é preciso a senha e o código de 6 dígitos de um aplicativo autenticador (Google Authenticator, Microsoft Authenticator e parecidos), com 10 códigos de recuperação. Na primeira vez, cada e-mail de `COPILOTO_ADMINS` recebe um link de ativação, que também aparece no log do servidor. Depois disso, quem já está na equipe convida os outros em **Configurações**. O painel mostra as empresas com métricas e nunca o conteúdo das conversas, além de implantações, uso e custos, saúde dos fluxos, suporte e os preços dos planos. Pausar uma empresa derruba as sessões dela e para o widget. **Entrar como suporte** abre o console da empresa por 60 minutos com o perfil Suporte, pede o motivo, registra na auditoria da empresa e avisa os Admins dela por e-mail.
+- **Créditos:** cada execução concluída gasta 1 crédito pelo roteiro gravado, ou 5 quando o agente visual consertou um passo. Testes não gastam. Um fluxo com mais de 10 consertos em 30 dias aparece como quebrado no painel da Starta.
 - **Segredos:** a senha da conta de serviço de cada empresa é cifrada no banco (AES-256-GCM) com `COPILOTO_CHAVE_MESTRA` e nunca volta para o console.
 
 ## Ligar ao sistema de uma empresa
@@ -240,13 +244,20 @@ Para um sistema com API, dá para escrever um adaptador em `server/src/adaptador
 | `ANTHROPIC_API_KEY` | Chave do Claude. Defina como variável de ambiente, nunca em arquivo. |
 | `SESSAO_SEGREDO` | Assina as sessões do console e os tokens do widget. Troque em produção. |
 | `COPILOTO_CHAVE_MESTRA` | Cifra os segredos das empresas no banco. Sem ela, deriva do `SESSAO_SEGREDO`. Guarde-a: sem ela, as senhas das contas de serviço não abrem. |
-| `COPILOTO_ADMINS` | E-mails (separados por vírgula) que veem o painel **Empresas clientes**. |
+| `COPILOTO_ADMINS` | E-mails (separados por vírgula) da equipe Starta. Na primeira vez que o servidor sobe, cada e-mail sem conta recebe o link para ativar o acesso à Plataforma (senha e aplicativo autenticador); o link também sai no log. |
 | `COPILOTO_CADASTRO` | `fechado` desliga o cadastro de empresas novas pela tela de entrada. |
-| `EMAIL_VENDAS` | Recebe por e-mail os pedidos de **Agendar demonstração** e **Falar com vendas** do site. Sem ela, os pedidos ficam só no banco da plataforma. |
+| `EMAIL_VENDAS` | Recebe por e-mail os pedidos de **Agendar demonstração** e **Falar com vendas** do site, os pedidos de **Mudar de plano** e, na cobrança manual, cada fatura a cobrar. Sem ela, tudo fica só no banco da plataforma. |
 | `TEXTOS_LEGAIS_DIR` | Pasta com os textos jurídicos aprovados (`termos.md`, `privacidade.md`, `contrato-lgpd.md`). O texto que faltar ali vem da minuta em `docs/legal`, com o aviso de revisão jurídica. |
 | `PUBLIC_URL` e `CONSOLE_URL` | Endereços públicos do servidor e do console (links de arquivos e de convite). A extensão só aceita o código de entrada vindo da aba de `CONSOLE_URL`. |
 | `EXTENSAO_URL_CHROME` e `EXTENSAO_URL_EDGE` | Páginas da extensão na Chrome Web Store e no Edge Add-ons. Vazias, a página **Instalar o gravador** explica a instalação pelo pacote. |
 | `EXTENSAO_AJUDA_URL` | Para onde aponta **Como instalar pelo pacote** (padrão: a seção deste README). |
+| `ASAAS_API_KEY` | Chave da conta do Asaas que cobra as faturas e os pacotes de créditos. Sem ela, a cobrança é manual (a Starta envia por e-mail e marca como paga no painel). No PowerShell, use aspas simples: `$env:ASAAS_API_KEY = '$aact_...'`. |
+| `ASAAS_AMBIENTE` | `sandbox` (padrão, para testar) ou `producao`. |
+| `ASAAS_WEBHOOK_TOKEN` | Token que você cadastra no webhook do Asaas, apontado para `{PUBLIC_URL}/api/pagamentos/asaas`. Sem ele, os avisos de pagamento são recusados. |
+| `ASAAS_NOTA_FISCAL` | `1` emite a nota fiscal de serviço pelo Asaas a cada fatura paga (precisa dos dados fiscais configurados na conta do Asaas). |
+| `ASAAS_NF_SERVICO_ID` ou `ASAAS_NF_SERVICO_CODIGO` | Serviço municipal da nota fiscal: o id no Asaas ou o código da prefeitura. |
+| `ASAAS_NF_SERVICO_NOME` | Descrição do serviço na nota fiscal. |
+| `ASAAS_NF_IMPOSTOS` | Impostos da nota, em percentuais: `iss=2,pis=0.65,cofins=3,reterIss=0` (o que faltar é zero). |
 
 As outras variáveis estão em `.env.example`.
 

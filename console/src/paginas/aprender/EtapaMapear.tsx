@@ -1,8 +1,9 @@
 // Etapa 3 · Mapear campos: liga cada campo da tela a um dado da tarefa (ou a um valor fixo),
-// escolhe a tarefa do fluxo e mostra o que o fluxo devolve (dados lidos e arquivos).
+// escolhe a tarefa do fluxo, mostra o que o fluxo devolve (dados lidos e arquivos) e onde a tela
+// mostra o número do registro criado (para o recibo dizer "Chamado #1287").
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import type { Campo as CampoTarefa, Fluxo, ListaTarefas, PassoFluxo } from '@copiloto/shared';
+import type { Campo as CampoTarefa, Fluxo, ListaTarefas, PassoFluxo, ResultadoFluxo } from '@copiloto/shared';
 import { api, type ErroApiCliente } from '../../api/cliente.ts';
 import { useApi } from '../../api/hooks.ts';
 import { Botao } from '../../componentes/Botao.tsx';
@@ -168,7 +169,12 @@ export function EtapaMapear({
   erroTarefa: ErroApiCliente | null;
   somenteLeitura: boolean;
   online: boolean;
-  salvar: (mudancas: { passos?: PassoFluxo[]; camposSugeridos?: CampoTarefa[]; tarefaId?: string | null }) => Promise<boolean>;
+  salvar: (mudancas: {
+    passos?: PassoFluxo[];
+    camposSugeridos?: CampoTarefa[];
+    tarefaId?: string | null;
+    resultado?: ResultadoFluxo | null;
+  }) => Promise<boolean>;
   aoAtualizar: (f: Fluxo) => void;
   aoVoltar: () => void;
   aoContinuar: () => void;
@@ -319,6 +325,8 @@ export function EtapaMapear({
         </section>
       ) : null}
 
+      <NumeroDoRegistro fluxo={fluxo} somenteLeitura={somenteLeitura} aoSalvar={(resultado) => void salvar({ resultado })} />
+
       <div className="row between wrap" style={{ paddingTop: 'var(--s-2)' }}>
         <Botao onClick={aoVoltar} icone="seta-esquerda">
           Voltar
@@ -331,5 +339,90 @@ export function EtapaMapear({
         </div>
       </div>
     </div>
+  );
+}
+
+/**
+ * Onde a tela mostra o número do registro que o fluxo criou. Fica vazio na maioria das vezes: o
+ * copiloto procura no aviso de confirmação ("Chamado #1287 criado"). Quando o sistema mostra o
+ * número em outro lugar, o admin diz qual elemento e, se quiser, o formato e o nome.
+ */
+function NumeroDoRegistro({
+  fluxo,
+  somenteLeitura,
+  aoSalvar,
+}: {
+  fluxo: Fluxo;
+  somenteLeitura: boolean;
+  aoSalvar: (r: ResultadoFluxo | null) => void;
+}) {
+  const atual = fluxo.resultado ?? {};
+  const mudar = (parcial: Partial<ResultadoFluxo>) => {
+    const novo: ResultadoFluxo = { ...atual, ...parcial };
+    for (const k of Object.keys(novo) as (keyof ResultadoFluxo)[]) if (!novo[k]) delete novo[k];
+    aoSalvar(Object.keys(novo).length ? novo : null);
+  };
+  const lido = fluxo.ultimoTeste?.ok ? fluxo.ultimoTeste.registro : undefined;
+  const podeUsarLugar = Boolean(lido?.seletor && lido.origem === 'aviso' && !atual.seletor && !somenteLeitura);
+  return (
+    <section className="card card-pad stack" aria-labelledby="registro-criado">
+      <div className="stack-sm" style={{ gap: 2 }}>
+        <h2 className="h4" id="registro-criado">
+          Número do registro criado
+        </h2>
+        <p className="small muted">
+          Depois do último passo, o copiloto lê na tela o número do que o fluxo criou e mostra no recibo, como “Chamado #1287”. Sem nada
+          aqui, ele procura no aviso de confirmação da tela. Se não achar um número só, o recibo sai sem número.
+        </p>
+      </div>
+      {lido ? (
+        <Aviso
+          tipo="sucesso"
+          titulo={`No último teste: ${lido.nome ? `${lido.nome} ` : ''}${lido.numero}`}
+          acoes={
+            podeUsarLugar ? (
+              <Botao tamanho="sm" onClick={() => mudar({ seletor: lido.seletor, nome: atual.nome || lido.nome })}>
+                Usar este lugar
+              </Botao>
+            ) : undefined
+          }
+        >
+          {lido.origem === 'configurado' ? 'Lido do lugar configurado abaixo' : 'Achado no aviso da tela'}: “{lido.texto}”.
+          {lido.url ? ' O recibo leva o link que a tela mostra para abrir o registro.' : ''}
+        </Aviso>
+      ) : fluxo.ultimoTeste?.ok && fluxo.ultimoTeste.registro === null ? (
+        <Aviso tipo="aviso" titulo="No último teste, o número não apareceu">
+          {atual.seletor
+            ? 'O lugar configurado não apareceu na tela depois do último passo. Confira o seletor e teste de novo.'
+            : 'Não havia um número só no aviso de confirmação. Se o sistema mostra o número em outro lugar, diga onde abaixo.'}
+        </Aviso>
+      ) : null}
+      <div className="ap-registro">
+        <TextoAoSair
+          rotulo="Nome do registro"
+          valor={atual.nome ?? ''}
+          somenteLeitura={somenteLeitura}
+          placeholder="Ex.: Chamado"
+          ajuda="Aparece no recibo e no botão “Abrir o chamado”."
+          aoSalvar={(nome) => mudar({ nome })}
+        />
+        <TextoAoSair
+          rotulo="Onde o número aparece"
+          valor={atual.seletor ?? ''}
+          somenteLeitura={somenteLeitura}
+          placeholder='Ex.: [data-campo="numero_chamado"]'
+          ajuda="Seletor do elemento na tela depois de salvar, como nos passos. Vazio: procura no aviso."
+          aoSalvar={(seletor) => mudar({ seletor })}
+        />
+        <TextoAoSair
+          rotulo="Formato do número"
+          valor={atual.formato ?? ''}
+          somenteLeitura={somenteLeitura}
+          placeholder="Ex.: CH-9999-9999"
+          ajuda="9 é um dígito e a é uma letra. Vazio: o número que estiver no elemento."
+          aoSalvar={(formato) => mudar({ formato })}
+        />
+      </div>
+    </section>
   );
 }

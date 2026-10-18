@@ -81,6 +81,7 @@ export function linhaEmpresa(plataforma: Plataforma, e: Empresa, desde = desde30
     id: e.id,
     nome: e.nome,
     iniciais: fmt.iniciaisEmpresa(e.nome),
+    cnpj: e.cnpj,
     demo: e.demo,
     situacao: situacaoDe(e),
     fase: e.fase,
@@ -214,10 +215,10 @@ export function detalheEmpresa(plataforma: Plataforma, e: Empresa): DetalheEmpre
   return {
     ...linha,
     dominio: e.dominios[0] ?? null,
-    cnpj: e.cnpj,
     faixaUsuarios: e.faixaUsuarios,
     limiteUsuarios: plano?.usuariosMax ?? null,
     acesso: e.sistema.acesso.modo,
+    conector: e.sistema.conector,
     adminEmpresa: admin ? { nome: admin.nome ?? admin.email, email: admin.email } : null,
     criadoEm: e.criadoEm,
     metaTarefas: e.metaTarefas,
@@ -246,6 +247,7 @@ export function usoPlataforma(plataforma: Plataforma, desde = desde30d()): UsoPl
     return {
       empresaId: e.id,
       nome: e.nome,
+      demo: e.demo,
       execucoes: l?.execucoes ?? 0,
       creditos,
       creditosConserto: l?.conserto ?? 0,

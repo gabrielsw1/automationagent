@@ -393,7 +393,8 @@ export class Agente {
       return {
         situacao: 'pausado',
         tarefa: def.nome,
-        instrucao: 'O limite de gasto do mês foi atingido e esta tarefa está pausada. Explique de forma neutra; o botão para falar com uma pessoa já aparece.',
+        instrucao:
+          'Esta tarefa está pausada neste mês (limite de gasto ou créditos do mês). Explique de forma neutra; o botão para falar com uma pessoa já aparece.',
         resposta_sugerida: `${pausa.mensagem} Se for urgente, uma pessoa da equipe pode fazer por você.`,
       };
     }

@@ -332,7 +332,12 @@ export const MIGRACOES: string[] = [
   ALTER TABLE execucoes ADD COLUMN creditos INTEGER NOT NULL DEFAULT 0;
   ALTER TABLE execucoes ADD COLUMN recuperacoes INTEGER NOT NULL DEFAULT 0;
   `,
-  // 6: extensão do navegador. E-mail de quem gravou (as "Gravações recentes" do popup são da pessoa)
+  // 6: onde a tela mostra o número do registro que o fluxo criou (Mapear campos), para o recibo
+  // dizer "Chamado #1287". JSON com seletor, formato e nome; NULL procura no aviso de confirmação.
+  `
+  ALTER TABLE fluxos ADD COLUMN resultado TEXT;
+  `,
+  // 7: extensão do navegador. E-mail de quem gravou (as "Gravações recentes" do popup são da pessoa)
   // e os passos em outro site que a pessoa removeu na revisão (a lista "Antes de publicar" mostra).
   `
   ALTER TABLE fluxos ADD COLUMN gravado_por_email TEXT;

@@ -224,7 +224,94 @@ export const MIGRACOES_PLATAFORMA: string[] = [
   UPDATE empresas SET fase = 'ativo', fase_desde = criado_em WHERE demo = 1;
   UPDATE empresas SET fase_desde = criado_em WHERE fase_desde IS NULL;
   `,
-  // 5: extensão do navegador (gravador de fluxos). A extensão entra com a conta do console: o console
+  // 5: cobrança (Plano e créditos, S5). Tamanho do pacote avulso de cada plano; dados de cobrança da
+  // empresa (o token do cartão do Asaas vai cifrado com a chave mestra); as faturas (mensais e de
+  // pacotes, com o id da cobrança no gateway) e os eventos do webhook já tratados (idempotência).
+  // A tabela de contatos ganha o pedido "Mudar de plano" (origem mudanca_plano, com a empresa e o
+  // plano pedido, e faixa opcional): o SQLite não altera um CHECK, então a tabela é recriada.
+  `
+  ALTER TABLE planos ADD COLUMN pacote_creditos INTEGER NOT NULL DEFAULT 1000;
+
+  ALTER TABLE empresas ADD COLUMN razao_social TEXT;
+  ALTER TABLE empresas ADD COLUMN email_cobranca TEXT;
+  ALTER TABLE empresas ADD COLUMN cep TEXT;
+  ALTER TABLE empresas ADD COLUMN endereco_numero TEXT;
+  ALTER TABLE empresas ADD COLUMN metodo_pagamento TEXT NOT NULL DEFAULT 'boleto' CHECK (metodo_pagamento IN ('boleto', 'cartao'));
+  ALTER TABLE empresas ADD COLUMN gateway_cliente_id TEXT;
+  ALTER TABLE empresas ADD COLUMN cartao_final TEXT;
+  ALTER TABLE empresas ADD COLUMN cartao_bandeira TEXT;
+  ALTER TABLE empresas ADD COLUMN cartao_validade TEXT;
+  -- creditCardToken do Asaas, cifrado (plataforma/cofre.ts).
+  ALTER TABLE empresas ADD COLUMN cartao_token TEXT;
+  -- IP de quem pagou com o cartão ou ligou a recarga: o Asaas pede o IP do pagador (remoteIp) ao cobrar o token.
+  ALTER TABLE empresas ADD COLUMN cartao_ip TEXT;
+  ALTER TABLE empresas ADD COLUMN recarga_automatica INTEGER NOT NULL DEFAULT 0;
+  ALTER TABLE empresas ADD COLUMN recarga_limite INTEGER;
+  ALTER TABLE empresas ADD COLUMN implantacao_faturada INTEGER NOT NULL DEFAULT 0;
+  -- Desde quando a empresa tem plano: a primeira fatura mensal é a do mês em que o plano entrou.
+  ALTER TABLE empresas ADD COLUMN cobranca_desde TEXT;
+  UPDATE empresas SET cobranca_desde = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE plano_id IS NOT NULL AND demo = 0;
+
+  CREATE TABLE faturas (
+    id TEXT PRIMARY KEY,
+    empresa_id TEXT NOT NULL REFERENCES empresas(id) ON DELETE CASCADE,
+    -- "2026-09" nas mensais; NULL nos pacotes.
+    competencia TEXT,
+    tipo TEXT NOT NULL CHECK (tipo IN ('mensal', 'pacote')),
+    -- JSON: [{descricao, quantidade, unitarioCentavos, totalCentavos}].
+    itens TEXT NOT NULL DEFAULT '[]',
+    total_centavos INTEGER,
+    status TEXT NOT NULL CHECK (status IN ('aberta', 'emitida', 'paga', 'vencida', 'cancelada')),
+    vencimento TEXT,
+    criado_em TEXT NOT NULL,
+    atualizado_em TEXT NOT NULL,
+    pago_em TEXT,
+    gateway TEXT NOT NULL CHECK (gateway IN ('asaas', 'manual')),
+    gateway_id TEXT,
+    url_pagamento TEXT,
+    url_boleto TEXT,
+    nota_fiscal_id TEXT,
+    url_nota_fiscal TEXT,
+    -- Créditos que o pacote dá quando a fatura é paga.
+    creditos INTEGER,
+    automatica INTEGER NOT NULL DEFAULT 0,
+    exemplo INTEGER NOT NULL DEFAULT 0,
+    -- Valor desconhecido só em fatura de exemplo de plano sem preço ("Sob consulta").
+    CHECK (total_centavos IS NOT NULL OR exemplo = 1)
+  );
+  -- Uma fatura mensal por empresa e mês, mesmo cancelada: o fechamento roda de hora em hora sem repetir.
+  CREATE UNIQUE INDEX faturas_mensal ON faturas(empresa_id, competencia) WHERE tipo = 'mensal';
+  CREATE UNIQUE INDEX faturas_gateway ON faturas(gateway_id) WHERE gateway_id IS NOT NULL;
+  CREATE INDEX faturas_empresa ON faturas(empresa_id, criado_em);
+
+  CREATE TABLE eventos_pagamento (
+    id TEXT PRIMARY KEY,
+    evento TEXT NOT NULL,
+    recebido_em TEXT NOT NULL
+  );
+
+  CREATE TABLE contatos_novo (
+    id TEXT PRIMARY KEY,
+    nome TEXT NOT NULL,
+    email TEXT NOT NULL,
+    empresa TEXT NOT NULL,
+    telefone TEXT,
+    faixa TEXT,
+    mensagem TEXT,
+    origem TEXT NOT NULL CHECK (origem IN ('demonstracao', 'vendas', 'piloto', 'mudanca_plano')),
+    criado_em TEXT NOT NULL,
+    ip TEXT,
+    empresa_id TEXT,
+    plano_id TEXT
+  );
+  INSERT INTO contatos_novo (id, nome, email, empresa, telefone, faixa, mensagem, origem, criado_em, ip)
+    SELECT id, nome, email, empresa, telefone, faixa, mensagem, origem, criado_em, ip FROM contatos;
+  DROP TABLE contatos;
+  ALTER TABLE contatos_novo RENAME TO contatos;
+  CREATE INDEX contatos_criado ON contatos(criado_em);
+  CREATE INDEX contatos_empresa ON contatos(empresa_id, criado_em);
+  `,
+  // 6: extensão do navegador (gravador de fluxos). A extensão entra com a conta do console: o console
   // entrega um código de uso único (2 minutos, preso à conta, à empresa e ao desafio da extensão) e
   // a extensão troca código + verificador por um token próprio. Só os hashes ficam aqui. O token vale
   // para uma conta numa empresa, só nas rotas da extensão, até "Sair" (ou a pessoa sair da equipe).

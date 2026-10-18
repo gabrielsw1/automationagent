@@ -20,7 +20,8 @@ import {
   useOnline,
   useToast,
 } from '../execucoes/pecas.tsx';
-import { EXEMPLO_ASSINADO, exemplosAssinatura, exemplosSessao, trechoInstalacao } from './instalacao.ts';
+import { EXEMPLO_ASSINADO, exemplosAssinatura, exemplosSessao, hostDaOrigem, trechoInstalacao } from './instalacao.ts';
+import { CampoLogo } from './Logo.tsx';
 import { contrasteComBranco, useCoresSugeridas } from './marca.ts';
 
 export { contrasteComBranco };
@@ -72,10 +73,13 @@ const CAMPOS: (keyof ConfigWidget)[] = [
   'proativa',
   'atendimentoHumano',
   'dominios',
+  'logo',
 ];
 
 export function mesmaConfig(a: ConfigWidget, b: ConfigWidget): boolean {
-  return CAMPOS.every((k) => JSON.stringify(a[k]) === JSON.stringify(b[k]));
+  // O logo conta pelo arquivo (o endereço é calculado pelo servidor a cada leitura).
+  const valor = (c: ConfigWidget, k: keyof ConfigWidget) => (k === 'logo' ? (c.logo?.arquivo ?? '') : JSON.stringify(c[k]));
+  return CAMPOS.every((k) => valor(a, k) === valor(b, k));
 }
 
 /** Como o servidor guarda a configuração (textos sem espaços nas pontas, domínios normalizados). */
@@ -251,6 +255,11 @@ function EditorCanais({
   const descartar = useAcao(() => api.post<DadosCanais>('/canais/descartar'));
 
   const mudar = (parcial: Partial<ConfigWidget>) => setRascunho((r) => ({ ...r, ...parcial }));
+  // O logo vai direto ao servidor (enviar e remover); o rascunho da tela só acompanha.
+  const aoMudarLogo = (c: DadosCanais) => {
+    definirServidor(c);
+    setRascunho((r) => ({ ...r, logo: c.rascunho.logo ?? null }));
+  };
 
   const usuarios = useApi<UsuarioSistema[]>('/sistema/usuarios');
   const [usuarioPrevia, setUsuarioPrevia] = useState('');
@@ -266,6 +275,7 @@ function EditorCanais({
     atalho: rascunho.atalho,
     proativa: rascunho.proativa,
     atendimentoHumano: rascunho.atendimentoHumano,
+    logo: rascunho.logo ?? null,
   };
   const textoSalvar =
     !podeEditar || !pendente
@@ -315,18 +325,6 @@ function EditorCanais({
         ) : null}
       </Cabecalho>
 
-      {podeEditar && temAlteracoes ? (
-        <div className="alert alert-warning" role="status">
-          <Icone nome="alerta" />
-          <div className="stack-sm">
-            <p className="strong">Alterações não publicadas</p>
-            <p className="small">
-              O rascunho fica salvo e a pré-visualização já mostra como vai ficar. Os usuários continuam vendo a versão publicada até você
-              publicar.
-            </p>
-          </div>
-        </div>
-      ) : null}
       {!podeEditar ? (
         <div className="alert" role="status">
           <Icone nome="cadeado" />
@@ -335,35 +333,15 @@ function EditorCanais({
       ) : null}
       <ErroAcao erro={publicar.erro ?? (estado === 'erro' && !erroSalvar?.offline ? erroSalvar : null)} />
 
-      <div className="tabs" role="tablist" aria-label="Canais">
-        <button className="tab active" type="button" role="tab" aria-selected="true">
-          <Icone nome="chat" tamanho="sm" />
-          Widget
-        </button>
-        {[
-          { rotulo: 'WhatsApp', icone: 'chat' as const },
-          { rotulo: 'E-mail', icone: 'email' as const },
-          { rotulo: 'Voz', icone: 'voz' as const },
-        ].map((c) => (
-          <button
-            key={c.rotulo}
-            className="tab cb-aba-desligada"
-            type="button"
-            role="tab"
-            aria-selected="false"
-            aria-disabled="true"
-            title={`${c.rotulo} chega em breve`}
-          >
-            <Icone nome={c.icone} tamanho="sm" />
-            {c.rotulo}
-            <span className="badge">Em breve</span>
-          </button>
-        ))}
-      </div>
-
       <div className="split">
         <div className="main-col stack-lg">
-          <Aparencia config={rascunho} erros={erros} mudar={mudar} travado={!podeEditar} />
+          <Aparencia
+            config={rascunho}
+            erros={erros}
+            mudar={mudar}
+            travado={!podeEditar}
+            logo={<CampoLogo logo={rascunho.logo} travado={!podeEditar || !online} iniciais={fmt.iniciaisEmpresa(resumo.eu.empresa.nome)} aoMudar={aoMudarLogo} />}
+          />
           <Instalacao
             servidor={servidor}
             config={rascunho}
@@ -372,6 +350,7 @@ function EditorCanais({
             travado={!podeEditar}
             podeAdministrar={podeAdministrar}
             demo={resumo.eu.empresa.demo}
+            empresa={resumo.eu.empresa.nome}
           />
         </div>
 
@@ -451,11 +430,14 @@ function Aparencia({
   erros,
   mudar,
   travado,
+  logo,
 }: {
   config: ConfigWidget;
   erros: ErrosConfig;
   mudar: (p: Partial<ConfigWidget>) => void;
   travado: boolean;
+  /** Campo do logo (enviado direto ao servidor). */
+  logo: ReactNode;
 }) {
   const [novaSugestao, setNovaSugestao] = useState<string | null>(null);
   const cores = useCoresSugeridas();
@@ -636,6 +618,8 @@ function Aparencia({
           )}
         </div>
 
+        {logo}
+
         <div className="stack-sm">
           <span className="label" id="lbl-pos">
             Posição na tela
@@ -758,6 +742,7 @@ function Instalacao({
   travado,
   podeAdministrar,
   demo,
+  empresa,
 }: {
   servidor: DadosCanais;
   config: ConfigWidget;
@@ -767,6 +752,8 @@ function Instalacao({
   podeAdministrar: boolean;
   /** Empresa de demonstração: o segredo vem do servidor (WIDGET_SEGREDO). */
   demo: boolean;
+  /** Nome da empresa ("A chave é só da Horizonte Gestão"). */
+  empresa: string;
 }) {
   const agora = useAgora(30_000);
   const [novo, setNovo] = useState('');
@@ -800,7 +787,7 @@ function Instalacao({
         {servidor.instalacao ? (
           <span className="badge badge-success cb-selo-quebra" title={fmt.dataHora(servidor.instalacao.vistoEm)}>
             <Icone nome="check" tamanho="sm" />
-            Detectado em {servidor.instalacao.origem} {fmt.haQuanto(servidor.instalacao.vistoEm, new Date(agora))}
+            Detectado em {hostDaOrigem(servidor.instalacao.origem)} {fmt.haQuanto(servidor.instalacao.vistoEm, new Date(agora))}
           </span>
         ) : (
           <span className="badge">
@@ -812,14 +799,15 @@ function Instalacao({
       <div className="card-body stack">
         {tela ? (
           <p className="small">
-            Cole este trecho antes de <span className="mono">&lt;/body&gt;</span> nas páginas onde o copiloto deve aparecer. Preencha com
-            os dados de quem está logado: ID, nome, e-mail e perfis de acesso. O copiloto usa os perfis para saber quem pode pedir cada
-            tarefa.
+            Cole este trecho antes de <span className="mono">&lt;/body&gt;</span> nas páginas onde o copiloto deve aparecer. A chave é só
+            da {empresa}. O seu servidor assina o ID, o nome, o e-mail e os perfis de quem está logado: é assim que o copiloto age com a
+            sessão e as permissões de quem pede.
           </p>
         ) : (
           <p className="small">
-            Cole este trecho antes de <span className="mono">&lt;/body&gt;</span> nas páginas onde o copiloto deve aparecer. Passe o ID do
-            usuário logado: é assim que o copiloto age com as permissões de quem pede.
+            Cole este trecho antes de <span className="mono">&lt;/body&gt;</span> nas páginas onde o copiloto deve aparecer. A chave é só
+            da {empresa}. O seu servidor assina o ID do usuário logado: é assim que o copiloto age com a sessão e as permissões de quem
+            pede.
           </p>
         )}
         <div style={{ position: 'relative' }}>
@@ -925,7 +913,7 @@ function Instalacao({
         </div>
         <p className="tiny muted">
           {publicados.length
-            ? `A chave pública só funciona nos domínios liberados e publicados: ${listaPorExtenso(publicados)}.`
+            ? `A chave pública só funciona nos domínios liberados: ${listaPorExtenso(publicados)}.`
             : 'Nenhum domínio publicado ainda: a chave pública não funciona em nenhum site.'}
         </p>
       </div>

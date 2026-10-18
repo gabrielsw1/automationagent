@@ -7,7 +7,12 @@ import { regrasSenha } from '../../src/paginas/cadastro/regras.ts';
 import { instalarFetch, local, renderizar, status } from './ambiente.tsx';
 
 vi.mock('@copiloto/widget/chat', () => ({
-  PreviaWidget: ({ config }: { config: { nome: string } }) => <div data-testid="previa">prévia {config.nome}</div>,
+  PreviaWidget: ({ config }: { config: { nome: string; logo?: { url: string } | null } }) => (
+    <div data-testid="previa">
+      prévia {config.nome}
+      {config.logo ? ` · logo ${config.logo.url}` : ''}
+    </div>
+  ),
 }));
 
 afterEach(() => {
@@ -372,6 +377,38 @@ describe('Cadastro · etapas 2 e 3', () => {
     const rascunho = pedidos.find((p) => p.caminho === '/canais/rascunho')?.corpo as { config: ConfigWidget };
     expect(rascunho.config).toMatchObject({ nome: 'Assistente Acme', cor: '#0B5CAD', boasVindas: 'Olá! Como posso ajudar?' });
     expect(pedidos.some((p) => p.caminho === '/canais/publicar')).toBe(true);
+  });
+
+  it('Sua marca: envia o logo, mostra o arquivo e a prévia com ele', async () => {
+    const canais = { publicada: WIDGET, rascunho: WIDGET, temAlteracoes: false, chavePublica: 'pk', urlScript: 'x', instalacao: null, conector: 'tela' };
+    const logo = {
+      arquivo: '0123456789abcdef0123456789abcdef.svg',
+      nome: 'logo-horizonte.svg',
+      tamanho: 12 * 1024,
+      tipo: 'image/svg+xml',
+      enviadoEm: new Date().toISOString(),
+      url: 'http://localhost:3000/api/widget/marca/pk/0123456789abcdef0123456789abcdef.svg',
+    };
+    const { pedidos } = instalarFetch({
+      'GET /auth/primeiro-acesso': ABERTO,
+      'GET /auth/eu': EU,
+      'GET /canais': canais,
+      'POST /canais/logo': { ...canais, rascunho: { ...WIDGET, logo }, temAlteracoes: true },
+      'DELETE /canais/logo': canais,
+    });
+    renderizar(pagina, { caminho: '/criar-conta/marca', rota });
+    expect(await screen.findByText('Arraste o logo para cá ou')).toBeTruthy();
+    expect(screen.getByText('PNG ou SVG quadrado, até 1 MB. Aparece no topo e ao lado das respostas.')).toBeTruthy();
+    expect(screen.getByText('Atualiza enquanto você edita. É assim que seus clientes vão ver.')).toBeTruthy();
+    const arquivo = new File(['<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1 1"/>'], 'logo-horizonte.svg', { type: 'image/svg+xml' });
+    fireEvent.change(screen.getByLabelText('escolha um arquivo'), { target: { files: [arquivo] } });
+    expect(await screen.findByText('logo-horizonte.svg')).toBeTruthy();
+    expect(screen.getByText('12 KB · enviado agora')).toBeTruthy();
+    expect(screen.getByTestId('previa').textContent).toContain(`logo ${logo.url}`);
+    expect(pedidos.find((p) => p.caminho === '/canais/logo')?.corpo).toBeInstanceOf(FormData);
+    fireEvent.click(screen.getByRole('button', { name: 'Remover logo-horizonte.svg' }));
+    await waitFor(() => expect(screen.queryByText('logo-horizonte.svg')).toBeNull());
+    expect(screen.getByTestId('previa').textContent).not.toContain('logo');
   });
 
   it('sem sessão, as etapas 2 e 3 levam à entrada', async () => {

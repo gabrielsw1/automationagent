@@ -140,10 +140,10 @@ function PassoWidget({ podeEditar, aoVerificar }: { podeEditar: boolean; aoVerif
     `Olá! Para o copiloto aparecer no ${resumo.nomeSistema}, cole este código antes do </body> nas páginas em que ele deve aparecer:\n\n${codigo}\n\n` +
     (tela
       ? 'Troque ID_DO_USUARIO_LOGADO, NOME_DO_USUARIO, EMAIL_DO_USUARIO e PERFIS_SEPARADOS_POR_VIRGULA pelos dados de quem está logado, e ' +
-        'HMAC_DOS_DADOS_DO_USUARIO pelo HMAC-SHA256 desses dados (um por linha, com os perfis separados só por vírgula) com o segredo do widget, ' +
+        'ASSINATURA_DO_SEU_SERVIDOR pelo HMAC-SHA256 desses dados (um por linha, com os perfis separados só por vírgula) com o segredo do widget, ' +
         'calculado no servidor (nunca no navegador). Assim o copiloto sabe quem pede e o que essa pessoa pode fazer. ' +
         'As instruções completas, com exemplos de código, estão em Canais e widget, no console do copiloto.\n'
-      : 'Troque ID_DO_USUARIO_LOGADO pelo identificador de quem está logado e HMAC_DO_ID_DO_USUARIO pelo HMAC-SHA256 desse ID com o segredo do widget, ' +
+      : 'Troque ID_DO_USUARIO_LOGADO pelo identificador de quem está logado e ASSINATURA_DO_SEU_SERVIDOR pelo HMAC-SHA256 desse ID com o segredo do widget, ' +
         'calculado no servidor (nunca no navegador). Assim o copiloto age só com as permissões dessa pessoa.\n');
   const mailto = `mailto:?subject=${encodeURIComponent(assunto)}&body=${encodeURIComponent(corpo)}`;
 
@@ -208,13 +208,13 @@ function PassoWidget({ podeEditar, aoVerificar }: { podeEditar: boolean; aoVerif
           <p className="help">
             Troque <span className="mono">ID_DO_USUARIO_LOGADO</span>, <span className="mono">NOME_DO_USUARIO</span>,{' '}
             <span className="mono">EMAIL_DO_USUARIO</span> e <span className="mono">PERFIS_SEPARADOS_POR_VIRGULA</span> pelos dados de quem está
-            usando o sistema, e <span className="mono">HMAC_DOS_DADOS_DO_USUARIO</span> pela assinatura calculada no seu servidor. Assim o copiloto sabe
+            usando o sistema, e <span className="mono">ASSINATURA_DO_SEU_SERVIDOR</span> pela assinatura calculada no seu servidor. Assim o copiloto sabe
             quem pede e o que essa pessoa pode fazer. <Link to="/canais">Ver como calcular a assinatura</Link>.
           </p>
         ) : (
           <p className="help">
             Troque <span className="mono">ID_DO_USUARIO_LOGADO</span> pelo identificador de quem está usando o sistema, e{' '}
-            <span className="mono">HMAC_DO_ID_DO_USUARIO</span> pela assinatura calculada no seu servidor. Assim o copiloto age só com as permissões
+            <span className="mono">ASSINATURA_DO_SEU_SERVIDOR</span> pela assinatura calculada no seu servidor. Assim o copiloto age só com as permissões
             dessa pessoa. <Link to="/canais">Ver como calcular a assinatura</Link>.
           </p>
         )}

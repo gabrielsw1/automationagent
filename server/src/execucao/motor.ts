@@ -21,6 +21,7 @@ import {
   type EtapaProgresso,
   type Fluxo,
   type MensagemWidget,
+  type RegistroLido,
   type StatusExecucao,
   type TarefaDefinicao,
   type UsuarioSistema,
@@ -29,6 +30,7 @@ import type { Contexto } from '../contexto.ts';
 import { agoraIso, json } from '../db/banco.ts';
 import { ErroConexaoSistema, type ChamadaApi, type RespostaApi } from '../adaptadores/tipos.ts';
 import type { EventoNavegador } from '../navegador/tipos.ts';
+import { numeroParaRecibo } from '../navegador/registro.ts';
 import type { ConversaLinha, NovaMensagem } from '../servicos/conversas.ts';
 import type { TarefaEmUso } from '../servicos/catalogo.ts';
 import { ErroHttp, conflito, naoEncontrado, semPermissao } from '../util/erros.ts';
@@ -1280,6 +1282,7 @@ export class Motor {
       gravadoEm: (l.gravado_em as string | null) ?? null,
       duracaoGravacaoMs: (l.duracao_gravacao_ms as number | null) ?? null,
       urlInicial: (l.url_inicial as string | null) ?? null,
+      resultado: json(l.resultado, null),
       ultimoTeste: json(l.ultimo_teste, null),
       salvoEm: String(l.salvo_em),
     };
@@ -1379,6 +1382,7 @@ export class Motor {
         recuperacoes: res.recuperacoes,
         gerados: res.gerados,
         arquivos: res.arquivos.map((a) => ({ nome: path.basename(a.caminho), tipo: a.tipo, rotulo: a.nome })),
+        registro: res.registro ?? null,
         caminho: 'navegador',
         simulado: false,
       });
@@ -1470,15 +1474,25 @@ export class Motor {
       caminho: Caminho;
       /** Passos que a recuperação visual consertou (a tela tinha mudado). */
       recuperacoes?: number;
+      /** Número do registro criado, lido da tela no fim do fluxo. */
+      registro?: RegistroLido | null;
     },
   ): Promise<void> {
     const agora = agoraIso();
     const duracao = e.iniciadoEm ? Date.now() - Date.parse(e.iniciadoEm) : 0;
     const atualizar = e.interno.atualizarId;
     const existente = e.interno.existente ?? {};
+    const registro = r.simulado ? null : (r.registro ?? null);
+    // Um passo de leitura que pegou o mesmo número do registro não se repete no recibo.
+    const gerados = registro
+      ? Object.fromEntries(Object.entries(r.gerados ?? {}).filter(([, v]) => v.replace(/^#\s?/, '') !== registro.numero))
+      : r.gerados;
     const valoresTitulo: Record<string, string> = { ...(r.resposta ?? {}), ...(r.gerados ?? {}), ...e.dados };
     if (r.id) valoresTitulo.id = r.id;
-    const codigo = atualizar ? codigoDoRegistro(existente) : r.resposta?.codigo ?? (r.id ? `#${r.id}` : undefined);
+    if (registro && !valoresTitulo.registro) valoresTitulo.registro = numeroParaRecibo(registro.numero);
+    const codigo = atualizar
+      ? codigoDoRegistro(existente)
+      : r.resposta?.codigo ?? (r.id ? `#${r.id}` : registro ? numeroParaRecibo(registro.numero) : undefined);
     let titulo = atualizar
       ? `Cadastro ${tituloDoRegistro(existente)} (${codigo ?? ''}) atualizado`
       : fmt.preencherModelo(def.tituloRecibo, valoresTitulo).replace(/\(\s*#?\s*\)/g, '').replace(/\s{2,}/g, ' ').trim();
@@ -1493,13 +1507,22 @@ export class Motor {
         rotulo: `Abrir no ${this.sistema()}`,
         url: this.urlSistema(fmt.preencherModelo(def.api.linkResultado, { ...e.dados, id: r.id ?? atualizar ?? '' })),
       };
+    } else if (registro?.url) {
+      // O sistema mostrou um link para o registro criado ("Abrir o chamado").
+      link = {
+        rotulo: registro.nome ? `Abrir ${registro.artigo ?? 'o'} ${registro.nome.toLowerCase()}` : `Abrir no ${this.sistema()}`,
+        url: this.urlSistema(registro.url),
+      };
     }
     const podeDesfazer = !r.simulado && !atualizar && r.caminho === 'api' && !!def.api?.desfazer && !!r.id && def.desfazerMinutos > 0;
     const desfazerAte = podeDesfazer ? new Date(Date.now() + def.desfazerMinutos * 60_000).toISOString() : undefined;
 
-    // Campos do recibo: tudo menos o que já está no título.
-    const campos = camposExibidos(def, e.dados).filter((c) => !titulo.includes(c.valor));
-    for (const [k, v] of Object.entries(r.gerados ?? {})) campos.push({ rotulo: rotuloGerado(k), valor: v });
+    // Campos do recibo: tudo menos o que já está no título (e, com o número do registro, o que
+    // foi para a linha "Chamado #1287 · Padaria Estrela · Prioridade alta").
+    let campos = camposExibidos(def, e.dados).filter((c) => !titulo.includes(c.valor));
+    const linhaRegistro = registro ? montarLinhaRegistro(def, e.dados, registro, campos) : null;
+    if (linhaRegistro) campos = campos.filter((c) => !linhaRegistro.usados.has(c.rotulo));
+    for (const [k, v] of Object.entries(gerados ?? {})) campos.push({ rotulo: rotuloGerado(k), valor: v });
     const via = r.caminho === 'api' ? 'via API' : 'pela tela';
     // O código da execução vai à parte (execucaoId); quem mostra o recibo o põe depois do resumo.
     const resumo = r.simulado
@@ -1511,7 +1534,7 @@ export class Motor {
       id: r.id ?? atualizar,
       codigo,
       link: link?.url,
-      gerados: r.gerados,
+      gerados,
       arquivos: r.arquivos?.map((a) => ({ nome: a.nome, tipo: a.tipo })),
       simulado: r.simulado || undefined,
       resposta: r.resposta,
@@ -1537,10 +1560,25 @@ export class Motor {
     });
     this.avisarConsole(e, 'concluida');
     registrarEvento(this.ctx.banco, e.id, { tipo: 'conclusao', titulo: 'Concluída', detalhe: `${titulo}. ${resumo}`, estado: 'ok' });
+    // Gastou crédito: a recarga automática confere se é hora de comprar um pacote (sem segurar a conclusão).
+    if (creditosDaExecucao(r) > 0) {
+      this.ctx.creditos.aposExecucao().catch((err) => console.error('[cobrança] Recarga automática falhou:', err instanceof Error ? err.message : err));
+    }
 
     this.postar(e.conversaId, {
       autor: 'copiloto',
-      blocos: [{ tipo: 'recibo', execucaoId: e.id, titulo, campos, resumo, link, desfazerAte }],
+      blocos: [
+        {
+          tipo: 'recibo',
+          execucaoId: e.id,
+          titulo,
+          ...(linhaRegistro ? { registro: linhaRegistro.registro } : {}),
+          campos,
+          resumo,
+          link,
+          desfazerAte,
+        },
+      ],
     });
     const principal = def.campos.find((c) => c.tipo === 'texto' && e.dados[c.chave]);
     const proximos = def.proximosPassos.map((p) => fmt.preencherModelo(p, valoresTitulo)).filter(Boolean);
@@ -1557,13 +1595,43 @@ export class Motor {
     this.anotar(
       e,
       `A execução ${e.id} terminou: ${titulo}${r.simulado ? ' (modo de teste, nada gravado)' : ''}. ` +
+        `${linhaRegistro ? `O ${this.sistema()} mostrou o número ${linhaRegistro.registro.numero} (${linhaRegistro.registro.nome}). ` : ''}` +
         `${r.gerados && Object.keys(r.gerados).length ? `Dados gerados: ${JSON.stringify(r.gerados)}. ` : ''}` +
         `${desfazerAte ? `A pessoa pode desfazer pelo recibo até ${fmt.hora(desfazerAte)}.` : ''}`,
     );
   }
 }
 
-/** Assinatura do link de um arquivo gerado (HMAC do id da execução e do nome do arquivo). */
+/**
+ * Linha do registro no topo do recibo: "Chamado #1287 · Padaria Estrela · Prioridade alta".
+ * Depois do número entram até dois dados curtos da tarefa (opções de lista viram "Prioridade
+ * alta"; textos curtos, menos o primeiro, que costuma ser o assunto, entram só com o valor). O
+ * resto continua na lista de campos.
+ */
+export function montarLinhaRegistro(
+  def: TarefaDefinicao,
+  valores: Record<string, string>,
+  registro: RegistroLido,
+  campos: CampoExibido[],
+): { registro: { nome: string; numero: string; detalhes: string[] }; usados: Set<string> } {
+  const detalhes: string[] = [];
+  const usados = new Set<string>();
+  const exibidos = new Map(campos.map((c) => [c.rotulo, c.valor]));
+  def.campos.forEach((campo, i) => {
+    if (detalhes.length >= 2) return;
+    const valor = exibidos.get(campo.rotulo);
+    if (!valor || !valores[campo.chave]) return;
+    if (campo.tipo === 'lista') {
+      detalhes.push(`${campo.rotulo} ${/^\p{Lu}\p{Ll}/u.test(valor) ? valor.charAt(0).toLowerCase() + valor.slice(1) : valor}`);
+      usados.add(campo.rotulo);
+    } else if (campo.tipo === 'texto' && i > 0 && valor.length <= 30 && valor.trim().split(/\s+/).length <= 3) {
+      detalhes.push(valor);
+      usados.add(campo.rotulo);
+    }
+  });
+  return { registro: { nome: registro.nome ?? 'Registro', numero: numeroParaRecibo(registro.numero), detalhes }, usados };
+}
+
 /** Assinatura do link de um arquivo gerado (vale sem sessão, só para esta empresa, execução e arquivo). */
 export function assinarArquivo(empresaId: string, execucaoId: string, nome: string, segredo: string): string {
   return crypto.createHmac('sha256', segredo).update(`arquivo.${empresaId}.${execucaoId}.${nome}`).digest('base64url').slice(0, 32);

@@ -301,6 +301,8 @@ describe('empresas clientes (S7)', () => {
 
     // Com o preço do crédito, a margem sai do custo real (IA + navegador) por crédito.
     expect((await api(amb, 'PUT', '/planos/piloto', { precoCreditoExtraCentavos: 40 }, g.cookie)).statusCode).toBe(200);
+    // A semente põe a demonstração no plano Piloto; sem plano, os créditos dela deixam a margem em aberto.
+    await api(amb, 'PUT', `/empresas/${amb.ctx.empresa.id}`, { planoId: null }, g.cookie);
     const resumo = (await api(amb, 'GET', '/empresas', undefined, g.cookie)).json<PainelEmpresas>().resumo;
     expect(resumo.emPiloto).toEqual({ total: 1, nomes: ['Clínica Mais Agenda'] });
     // A demonstração gastou créditos sem plano: a margem fica em aberto até ela ter plano com preço.

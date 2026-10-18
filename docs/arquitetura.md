@@ -44,7 +44,39 @@ Regras:
   `sessao` (antes do fluxo, `POST urlSessao` com `{usuario, ts}` e `X-Copiloto-Assinatura: hmac_sha256_hex("<usuario>.<ts>", segredo do widget)`;
   resposta `{cookies:[{name, value, domain?, path?}]}` ou `{url}` de entrada única), `conta` (login com Playwright na `urlLogin`,
   `entrarComConta` em `navegador/executor.ts`) ou `nenhum`. Falhas viram `ErroAcessoSistema` com mensagem para pessoas, e nada roda no sistema.
-- Painel da plataforma: `Eu.adminPlataforma` vem de `COPILOTO_ADMINS`.
+- Plataforma Starta: contas próprias (`pessoas_starta`, `plataforma/starta.ts`), com senha e TOTP (`auth/totp.ts`), códigos de recuperação,
+  aparelho confiável e sessão em duas etapas (`sessoes_starta.etapa`). `COPILOTO_ADMINS` só cria as primeiras contas e manda o link de
+  ativação; `Eu.adminPlataforma` diz se o e-mail da conta tem acesso ativo à Plataforma. Modo suporte: cookie do console `sup.<token>`
+  (`acessos_suporte`), perfil `suporte` por 60 minutos, auditoria e e-mail aos Admins da empresa.
+
+## Cobrança (`server/src/cobranca/`)
+
+- **Ciclo:** o mês do calendário em America/Sao_Paulo (`cobranca/ciclo.ts`). Créditos do ciclo = incluídos no plano + pacotes
+  pagos no ciclo. Cada execução concluída gasta 1 crédito pelo roteiro ou 5 com conserto visual (`creditosDaExecucao`, `shared/src/plataforma.ts`).
+- **Quando acabam** (`Creditos.verificar`, chamado por `Gastos.verificar` antes do limite em R$): a tarefa segue como crédito extra só
+  se o plano tem preço do crédito extra e o valor dos extras do mês (extras × preço) ainda está abaixo do limite mensal; senão, recusa com
+  "Os créditos do mês acabaram. Um Admin pode comprar um pacote em Plano e créditos." Empresa com plano e preços
+  (`Creditos.cobraPorCredito`): o "gasto do mês" do console e dos limites é o valor dos extras. Demonstração e planos sem
+  preço seguem com o custo em R$ de antes.
+- **Fechamento** (`Faturas.fecharMes`): na subida do servidor e de hora em hora. Uma fatura mensal por empresa e mês (índice
+  único `faturas_mensal`), para empresas fora da demonstração com plano desde antes do fim do mês. Itens: assinatura, taxa de
+  implantação (só na primeira) e créditos extras. Preço que falta: pula a empresa, escreve no log e mostra
+  "preço não definido" nas pendências da Plataforma. Vencimento: 10 dias depois do fechamento (pacote: 3 dias); na cobrança
+  manual, a mesma rodada marca como vencida a fatura que passou do vencimento sem pagamento.
+- **Pagamento:** com `ASAAS_API_KEY`, `cobranca/asaas.ts` cria o cliente e a cobrança (boleto, cartão pelo link do Asaas, ou o
+  token do cartão guardado depois do primeiro pagamento, para a recarga automática). O Asaas avisa em
+  `POST {PUBLIC_URL}/api/pagamentos/asaas` com o cabeçalho `asaas-access-token` = `ASAAS_WEBHOOK_TOKEN` (`rotas/pagamentos.ts`;
+  cada evento é tratado uma vez, tabela `eventos_pagamento`). Fatura paga de pacote libera os créditos. Nota fiscal de serviço
+  só com `ASAAS_NOTA_FISCAL=1` e os dados fiscais da conta do Asaas. Sem chave, a cobrança é manual: a fatura fica
+  "Aguardando pagamento", o e-mail vai para `EMAIL_VENDAS`, e a Starta usa **Marcar como paga** ou **Cancelar** no painel da
+  empresa (registrado na auditoria da empresa).
+- **Tabelas** (migração 5 da plataforma): `faturas` (itens em JSON, `exemplo = 1` só no seed), `eventos_pagamento`, e em
+  `empresas` os dados de cobrança, o cartão guardado (final, bandeira, token cifrado), a recarga automática e `cobranca_desde`.
+  `planos.pacote_creditos` é o tamanho do pacote avulso (Configurações › Planos e preços).
+- **Rotas:** `GET /api/console/plano` → `PlanoECreditos` (Admin, ou a Starta no modo suporte, só leitura); `POST /plano/pacotes`,
+  `PUT /plano/recarga`, `PUT /plano/cobranca`, `PUT /plano/metodo`, `POST /plano/mudanca` (pedido em `contatos`, origem
+  `mudanca_plano`, e-mail para `EMAIL_VENDAS`), `GET /plano/faturas/:id/pdf` (demonstrativo, `cobranca/pdf.ts`).
+  Plataforma: `GET /empresas/:id/faturas`, `POST /empresas/:id/faturas/:fatura/paga|cancelar`.
 
 ## Regras que valem para todo o código
 
@@ -79,6 +111,7 @@ Regras:
 | `configuracoes` | `servicos/configuracoes.ts` | `ler/gravar/metadados` de `widget_publicado`, `widget_rascunho`, `widget_chave_publica`, `widget_instalacao`, `limites`, `seguranca`, `guia_feitos` |
 | `auditoria` | `servicos/auditoria.ts` | `registrar(ator, acao, alvo, detalhe?)`, `listar()` |
 | `gastos` | `servicos/gastos.ts` | Custos em R$, `limites()`, `verificar()`, `pausaAtiva()`, `gastoEntre()` |
+| `creditos` | `cobranca/creditos.ts` | Créditos do ciclo, `verificar()` antes de cada tarefa, uso por tarefa (Plano e créditos) |
 | `conversas` | `servicos/conversas.ts` | Mensagens do widget (emite SSE), transcrição do Claude (só acrescenta) |
 | `catalogo` | `servicos/catalogo.ts` | Tarefas e versões (`criar`, `salvarRascunho`, `publicar`, `emUso`, `testes`...) |
 | `conhecimento` | `conhecimento/` | `buscar`, `registrarSemResposta`, `responder`, `retomar` |
@@ -229,6 +262,7 @@ Autenticação: `POST /iniciar` devolve `token`; as demais rotas usam `Authoriza
 | `POST /anexos` (multipart, campo `arquivo`) | → `AnexoEnviado` |
 | `POST /proativa` `{ pagina, segundosParado }` | → `{ sugestao: SugestaoProativa \| null }` |
 | `GET /recentes` | → `ItemRecente[]` |
+| `GET /marca/:chave/:arquivo` | logo da empresa (público, sem token). Só serve o arquivo que o rascunho ou a publicação do widget usam, pela chave pública da própria empresa; `cache-control: public, max-age=31536000, immutable` e ETag (o nome é o hash do conteúdo); SVG com CSP `default-src 'none'; sandbox`. A URL vem pronta em `config.logo.url` |
 
 Ações de botão dentro das mensagens (`AcaoBloco.acao`): `abrir` (abre `url`), `mensagem` (envia `mensagem` como se a
 pessoa tivesse escrito), `humano` (`POST /conversas/:id/humano`), `atualizar` (`POST /execucoes/:id/atualizar-existente`),
@@ -377,6 +411,7 @@ console-b:
 | `GET /canais` | ver | `Canais` |
 | `PUT /canais/rascunho` `{ config: ConfigWidget }` | editar | `Canais` |
 | `POST /canais/publicar` · `POST /canais/descartar` | editar | `Canais` |
+| `POST /canais/logo` (multipart, campo `arquivo`) · `DELETE /canais/logo` | editar | `Canais`: o logo entra no rascunho (vale no widget depois de publicar). PNG ou SVG quadrado, até 1 MB, conferido pelo conteúdo (`servicos/logo.ts`); recusa com 422 ou 413 `logo_invalido`. Fica em `<pasta da empresa>/marca/<hash>.<ext>`; publicar, descartar, trocar e remover apagam os arquivos que nem o rascunho nem a publicação usam |
 | `GET /equipe` | ver | `MembroEquipe[]` |
 | `POST /equipe/convites` `{ email, perfil }` | administrar | `{ membro: MembroEquipe, linkConvite }` (sem envio de e-mail: o console mostra o link para copiar) |
 | `POST /equipe/:id/reenviar` | administrar | `{ membro, linkConvite }` |
@@ -386,13 +421,19 @@ console-b:
 | `GET /auditoria?antes=` | administrar | `RegistroAuditoria[]` |
 
 navegador: `GET /fluxos` → `Fluxo[]`; `POST /fluxos {nome, tarefaId?, urlInicial}` → `{ fluxo, token, urlGravacao }`;
-`GET /fluxos/:id`; `PUT /fluxos/:id` (revisar/mapear); `POST /fluxos/:id/aprender` (Claude transforma os eventos em passos e sugere campos);
-`POST /fluxos/:id/testar {valores, usuarioId}`; `POST /fluxos/:id/publicar`; `DELETE /fluxos/:id`; `GET /prints/:id` (imagem);
+`GET /fluxos/:id`; `PUT /fluxos/:id` (revisar/mapear; `resultado: {seletor?, formato?, nome?} | null` diz onde a tela mostra o número do registro criado); `POST /fluxos/:id/aprender` (Claude transforma os eventos em passos e sugere campos);
+`POST /fluxos/:id/testar {valores, usuarioId}` (o resultado traz `registro`, o número lido da tela); `POST /fluxos/:id/publicar {ativar?, perfis?}` → `FluxoPublicado` (com `ativar`, publica também a tarefa ligada, com `perfis` em quem pode usar; ficha incompleta é 422 `ficha_incompleta` e nada é publicado); `DELETE /fluxos/:id`; `GET /prints/:id` (imagem);
 `GET /prints/:id/info`; `GET /fluxos/:id/gravacao` (passos gravados até agora, para o "N passos até agora" ao vivo);
 `POST /fluxos/:id/gravar` (abre uma gravação nova para o fluxo); `POST /fluxos/:id/concluir-gravacao`; `POST /fluxos/:id/cancelar-gravacao`;
 `POST /fluxos/:id/nova-versao` (fluxo publicado fica só leitura: editar cria versão nova); `POST /fluxos/:id/criar-tarefa`
 (ficha em rascunho com os campos sugeridos, frases de exemplo tiradas do nome do fluxo e recibo `<nome>: feito`, ou com o primeiro dado lido).
 Execuções de teste usam IDs `teste_*`, gravam o uso do Claude com `execucao_id` nulo e penduram os prints no fluxo.
+Número do registro criado (`navegador/registro.ts`): no fim do fluxo, o executor lê o número do que foi criado. Com
+`fluxos.resultado.seletor`, lê daquele elemento (com `formato`, em que 9 é dígito e a é letra); sem, procura nos avisos de
+confirmação (`[role=status]`, `.alerta`, `.toast`…) por padrões conservadores ("Chamado #1287", "Pedido nº 1287",
+"Protocolo: …", "Chamado CH-2026-0153 aberto") e só aceita exatamente um número. Sem número, o recibo sai sem a linha. Com
+número, o recibo ganha `registro: {nome, numero, detalhes}` ("Chamado #1287 · Padaria Estrela · Prioridade alta") e, se a
+tela tem um link do mesmo site com o número, o botão "Abrir o chamado". Migração 6: coluna `fluxos.resultado`.
 
 conhecimento: `GET /conhecimento/fontes` → `FonteConhecimento[]`; `POST /conhecimento/fontes/site {url, limitePaginas?}`;
 `POST /conhecimento/fontes/arquivo` (multipart: PDF, DOCX, TXT, MD); `POST /conhecimento/fontes/video` (transcrição .vtt/.srt ou texto);

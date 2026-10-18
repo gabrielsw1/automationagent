@@ -14,6 +14,7 @@ import extensao from './extensao.ts';
 import fluxos from './fluxos.ts';
 import guia from './guia.ts';
 import painel from './painel.ts';
+import plano from './plano.ts';
 import prints from './prints.ts';
 import resumo from './resumo.ts';
 import sistema from './sistema.ts';
@@ -45,6 +46,7 @@ const rotas: FastifyPluginAsync = async (app) => {
   await app.register(canais, { prefix: '/canais' });
   await app.register(busca, { prefix: '/busca' });
   await app.register(equipe);
+  await app.register(plano);
 };
 
 export default rotas;

@@ -5,7 +5,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { chromium, errors, type Browser, type BrowserContext, type Locator, type Page } from 'playwright';
-import { casarOpcao, interpretarHora, passoExecutavel, somenteDigitos, type PassoFluxo } from '@copiloto/shared';
+import { casarOpcao, interpretarHora, passoExecutavel, somenteDigitos, type PassoFluxo, type RegistroLido } from '@copiloto/shared';
 import type { Config } from '../config.ts';
 import type { Banco } from '../db/banco.ts';
 import { ErroAcessoSistema, type AdaptadorSistema, type CookieNavegador, type SessaoNavegador } from '../adaptadores/tipos.ts';
@@ -21,6 +21,7 @@ import type {
 import { acharSensiveis, borrarImagem } from './mascara.ts';
 import { SCRIPT_NOMES } from './pagina.ts';
 import { apagarPrintsVencidos, salvarPrint } from './prints.ts';
+import { lerRegistro } from './registro.ts';
 import { ATRIBUTO_ALVO, coletarElementos, descreverElemento, limparMarcas, perguntarAoClaude } from './recuperacao.ts';
 import { localizar, papelDoSeletor } from './seletores.ts';
 import { chaveDe, encurtar, mesPorExtenso, minusculaInicial, noPassado } from './texto.ts';
@@ -54,6 +55,8 @@ export interface OpcoesNavegador {
   ociosoMs?: number;
   /** Tamanho da janela do navegador (os prints e os destaques usam estas medidas). */
   janela?: { width: number; height: number };
+  /** Depois do último passo, quanto esperar o número do registro criado aparecer na tela. */
+  tempoRegistroMs?: number;
 }
 
 const PADROES: Required<OpcoesNavegador> = {
@@ -63,6 +66,7 @@ const PADROES: Required<OpcoesNavegador> = {
   esperaPosCliqueMs: 800,
   ociosoMs: 5 * 60_000,
   janela: { width: 1280, height: 800 },
+  tempoRegistroMs: 2_000,
 };
 
 type Motivo = Extract<ResultadoNavegador, { ok: false }>['motivo'];
@@ -374,18 +378,46 @@ class ExecucaoFluxo {
         const printId = await this.fotografar(`Passo ${passo.n} · ${titulo}`, fim.destaque);
         this.emitir({ tipo: 'passo_ok', passo: passo.n, titulo, detalhe: fim.detalhe, printId, destaque: fim.destaque });
       }
+      const registro = await this.lerRegistroCriado();
       return {
         ok: true,
         gerados: this.gerados,
         arquivos: this.arquivos,
         duracaoMs: Date.now() - this.inicio,
         recuperacoes: this.recuperacoes,
+        registro,
       };
     } catch (e) {
       return await this.resultadoDeFalha(e);
     } finally {
       pedido.sinal.removeEventListener('abort', aoCancelar);
       await this.contexto?.close().catch(() => {});
+    }
+  }
+
+  /**
+   * Número do registro que o fluxo criou ("Chamado #1287"), lido da tela depois do último passo.
+   * Com o lugar configurado no fluxo, sempre; sem, só quando o fluxo termina num clique (salvar,
+   * abrir, enviar), procurando no aviso de confirmação. Não achar não é falha: o recibo sai sem número.
+   * undefined: não procurou (o fluxo não cria nada); null: procurou e não achou.
+   */
+  private async lerRegistroCriado(): Promise<RegistroLido | null | undefined> {
+    const { fluxo } = this.pedido;
+    const configurado = !!fluxo.resultado?.seletor?.trim();
+    const ultimo = [...fluxo.passos].reverse().find((p) => p.tipo !== 'esperar');
+    if (!configurado && ultimo?.tipo !== 'clique') return undefined;
+    try {
+      const registro = await lerRegistro(this.page, fluxo.resultado, this.opcoes.tempoRegistroMs);
+      if (!registro && configurado) {
+        this.emitir({
+          tipo: 'aviso',
+          titulo: 'Não achei o número do registro na tela',
+          detalhe: `O fluxo diz que o número aparece em ${fluxo.resultado!.seletor}, mas esse lugar não apareceu depois do último passo. O recibo sai sem número.`,
+        });
+      }
+      return registro;
+    } catch {
+      return null;
     }
   }
 

@@ -368,3 +368,50 @@ describe('PreviaWidget', () => {
     expect(fetch).not.toHaveBeenCalled();
   });
 });
+
+describe('Logo da empresa no avatar do copiloto', () => {
+  const LOGO = {
+    arquivo: '3f9ac1d2e4b5a6978877665544332211.png',
+    nome: 'logo-horizonte.png',
+    tamanho: 12 * 1024,
+    tipo: 'image/png' as const,
+    enviadoEm: '2026-10-17T13:00:00.000Z',
+    url: 'http://localhost:3000/api/widget/marca/pk_demo/3f9ac1d2e4b5a6978877665544332211.png',
+  };
+
+  it('a prévia usa o logo no topo e ao lado da resposta; sem logo, o ícone padrão', () => {
+    vi.stubGlobal('fetch', vi.fn());
+    const config = { ...inicioFalso().config, logo: LOGO };
+    const { container, rerender } = render(<PreviaWidget config={config} usuarioNome="Ana Ribeiro" />);
+    const imagens = Array.from(container.querySelectorAll('.cp-avatar-logo img'));
+    expect(imagens.length).toBeGreaterThanOrEqual(2); // cabeçalho + mensagem de boas-vindas
+    expect(imagens.every((i) => i.getAttribute('src') === LOGO.url)).toBe(true);
+    expect(container.querySelector('.widget-head .cp-avatar-logo img')).toBeTruthy();
+
+    rerender(<PreviaWidget config={{ ...config, logo: null }} usuarioNome="Ana Ribeiro" />);
+    expect(container.querySelector('.cp-avatar-logo')).toBeNull();
+    expect(container.querySelector('.widget-head .avatar-bot svg')).toBeTruthy();
+  });
+
+  it('se a imagem do logo não abrir, volta ao ícone padrão', () => {
+    vi.stubGlobal('fetch', vi.fn());
+    const { container } = render(<PreviaWidget config={{ ...inicioFalso().config, logo: LOGO }} usuarioNome="Ana Ribeiro" />);
+    const topo = container.querySelector('.widget-head .cp-avatar-logo img') as HTMLImageElement;
+    fireEvent.error(topo);
+    expect(container.querySelector('.widget-head .cp-avatar-logo')).toBeNull();
+    expect(container.querySelector('.widget-head .avatar-bot svg')).toBeTruthy();
+  });
+
+  it('o chat ligado ao servidor usa o logo da configuração publicada nas respostas', async () => {
+    servidorFalso({
+      'GET /api/widget/sessao': () => inicioFalso({ conversaId: 'c1', config: { ...inicioFalso().config, logo: LOGO } }),
+      'GET /api/widget/conversas/c1': () =>
+        conversa([msg({ autor: 'usuario', texto: 'abre um chamado' }), msg({ autor: 'copiloto', texto: 'Para qual cliente?' })]),
+    });
+    const { container } = render(<ChatCopiloto token="tk" />);
+    await screen.findByText('Para qual cliente?');
+    const resposta = screen.getByText('Para qual cliente?').closest('.msg') as HTMLElement;
+    expect(resposta.querySelector('.cp-avatar-logo img')?.getAttribute('src')).toBe(LOGO.url);
+    expect(container.querySelector('.widget-head .cp-avatar-logo img')?.getAttribute('src')).toBe(LOGO.url);
+  });
+});

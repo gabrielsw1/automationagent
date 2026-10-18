@@ -138,22 +138,28 @@ describe('Antes de publicar · passo em outro site', () => {
     expect(resumoOutrosSites(fluxo({ passos: passos().map((p) => (p.outroSite ? { ...p, instrucao: true } : p)) }))?.texto).toBe('1 mantido como instrução');
   });
 
-  it('bloqueia publicar até resolver; depois mostra o item resolvido', () => {
+  it('bloqueia publicar até resolver; depois mostra o item resolvido', async () => {
+    instalarFetch({ 'GET /canais': { instalacao: null } });
     const testado = { ultimoTeste: { em: '2026-10-17T12:05:00.000Z', ok: true } };
     const aoIrPara = vi.fn();
-    const props = { nomeSistema: 'Horizonte', nomeTarefa: null, somenteLeitura: false, online: true, aoPublicado: () => {}, aoIrPara };
+    const props = { tarefa: null, campos: [], nomeSistema: 'Horizonte', somenteLeitura: false, online: true, aoPublicado: () => {}, aoTarefaMudou: () => {}, aoIrPara };
+    const publicar = () => screen.getByRole('button', { name: 'Publicar versão 1' }) as HTMLButtonElement;
     renderizar(<EtapaPublicar fluxo={fluxo(testado)} {...props} />);
-    expect(screen.getByText('Falta resolver o passo em outro site')).toBeTruthy();
-    expect((screen.getByRole('button', { name: /Publicar/ }) as HTMLButtonElement).disabled).toBe(true);
-    fireEvent.click(screen.getByRole('button', { name: 'Resolver na revisão' }));
+    const antes = screen.getByRole('heading', { name: 'Antes de publicar' }).parentElement!;
+    expect(within(antes).getByText('Falta resolver o passo em outro site')).toBeTruthy();
+    expect(publicar().disabled).toBe(true);
+    fireEvent.click(within(antes).getByRole('button', { name: 'Resolver na revisão' }));
     expect(aoIrPara).toHaveBeenCalledWith('revisar');
 
     const resolvido = fluxo({ ...testado, passos: passos().map((p) => (p.outroSite ? { ...p, instrucao: true } : p)) });
     cleanup();
     renderizar(<EtapaPublicar fluxo={resolvido} {...props} />);
-    expect(screen.getByText('Passo em outro site resolvido')).toBeTruthy();
-    expect(screen.getByText('2 passos no Horizonte, sem pendência')).toBeTruthy();
-    expect((screen.getByRole('button', { name: /Publicar/ }) as HTMLButtonElement).disabled).toBe(false);
+    const depois = screen.getByRole('heading', { name: 'Antes de publicar' }).parentElement!;
+    expect(within(depois).getByText('Passo em outro site resolvido')).toBeTruthy();
+    expect(within(depois).getByText('1 mantido como instrução')).toBeTruthy();
+    // A instrução não conta como passo no sistema.
+    expect(within(depois).getByText('2 passos no Horizonte')).toBeTruthy();
+    await waitFor(() => expect(publicar().disabled).toBe(false));
   });
 });
 

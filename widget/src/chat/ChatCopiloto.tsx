@@ -5,7 +5,7 @@ import type { WidgetInicio } from '@copiloto/shared';
 import { ClienteApi } from './api.ts';
 import { ControladorChat } from './controlador.ts';
 import { estiloMarca } from './cor.ts';
-import { Icone } from './icones.tsx';
+import { Icone, ProvedorLogo } from './icones.tsx';
 import { Cabecalho, Painel } from './painel.tsx';
 import { mensagemDeErro } from './util.ts';
 
@@ -84,14 +84,16 @@ export function ChatCopiloto({ token, apiBase = '', aoFechar, altura = 640, foca
   }
 
   return (
-    <Painel
-      key={token}
-      controlador={sessao.controlador}
-      modo="console"
-      aoFechar={aoFechar}
-      focarAoAbrir={focarAoAbrir}
-      altura={altura}
-      estilo={estiloMarca(sessao.inicio.config.cor)}
-    />
+    <ProvedorLogo value={sessao.inicio.config.logo?.url || null}>
+      <Painel
+        key={token}
+        controlador={sessao.controlador}
+        modo="console"
+        aoFechar={aoFechar}
+        focarAoAbrir={focarAoAbrir}
+        altura={altura}
+        estilo={estiloMarca(sessao.inicio.config.cor)}
+      />
+    </ProvedorLogo>
   );
 }

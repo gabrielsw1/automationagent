@@ -92,6 +92,15 @@
   .ap-ao-vivo-ponto, .ap-novo-passo { animation: none; }
 }
 
+/* Número do registro criado (Mapear campos): nome, lugar e formato lado a lado. */
+.ap-registro { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr) minmax(0, 1fr); gap: var(--s-4); align-items: start; }
+@media (max-width: 760px) { .ap-registro { grid-template-columns: minmax(0, 1fr); } }
+
+/* Publicar (F3): resumo em duas colunas e o grupo de perfis sem moldura. */
+.ap-resumo { margin: 0; grid-template-columns: minmax(120px, 200px) 1fr; gap: 14px 16px; font-size: var(--fs-14); }
+.ap-fieldset { border: 0; margin: 0; }
+@media (max-width: 760px) { .ap-resumo { grid-template-columns: minmax(0, 1fr); row-gap: 4px; } .ap-resumo dd { margin-bottom: var(--s-2); } }
+
 /* Passo feito em outro site: as duas escolhas, cada uma com o que faz. */
 .ap-outro-site { align-items: flex-start; }
 .ap-escolhas { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: var(--s-2); }
