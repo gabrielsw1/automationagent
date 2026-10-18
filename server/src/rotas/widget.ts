@@ -26,6 +26,7 @@ import { assinarArquivo, caminhoArquivo, type Ator } from '../execucao/motor.ts'
 import { lerExecucao } from '../execucao/registro.ts';
 import { normalizar } from '../agente/extracao.ts';
 import { podeExecutar } from '../servicos/catalogo.ts';
+import { caminhoLogo, comUrlDoLogo } from '../servicos/logo.ts';
 import type { ConversaLinha } from '../servicos/conversas.ts';
 import { ErroHttp, naoEncontrado, pedidoInvalido, semPermissao } from '../util/erros.ts';
 import { novoId } from '../util/ids.ts';
@@ -121,10 +122,10 @@ const rotas: FastifyPluginAsync = async (app) => {
     return plataforma.contexto(empresa.id);
   }
 
-  /** Lê o token (cabeçalho ou ?token=), a empresa e a pessoa. Rotas públicas: /iniciar e arquivos com link assinado. */
+  /** Lê o token (cabeçalho ou ?token=), a empresa e a pessoa. Rotas públicas: /iniciar, o logo e arquivos com link assinado. */
   app.addHook('onRequest', async (request) => {
     const rota = request.routeOptions.url ?? '';
-    if (rota.endsWith('/iniciar')) return;
+    if (rota.endsWith('/iniciar') || rota.endsWith('/marca/:chave/:arquivo')) return;
     const cabecalho = request.headers.authorization;
     const token =
       (cabecalho?.startsWith('Bearer ') ? cabecalho.slice(7) : undefined) ?? (request.query as { token?: string } | undefined)?.token;
@@ -158,7 +159,7 @@ const rotas: FastifyPluginAsync = async (app) => {
 
   function configPublica(ctx: Contexto, teste: boolean): WidgetConfigPublica {
     const { dominios: _d, ...publica } = ctx.configuracoes.ler(teste ? 'widget_rascunho' : 'widget_publicado');
-    return publica;
+    return comUrlDoLogo(publica, ctx.config.urlPublica, ctx.empresa.chavePublica);
   }
 
   function sugestoesPara(ctx: Contexto, usuario: UsuarioSistema, teste: boolean, pagina?: PaginaContexto | null): Sugestao[] {
@@ -292,6 +293,31 @@ const rotas: FastifyPluginAsync = async (app) => {
   });
 
   app.get('/sessao', async (request) => inicio(sessao(request)));
+
+  // Logo da empresa (público, preso à chave do widget). Só os arquivos que o rascunho ou a
+  // publicação usam; o nome é o hash do conteúdo, então o cache pode ser longo.
+  app.get('/marca/:chave/:arquivo', async (request, reply) => {
+    const { chave, arquivo } = request.params as { chave: string; arquivo: string };
+    const empresa = plataforma.empresaPorChave(chave);
+    if (!empresa) throw naoEncontrado('Logo');
+    const ctx = plataforma.contexto(empresa.id);
+    const emUso = [ctx.configuracoes.ler('widget_publicado').logo, ctx.configuracoes.ler('widget_rascunho').logo];
+    const logo = emUso.find((l) => l?.arquivo === arquivo);
+    const caminho = logo ? caminhoLogo(ctx.config.dirDados, arquivo) : null;
+    if (!logo || !caminho) throw naoEncontrado('Logo');
+    const etag = `"${arquivo.split('.')[0]}"`;
+    reply
+      .header('cache-control', 'public, max-age=31536000, immutable')
+      .header('etag', etag)
+      .header('x-content-type-options', 'nosniff')
+      .header('cross-origin-resource-policy', 'cross-origin');
+    if (logo.tipo === 'image/svg+xml') {
+      // Mesmo conferido no envio: aberto direto no navegador, o SVG não roda nada nem carrega nada.
+      reply.header('content-security-policy', "default-src 'none'; style-src 'unsafe-inline'; img-src data:; sandbox");
+    }
+    if (request.headers['if-none-match'] === etag) return reply.status(304).send();
+    return reply.type(logo.tipo).send(fs.createReadStream(caminho));
+  });
 
   // ------------------------------------------------------------ conversas
 

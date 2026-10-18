@@ -20,6 +20,21 @@ export interface PaginaContexto {
   url?: string;
 }
 
+/** Logo da empresa no widget (Canais e widget › Aparência e a etapa "Sua marca" do cadastro). */
+export interface LogoWidget {
+  /** Nome do arquivo guardado na pasta da empresa: o hash do conteúdo e a extensão. Ex.: "3f9a…c1.svg". */
+  arquivo: string;
+  /** Nome do arquivo enviado. Ex.: "logo-horizonte.svg". */
+  nome: string;
+  /** Bytes. */
+  tamanho: number;
+  tipo: 'image/png' | 'image/svg+xml';
+  /** ISO */
+  enviadoEm: string;
+  /** Endereço público (preso à chave do widget da empresa), com cache longo. Calculado pelo servidor a cada leitura. */
+  url: string;
+}
+
 export interface WidgetConfigPublica {
   nome: string;
   boasVindas: string;
@@ -31,6 +46,8 @@ export interface WidgetConfigPublica {
   atalho: boolean;
   proativa: { ativa: boolean; segundosParado: 15 | 30 | 60 };
   atendimentoHumano: { horario: string };
+  /** Logo no topo do assistente e ao lado das respostas. Sem logo, o widget usa o ícone padrão. */
+  logo?: LogoWidget | null;
 }
 
 export interface UsuarioWidget {
@@ -178,6 +195,11 @@ export type Bloco =
       campos: CampoExibido[];
       /** Ex.: "Feito via API em 4 s". */
       resumo: string;
+      /**
+       * Registro criado, lido da tela no fim do fluxo (caminho navegador). Vira a linha
+       * "Chamado #1287 · Padaria Estrela · Prioridade alta" no topo do recibo.
+       */
+      registro?: { nome: string; numero: string; detalhes: string[] };
       link?: { rotulo: string; url: string };
       /** ISO; ausente quando a tarefa não permite desfazer. */
       desfazerAte?: string;

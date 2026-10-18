@@ -1,5 +1,5 @@
 // Tipos das respostas do servidor e peças pequenas usadas nas etapas do Aprender fluxo (C4).
-import type { Campo, EtapaFluxo, Fluxo, PassoFluxo, TipoPasso } from '@copiloto/shared';
+import type { Campo, EtapaFluxo, Fluxo, PassoFluxo, RegistroLido, TipoPasso } from '@copiloto/shared';
 
 /** POST /fluxos, GET /fluxos/:id/gravacao e POST /fluxos/:id/gravar. */
 export interface RespostaGravacao {
@@ -40,8 +40,16 @@ export interface RespostaTeste {
     recuperacoes: number;
     printId?: string;
     candidato?: { texto: string; confianca: number };
+    /** Número do registro criado, lido da tela no fim do teste (null: não achou). */
+    registro?: RegistroLido | null;
   };
   eventos: EventoTeste[];
+}
+
+/** "Chamado #1287", "CH-2026-0153": como o recibo mostra o número lido. */
+export function registroPorExtenso(r: Pick<RegistroLido, 'nome' | 'numero'>): string {
+  const numero = /^\d+$/.test(r.numero) ? `#${r.numero}` : r.numero;
+  return r.nome ? `${r.nome} ${numero}` : numero;
 }
 
 /** GET /prints/:id/info */

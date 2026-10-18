@@ -196,6 +196,38 @@ export interface PassoFluxo {
 
 export type EtapaFluxo = 'gravar' | 'revisar' | 'mapear' | 'testar' | 'publicar';
 
+/**
+ * Onde a tela mostra o número do registro que o fluxo criou (Mapear campos). Depois do último passo,
+ * o navegador lê o número desse elemento e o recibo mostra "Chamado #1287". Sem `seletor`, ele procura
+ * no aviso de confirmação da tela; se não achar, o recibo sai sem número.
+ */
+export interface ResultadoFluxo {
+  /** Elemento da tela depois de salvar, no formato dos seletores dos passos. Ex.: '[data-campo="numero_chamado"]'. */
+  seletor?: string;
+  /** Formato do número, como no gravador: 9 é um dígito e a é uma letra. Ex.: "CH-9999-9999". Vazio: o primeiro número do elemento. */
+  formato?: string;
+  /** Nome do registro, para o recibo ("Chamado #1287", "Abrir o chamado"). Vazio: vem do aviso da tela ou do nome do fluxo. */
+  nome?: string;
+}
+
+/** Número do registro criado, lido da tela no fim do fluxo. */
+export interface RegistroLido {
+  /** Como a tela mostra, sem o "#". Ex.: "1287", "CH-2026-0153". O recibo mostra "#1287" quando é só número. */
+  numero: string;
+  /** Nome do registro, quando a tela ou a configuração disse. Ex.: "Chamado". */
+  nome?: string;
+  /** Artigo do nome ("o chamado", "a visita"), para "Abrir o chamado". */
+  artigo?: 'o' | 'a';
+  /** Link da tela para abrir o registro, quando o sistema mostra um. */
+  url?: string;
+  /** Texto onde o número foi achado (para o console mostrar). */
+  texto: string;
+  /** Seletor do elemento onde o número estava (para "Usar este lugar" no Mapear campos). */
+  seletor?: string;
+  /** configurado: pelo seletor do fluxo; aviso: procurado no aviso de confirmação. */
+  origem: 'configurado' | 'aviso';
+}
+
 export interface Fluxo {
   id: string;
   nome: string;
@@ -210,13 +242,37 @@ export interface Fluxo {
   gravadoEm: string | null;
   duracaoGravacaoMs: number | null;
   urlInicial: string | null;
+  /** Onde ler o número do registro criado. null: procura no aviso de confirmação. */
+  resultado?: ResultadoFluxo | null;
   ultimoTeste?: {
     em: string;
     ok: boolean;
     passoFalhou?: number;
     erro?: string;
+    /** Quanto o teste levou. */
+    duracaoMs?: number;
+    /** Com quem o teste rodou ("como Ana Ribeiro"). */
+    usuarioNome?: string;
+    /** Número do registro que o teste criou, lido da tela. */
+    registro?: RegistroLido | null;
   } | null;
   salvoEm: string;
+}
+
+/** Resposta de "Publicar" no Aprender fluxo (F3). */
+export interface FluxoPublicado {
+  fluxo: Fluxo;
+  /** A tarefa do fluxo, quando há: com o widget ligado, publicada junto (fica ativa). */
+  tarefa: {
+    id: string;
+    nome: string;
+    status: StatusTarefa;
+    /** Versão publicada (ativada) ou a do rascunho em que o fluxo entrou. */
+    versao: number;
+    ativada: boolean;
+    publicadoPor: string | null;
+    publicadoEm: string | null;
+  } | null;
 }
 
 /** Evento bruto capturado pelo gravador no navegador do admin. */

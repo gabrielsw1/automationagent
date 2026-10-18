@@ -15,6 +15,21 @@ export function creditosDaExecucao(r: { simulado: boolean; recuperacoes?: number
   return (r.recuperacoes ?? 0) > 0 ? CREDITOS_COM_CONSERTO : CREDITOS_POR_ROTEIRO;
 }
 
+function creditos(n: number): string {
+  return `${n} ${n === 1 ? 'crédito' : 'créditos'}`;
+}
+
+/**
+ * "Custo previsto" de uma tarefa (Publicar e ficha da tarefa), pelas mesmas regras de
+ * `creditosDaExecucao`. Pela tela: "1 crédito por execução, até 5 se precisar de conserto".
+ * Pela API: "1 crédito por execução" (e, com o fluxo gravado de reserva, o conserto dele).
+ */
+export function custoPrevisto(caminho: 'api' | 'navegador', reservaPelaTela = false): string {
+  const base = `${creditos(CREDITOS_POR_ROTEIRO)} por execução`;
+  if (caminho === 'navegador') return `${base}, até ${CREDITOS_COM_CONSERTO} se precisar de conserto`;
+  return reservaPelaTela ? `${base}, até ${CREDITOS_COM_CONSERTO} se o caminho reserva pela tela precisar de conserto` : base;
+}
+
 /** Fluxo "quebrado": o roteiro falhou e o agente visual consertou mais que isso em 30 dias. */
 export const CONSERTOS_PARA_QUEBRADO = 10;
 

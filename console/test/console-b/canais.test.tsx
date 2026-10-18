@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
-import type { Canais as DadosCanais, ConfigWidget } from '@copiloto/shared';
+import type { Canais as DadosCanais, ConfigWidget, LogoWidget } from '@copiloto/shared';
 import Canais, {
   contrasteComBranco,
   dominioValido,
@@ -34,7 +34,7 @@ function canais(parcial: Partial<DadosCanais> = {}): DadosCanais {
     temAlteracoes: false,
     chavePublica: 'pk_live_8f3a2c1b9d7e6f5a',
     urlScript: 'http://localhost:3000/copiloto.js',
-    instalacao: { origem: 'app.horizonte.com.br', vistoEm: new Date(Date.now() - 3 * 60_000).toISOString() },
+    instalacao: { origem: 'https://app.horizonte.com.br', vistoEm: new Date(Date.now() - 3 * 60_000).toISOString() },
     conector: 'api',
     ...parcial,
   };
@@ -91,25 +91,36 @@ describe('regras do widget', () => {
 });
 
 describe('C8 · Canais e widget', () => {
-  it('mostra rascunho não publicado, canais em breve, instalação e trecho com assinatura', async () => {
+  it('mostra rascunho não publicado, instalação detectada e trecho com assinatura, sem canais “Em breve”', async () => {
     instalarFetch({
-      'GET /canais': canais({ rascunho: config({ nome: 'Ajuda Horizonte' }), temAlteracoes: true }),
+      'GET /canais': canais({
+        rascunho: config({ nome: 'Ajuda Horizonte' }),
+        publicada: config({ dominios: ['app.horizonte.com.br', 'homologacao.horizonte.com.br'] }),
+        temAlteracoes: true,
+      }),
       'GET /sistema/usuarios': [],
     });
     renderizar(<Canais />, { caminho: '/canais' });
     expect(await screen.findByRole('heading', { name: 'Canais e widget' })).toBeTruthy();
-    expect(screen.getAllByText('Alterações não publicadas').length).toBe(2); // cabeçalho + faixa
-    for (const canal of ['WhatsApp', 'E-mail', 'Voz']) {
-      const aba = screen.getByRole('tab', { name: new RegExp(canal) });
-      expect(aba.getAttribute('aria-disabled')).toBe('true');
-      expect(within(aba).getByText('Em breve')).toBeTruthy();
-    }
+    // Como no design: só "Alterações não publicadas · Descartar · Publicar alterações" no cabeçalho.
+    expect(screen.getAllByText('Alterações não publicadas').length).toBe(1);
+    expect(screen.getByRole('button', { name: 'Descartar' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Publicar alterações' })).toBeTruthy();
+    // Nada de abas de canais que ainda não existem.
+    expect(screen.queryByRole('tablist')).toBeNull();
+    expect(screen.queryByText('Em breve')).toBeNull();
+    for (const canal of ['WhatsApp', 'E-mail', 'Voz']) expect(screen.queryByText(canal)).toBeNull();
     expect((screen.getByLabelText('Nome do assistente') as HTMLInputElement).value).toBe('Ajuda Horizonte');
-    expect(screen.getByText(/Detectado em app\.horizonte\.com\.br/)).toBeTruthy();
+    // O selo mostra o domínio (não o endereço inteiro) e há quanto tempo, pelo dado guardado na instalação.
+    expect(screen.getByText('Detectado em app.horizonte.com.br há 3 min')).toBeTruthy();
+    expect(screen.getByText(/A chave é só da Horizonte\. O seu servidor assina o ID do usuário logado/)).toBeTruthy();
     const trecho = screen.getByLabelText('Trecho de instalação').textContent ?? '';
     expect(trecho).toContain('src="http://localhost:3000/copiloto.js"');
-    expect(trecho).toContain('data-assinatura=');
+    expect(trecho).toContain('data-assinatura="ASSINATURA_DO_SEU_SERVIDOR"');
     expect(trecho).not.toContain('pk_live_8f3a2c1b9d7e6f5a'); // a chave aparece mascarada; o Copiar leva a inteira
+    expect(
+      screen.getByText('A chave pública só funciona nos domínios liberados: app.horizonte.com.br e homologacao.horizonte.com.br.'),
+    ).toBeTruthy();
   });
 
   it('salva o rascunho sozinho e publica', async () => {
@@ -130,7 +141,7 @@ describe('C8 · Canais e widget', () => {
       () => expect(pedidos.some((p) => p.metodo === 'PUT' && (p.corpo as { config: ConfigWidget }).config.nome === 'Ajuda')).toBe(true),
       { timeout: 2500 },
     );
-    await waitFor(() => expect(screen.getAllByText('Alterações não publicadas').length).toBe(2));
+    await waitFor(() => expect(screen.getAllByText('Alterações não publicadas').length).toBe(1));
     fireEvent.click(screen.getByRole('button', { name: 'Publicar alterações' }));
     expect(await screen.findByText(/Widget publicado/)).toBeTruthy();
     expect(pedidos.some((p) => p.metodo === 'POST' && p.caminho === '/canais/publicar')).toBe(true);
@@ -165,7 +176,8 @@ describe('C8 · Canais e widget', () => {
     expect(trecho).toContain('data-nome="NOME_DO_USUARIO"');
     expect(trecho).toContain('data-email="EMAIL_DO_USUARIO"');
     expect(trecho).toContain('data-perfis="PERFIS_SEPARADOS_POR_VIRGULA"');
-    expect(trecho).toContain('data-assinatura="HMAC_DOS_DADOS_DO_USUARIO"');
+    expect(trecho).toContain('data-assinatura="ASSINATURA_DO_SEU_SERVIDOR"');
+    expect(screen.getByText(/O seu servidor assina o ID, o nome, o e-mail e os perfis de quem está logado/)).toBeTruthy();
     expect(screen.getByLabelText('Exemplo do texto assinado').textContent).toBe('101\nAna Ribeiro\nana@suaempresa.com.br\nAtendimento,Comercial');
     expect(screen.getAllByText(/usuario\.perfis\.join\(','\)/).length).toBeGreaterThan(0);
 
@@ -183,7 +195,7 @@ describe('C8 · Canais e widget', () => {
     instalarFetch({ 'GET /canais': canais({ conector: 'api' }), 'GET /sistema/usuarios': [] });
     renderizar(<Canais />, { caminho: '/canais' });
     const trecho = (await screen.findByLabelText('Trecho de instalação')).textContent ?? '';
-    expect(trecho).toContain('data-assinatura="HMAC_DO_ID_DO_USUARIO"');
+    expect(trecho).toContain('data-assinatura="ASSINATURA_DO_SEU_SERVIDOR"');
     expect(trecho).not.toContain('data-nome');
     expect(screen.queryByLabelText('Pedido de sessão')).toBeNull();
   });
@@ -253,5 +265,84 @@ describe('C8 · Canais e widget', () => {
     localStorage.setItem('copiloto.console.canais.rascunho.emp-horizonte', JSON.stringify(config({ nome: 'Guardado offline' })));
     renderizar(<Canais />, { caminho: '/canais', perfil: 'admin' });
     expect(((await screen.findByLabelText('Nome do assistente')) as HTMLInputElement).value).toBe('Guardado offline');
+  });
+});
+
+describe('Logo do widget (Aparência)', () => {
+  const LOGO: LogoWidget = {
+    arquivo: '3f9ac1d2e4b5a6978877665544332211.svg',
+    nome: 'logo-horizonte.svg',
+    tamanho: 12 * 1024,
+    tipo: 'image/svg+xml',
+    enviadoEm: new Date().toISOString(),
+    url: 'http://localhost:3000/api/widget/marca/pk_live_8f3a2c1b9d7e6f5a/3f9ac1d2e4b5a6978877665544332211.svg',
+  };
+
+  it('envia o logo, mostra o arquivo e a prévia com ele, e remove', async () => {
+    const { pedidos } = instalarFetch({
+      'GET /canais': canais(),
+      'GET /sistema/usuarios': [],
+      'POST /canais/logo': () => canais({ rascunho: config({ logo: LOGO }), temAlteracoes: true }),
+      'DELETE /canais/logo': () => canais(),
+    });
+    const { container } = renderizar(<Canais />, { caminho: '/canais' });
+    expect(await screen.findByText('Arraste o logo para cá ou')).toBeTruthy();
+    expect(screen.getByText('PNG ou SVG quadrado, até 1 MB. Aparece no topo e ao lado das respostas.')).toBeTruthy();
+    // Sem logo, a prévia usa o ícone padrão (nenhuma imagem no avatar).
+    expect(container.querySelector('.cp-avatar-logo')).toBeNull();
+
+    const arquivo = new File(['<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"/>'], 'logo-horizonte.svg', { type: 'image/svg+xml' });
+    fireEvent.change(screen.getByLabelText('escolha um arquivo'), { target: { files: [arquivo] } });
+    expect(await screen.findByText('logo-horizonte.svg')).toBeTruthy();
+    expect(screen.getByText('12 KB · enviado agora')).toBeTruthy();
+    const envio = pedidos.find((p) => p.metodo === 'POST' && p.caminho === '/canais/logo');
+    expect(envio?.corpo).toBeInstanceOf(FormData);
+    expect(((envio!.corpo as FormData).get('arquivo') as File).name).toBe('logo-horizonte.svg');
+    // A prévia ao vivo usa o logo no topo e ao lado da resposta.
+    const imagens = Array.from(container.querySelectorAll('.cp-avatar-logo img')).map((i) => i.getAttribute('src'));
+    expect(imagens.length).toBeGreaterThanOrEqual(2);
+    expect(imagens.every((src) => src === LOGO.url)).toBe(true);
+    // Logo novo é alteração a publicar.
+    expect(screen.getByText('Alterações não publicadas')).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Remover logo-horizonte.svg' }));
+    await waitFor(() => expect(screen.queryByText('logo-horizonte.svg')).toBeNull());
+    expect(pedidos.some((p) => p.metodo === 'DELETE' && p.caminho === '/canais/logo')).toBe(true);
+    expect(container.querySelector('.cp-avatar-logo')).toBeNull();
+  });
+
+  it('recusa no navegador o que não é PNG/SVG ou passa de 1 MB, sem enviar', async () => {
+    const { pedidos } = instalarFetch({ 'GET /canais': canais(), 'GET /sistema/usuarios': [] });
+    renderizar(<Canais />, { caminho: '/canais' });
+    const entrada = await screen.findByLabelText('escolha um arquivo');
+    fireEvent.change(entrada, { target: { files: [new File(['GIF89a'], 'logo.gif', { type: 'image/gif' })] } });
+    expect(await screen.findByText('O logo precisa ser um arquivo PNG ou SVG.')).toBeTruthy();
+    const grande = new File([new Uint8Array(1024 * 1024 + 10)], 'logo.png', { type: 'image/png' });
+    fireEvent.change(entrada, { target: { files: [grande] } });
+    expect(await screen.findByText('O logo tem 1,0 MB. O limite é 1 MB.')).toBeTruthy();
+    expect(pedidos.some((p) => p.caminho === '/canais/logo')).toBe(false);
+  });
+
+  it('mostra o erro do servidor (SVG com script)', async () => {
+    instalarFetch({
+      'GET /canais': canais(),
+      'GET /sistema/usuarios': [],
+      'POST /canais/logo': {
+        status: 422,
+        corpo: { erro: 'logo_invalido', mensagem: 'Este SVG não pode ser usado como logo: usa o elemento <script>.' },
+      },
+    });
+    renderizar(<Canais />, { caminho: '/canais' });
+    const entrada = await screen.findByLabelText('escolha um arquivo');
+    fireEvent.change(entrada, { target: { files: [new File(['<svg><script/></svg>'], 'x.svg', { type: 'image/svg+xml' })] } });
+    expect((await screen.findByRole('alert')).textContent).toContain('usa o elemento <script>');
+  });
+
+  it('Leitor vê o logo publicado sem poder trocar', async () => {
+    instalarFetch({ 'GET /canais': canais({ rascunho: config({ logo: LOGO }), publicada: config({ logo: LOGO }) }), 'GET /sistema/usuarios': [] });
+    renderizar(<Canais />, { caminho: '/canais', perfil: 'leitor' });
+    expect(await screen.findByText('logo-horizonte.svg')).toBeTruthy();
+    expect(screen.queryByLabelText('escolha um arquivo')).toBeNull();
+    expect(screen.queryByRole('button', { name: /Remover/ })).toBeNull();
   });
 });

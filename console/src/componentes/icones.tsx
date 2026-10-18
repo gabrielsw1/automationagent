@@ -144,6 +144,13 @@ const P = {
   ),
   editar: <path d="M4 20h4l11-11-4-4L4 16zM13.5 6.5l4 4" />,
   subir: <path d="M6 15l6-6 6 6" />,
+  /** Enviar: arquivo do logo e "Publicar versão N". */
+  enviarArquivo: (
+    <>
+      <path d="M12 16V4M7 9l5-5 5 5" />
+      <path d="M4 16v4h16v-4" />
+    </>
+  ),
   pontos: <path d="M5 12h.01M12 12h.01M19 12h.01" />,
   /** Item ainda não cumprido (regras da senha). */
   circulo: <circle cx="12" cy="12" r="9" />,

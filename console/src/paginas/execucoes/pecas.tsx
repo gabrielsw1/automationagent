@@ -110,18 +110,6 @@ const CAMINHOS: Record<string, ReactNode> = {
       <path d="M12 11v5M12 8v.01" />
     </>
   ),
-  email: (
-    <>
-      <rect x="3" y="5" width="18" height="14" rx="2" />
-      <path d="M3 7l9 6 9-6" />
-    </>
-  ),
-  voz: (
-    <>
-      <rect x="9" y="3" width="6" height="11" rx="3" />
-      <path d="M5 11a7 7 0 0014 0M12 18v3" />
-    </>
-  ),
   abrir: (
     <>
       <path d="M14 4h6v6M20 4l-9 9" />

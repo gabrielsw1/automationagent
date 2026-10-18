@@ -2,7 +2,7 @@
 // gravado), e o fluxo reserva quando a API falha.
 import { useId, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { fmt, type ExecucaoApi, type Fluxo, type MetodoHttp, type TarefaDefinicao, type Transformacao } from '@copiloto/shared';
+import { custoPrevisto, fmt, type ExecucaoApi, type Fluxo, type MetodoHttp, type TarefaDefinicao, type Transformacao } from '@copiloto/shared';
 import { api, type ErroApiCliente } from '../../api/cliente.ts';
 import { useApi } from '../../api/hooks.ts';
 import { Botao } from '../../componentes/Botao.tsx';
@@ -511,7 +511,9 @@ export default function AbaExecucao(props: PropsAbaExecucao) {
           <h2 className="h4" id="executar-titulo">
             Como executar
           </h2>
-          <span className="small muted">API é mais rápida e não quebra quando a tela muda.</span>
+          <span className="small muted">
+            Pela tela, com o roteiro gravado e o agente visual só no conserto. A API, quando o sistema tem, é um atalho mais rápido.
+          </span>
         </div>
         <Segmentado
           rotulo="Caminho de execução"
@@ -559,9 +561,10 @@ export default function AbaExecucao(props: PropsAbaExecucao) {
           </>
         ) : (
           <>
-            <Aviso tipo="info">
-              No caminho navegador, o copiloto repete na tela do sistema os passos que você gravou, com o login de quem pediu. É mais lento que a API e
-              depende da tela não mudar muito.
+            <Aviso tipo="info" titulo="Caminho pela tela, com o agente visual só no conserto">
+              O copiloto repete na tela do sistema o roteiro que você gravou, com a sessão de quem pediu. O agente visual só entra quando a tela
+              muda e um passo não é encontrado: ele procura o botão ou o campo, conserta o passo e avisa você. Custo previsto:{' '}
+              {custoPrevisto('navegador')}.
             </Aviso>
             <EscolherFluxo {...props} fluxos={fluxos.dados} erro={fluxos.erro} tarefaId={tarefaId} />
             {!def.fluxoId && fluxos.dados ? <p className="small text-danger">Escolha o fluxo gravado que esta tarefa usa.</p> : null}
@@ -569,7 +572,7 @@ export default function AbaExecucao(props: PropsAbaExecucao) {
             <CampoForm
               rotulo="Confiança mínima para agir sozinho"
               classe="select"
-              ajuda="Quando a tela muda, o copiloto procura o botão ou campo pelo texto e pela posição. Abaixo desta confiança ele para e pede ajuda a uma pessoa da equipe."
+              ajuda="No conserto, o agente visual procura o botão ou campo que mudou pelo texto e pela posição. Abaixo desta confiança ele não age sozinho: para e pede ajuda a uma pessoa da equipe."
               style={{ maxWidth: 420 }}
             >
               {(p) => (

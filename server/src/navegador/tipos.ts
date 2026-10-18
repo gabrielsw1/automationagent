@@ -1,6 +1,6 @@
 // Contrato do caminho navegador (Playwright). O motor de execução chama `executar` quando a
 // tarefa usa um fluxo gravado (ou quando a API falha e a tarefa permite usar o fluxo).
-import type { Fluxo } from '@copiloto/shared';
+import type { Fluxo, RegistroLido } from '@copiloto/shared';
 
 export interface Destaque {
   x: number;
@@ -53,6 +53,8 @@ export type ResultadoNavegador =
       duracaoMs: number;
       /** Quantas vezes a recuperação visual achou um elemento que tinha mudado. */
       recuperacoes: number;
+      /** Número do registro criado, lido da tela depois do último passo; null quando procurou e não achou. */
+      registro?: RegistroLido | null;
     }
   | {
       ok: false;
