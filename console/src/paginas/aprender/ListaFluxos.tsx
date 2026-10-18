@@ -11,7 +11,7 @@ import { Icone } from '../../componentes/icones.tsx';
 import { Modal } from '../../componentes/Modal.tsx';
 import { useMigalhas, useOnline } from '../../componentes/pagina.tsx';
 import { SeloCaminho } from '../../componentes/Selos.tsx';
-import { usePode, useSessao } from '../../componentes/sessao.tsx';
+import { recarregar, usePode, useSessao } from '../../componentes/sessao.tsx';
 import { Tabela } from '../../componentes/Tabela.tsx';
 import { useToast } from '../../componentes/Toast.tsx';
 import { ETAPAS, prepararAba, rotuloSituacao, type RespostaGravacao } from './comum.tsx';
@@ -46,8 +46,6 @@ function ComoFunciona() {
   );
 }
 
-export const AJUDA_EXTENSAO = 'https://github.com/gabrielsw1/automationagent#extens%C3%A3o-para-gravar-fluxos';
-
 /** A extensão do copiloto marca o <html> de toda página logo no início. */
 export function extensaoInstalada(): boolean {
   return typeof document !== 'undefined' && document.documentElement.hasAttribute(MARCA_EXTENSAO);
@@ -78,10 +76,8 @@ function SobreExtensao() {
   }
   return (
     <p className="tiny muted">
-      Para gravar em sites sem o widget do copiloto, instale a extensão do navegador.{' '}
-      <a href={AJUDA_EXTENSAO} target="_blank" rel="noreferrer">
-        Como instalar
-      </a>
+      Para gravar em sites sem o widget do copiloto, instale o gravador de fluxos (extensão do navegador).{' '}
+      <Link to="/aprender/instalar">Como instalar</Link>
     </p>
   );
 }
@@ -208,7 +204,11 @@ export function ModalNovaGravacao({
           rotulo="Página onde a tarefa começa"
           obrigatorio
           erro={erros.url}
-          ajuda={`Endereço de uma tela do ${resumo.nomeSistema}. Pode colar o endereço completo da barra do navegador.`}
+          ajuda={
+            urlInicialSugerida
+              ? 'Veio da aba em que você clicou em Gravar esta aba, no gravador. Pode trocar se a tarefa começar em outra tela.'
+              : `Endereço de uma tela do ${resumo.nomeSistema}. Pode colar o endereço completo da barra do navegador.`
+          }
         >
           {(p) => (
             <input
@@ -222,6 +222,9 @@ export function ModalNovaGravacao({
             />
           )}
         </Campo>
+        <Aviso titulo={`Entre no ${resumo.nomeSistema} antes de gravar`}>
+          Se a aba pedir usuário e senha, entre primeiro e só depois faça a tarefa. A entrada no sistema não precisa fazer parte do fluxo.
+        </Aviso>
         <p className="tiny muted">Senhas e valores digitados nunca são gravados: o copiloto guarda só o formato (por exemplo, 99.999.999/9999-99).</p>
         <SobreExtensao />
         <button type="submit" hidden />
@@ -242,6 +245,35 @@ export default function ListaFluxos() {
   const tarefaDaUrl = busca.get('tarefa');
   // ?gravar=<endereço>: vem do "Gravar esta aba" da extensão do navegador.
   const gravarDaUrl = busca.get('gravar');
+  // ?empresa=<id>: a empresa da conta da extensão. Se o console estiver em outra, troca antes de gravar.
+  const empresaDaUrl = busca.get('empresa');
+  const [trocandoEmpresa, setTrocandoEmpresa] = useState<string | null>(null);
+  const [erroEmpresa, setErroEmpresa] = useState<string | null>(null);
+  useEffect(() => {
+    if (!empresaDaUrl) return;
+    const semEmpresa = new URLSearchParams(busca);
+    semEmpresa.delete('empresa');
+    if (empresaDaUrl === resumo.eu.empresa.id) {
+      setBusca(semEmpresa, { replace: true });
+      return;
+    }
+    const destino = resumo.eu.empresas.find((e) => e.id === empresaDaUrl);
+    if (!destino) {
+      setErroEmpresa('O gravador está conectado a uma empresa em que você não está mais. Clique em Trocar no ícone do gravador e escolha a empresa de novo.');
+      setBusca(semEmpresa, { replace: true });
+      return;
+    }
+    setTrocandoEmpresa(destino.nome);
+    api
+      .post('/auth/empresa', { empresaId: destino.id })
+      .then(() => recarregar.console(`/aprender?${semEmpresa.toString()}`))
+      .catch((e: ErroApiCliente) => {
+        setTrocandoEmpresa(null);
+        setErroEmpresa(`Não consegui abrir a ${destino.nome} para gravar. ${e.message}`);
+        setBusca(semEmpresa, { replace: true });
+      });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [empresaDaUrl]);
   const [novo, setNovo] = useState(Boolean(tarefaDaUrl || gravarDaUrl) || busca.get('nova') === '1');
 
   useEventosConsole((e) => {
@@ -288,6 +320,14 @@ export default function ListaFluxos() {
       Começar gravação
     </Botao>
   ) : null;
+  const instalar = !extensaoInstalada() ? (
+    <Link className="btn btn-secondary" to="/aprender/instalar">
+      <Icone nome="extensao" />
+      Instalar o gravador
+    </Link>
+  ) : null;
+
+  if (trocandoEmpresa) return <Carregando texto={`Abrindo a ${trocandoEmpresa} para gravar…`} />;
 
   let conteudo;
   if (fluxos.carregando && !fluxos.dados) conteudo = <Carregando forma="tabela" texto="Carregando os fluxos…" />;
@@ -370,14 +410,26 @@ export default function ListaFluxos() {
         titulo="Aprender fluxo"
         selos={<SeloCaminho caminho="navegador" />}
         subtitulo={`Para telas sem API: você faz a tarefa uma vez no ${resumo.nomeSistema} e o copiloto aprende os passos para repetir num navegador na nuvem.`}
-        acoes={linhas.length ? acao : null}
+        acoes={
+          linhas.length || instalar ? (
+            <>
+              {instalar}
+              {linhas.length ? acao : null}
+            </>
+          ) : null
+        }
       />
+      {erroEmpresa ? (
+        <Aviso tipo="aviso" titulo="Gravação na empresa do gravador">
+          {erroEmpresa}
+        </Aviso>
+      ) : null}
       {!podeEditar ? (
         <Aviso titulo="Você pode ver os fluxos, mas não gravar nem publicar">Seu perfil só permite ver. Peça a um Admin ou a um Editor de tarefas para gravar fluxos.</Aviso>
       ) : null}
       {conteudo}
       <ComoFunciona />
-      {podeEditar ? <ModalNovaGravacao aberto={novo} aoFechar={fecharNovo} tarefaInicial={tarefaDaUrl} urlInicialSugerida={gravarDaUrl} /> : null}
+      {podeEditar ? <ModalNovaGravacao aberto={novo && !empresaDaUrl} aoFechar={fecharNovo} tarefaInicial={tarefaDaUrl} urlInicialSugerida={gravarDaUrl} /> : null}
     </div>
   );
 }

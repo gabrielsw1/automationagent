@@ -64,9 +64,11 @@ Para ver as falhas acontecerem, abra http://localhost:4000/_demo. Lá você pode
 
 ## Extensão para gravar fluxos
 
-A extensão do navegador grava um fluxo em qualquer site, mesmo onde o widget não está instalado. Ela funciona no Chrome e no Edge. Ao gravar, ela usa a mesma barra "Gravando" do widget, e o widget sai de cena.
+A extensão do navegador (**Copiloto · Gravador de fluxos**) grava um fluxo em qualquer site, mesmo onde o widget não está instalado. Ela funciona no Chrome e no Edge. Ao gravar, ela usa a mesma barra "Gravando" do widget, mostra os passos gravados num painel no canto da página, e o widget sai de cena.
 
-### Instalar
+No console, **Aprender fluxo** › **Instalar o gravador** mostra os passos de instalação, quem da empresa pode gravar e, ao vivo, se a extensão já está instalada e em qual empresa ela entrou. Quando a extensão estiver publicada nas lojas, a página mostra os botões **Instalar no Chrome** e **Instalar no Edge** (veja [Publicar nas lojas](#publicar-nas-lojas)). Até lá, ela leva para a seção abaixo.
+
+### Instalar pelo pacote (sem a loja)
 
 1. Gere a extensão. Ela fica na pasta `extension\dist`:
    - Com `npm run dev` rodando, a pasta já existe e é recompilada a cada mudança.
@@ -78,6 +80,20 @@ A extensão do navegador grava um fluxo em qualquer site, mesmo onde o widget n�
 
 Mudou o código da extensão com o `npm run dev` rodando? Clique em recarregar (↻) no cartão dela em `chrome://extensions`.
 
+### Entrar com a conta do Copiloto
+
+A extensão grava para uma conta e uma empresa. A senha nunca passa por ela:
+
+1. Clique no ícone do Copiloto e em **Entrar com a conta do Copiloto**. Abre o console numa aba nova, em **Conectar o gravador**. Se o console pedir, entre com o seu e-mail e senha.
+2. Escolha a empresa. Só aparecem liberadas as empresas em que o seu perfil é Admin ou Editor de tarefas.
+3. Clique em **Conectar o gravador**. A página mostra "Gravador conectado" e pode ser fechada.
+
+Como funciona: a extensão abre a página com um desafio; o console pede ao servidor um código de uso único, que vale 2 minutos e fica preso à conta, à empresa e ao desafio; a página entrega o código à extensão pela própria aba. A extensão só aceita o código vindo da aba do console configurado no servidor e troca o código pelo token dela, com um segredo que nunca sai da extensão. O servidor guarda só o hash do token. O token serve apenas para as rotas da extensão (gravar, gravações recentes, sair), nunca para as outras telas do console.
+
+O token deixa de valer quando você clica em **Trocar** › **Sair da extensão**, quando troca de empresa, quando usa "Sair de todos os outros aparelhos" no console, quando a pessoa sai da equipe ou quando a empresa é suspensa. **Trocar** também muda a empresa: escolha outra e confirme na aba do console que abre.
+
+Quem tem o perfil Leitor vê no popup que o perfil não permite gravar.
+
 ### Gravar o primeiro fluxo
 
 Antes de gravar, entre no sistema, por exemplo no Horizonte como Ana Ribeiro. Assim a gravação já começa na tela certa, e não na de login.
@@ -85,7 +101,9 @@ Antes de gravar, entre no sistema, por exemplo no Horizonte como Ana Ribeiro. As
 A gravação pode começar por dois lugares:
 
 - **Pelo console:** abra **Aprender fluxo** › **Começar gravação**. Dê um nome ao fluxo, informe a página onde a tarefa começa e clique em **Abrir e gravar**. Abre uma aba do sistema com a barra "Gravando" no topo. O modal mostra "Extensão instalada" quando o console encontra a extensão.
-- **Pelo ícone:** na aba do sistema, clique no ícone do Copiloto e em **Gravar esta aba**. O console abre o mesmo **Começar gravação**, com o endereço da aba já preenchido.
+- **Pelo ícone:** na aba do sistema, clique no ícone do Copiloto e em **Gravar esta aba**. O console abre o mesmo **Começar gravação**, com o endereço da aba já preenchido, na empresa em que a extensão entrou (se o console estiver em outra empresa da sua conta, ele troca antes).
+
+O popup também mostra as **Gravações recentes** (Enviada há N min, Em revisão, Publicada).
 
 Depois, faça a tarefa uma vez, do começo ao fim. A extensão grava:
 
@@ -94,9 +112,11 @@ Depois, faça a tarefa uma vez, do começo ao fim. A extensão grava:
 - trocas de página, mesmo quando a aba vai para outro site;
 - downloads.
 
-Senhas nunca são gravadas.
+Senhas nunca são gravadas, nem o formato. Enquanto você digita, um balão perto do campo mostra o que fica gravado ("Gravado só o formato: 99.999.999/9999-99", ou "Senha: nada é gravado, nem o formato").
 
-Para terminar, clique em **Concluir** na barra ou no ícone do Copiloto. **Cancelar** descarta a gravação. Em seguida, volte ao console e siga as etapas: **Revisar passos**, **Mapear campos**, **Testar** e **Publicar**.
+Para terminar, clique em **Concluir** na barra ou no ícone do Copiloto. **Cancelar** descarta a gravação. Sem conexão com o copiloto, os passos ficam guardados na aba e vão sozinhos quando a conexão voltar; **Tentar agora** tenta na hora. Em seguida, volte ao console e siga as etapas: **Revisar passos**, **Mapear campos**, **Testar** e **Publicar**.
+
+**Passos em outro site.** Se o caminho passou por outro site (uma consulta de CNPJ, por exemplo), esses passos ficam marcados em **Revisar passos**. O copiloto só repete passos no sistema da empresa. Para cada um, escolha **Remover** (sai do fluxo) ou **Manter como instrução** (o copiloto não faz o passo, mas avisa a pessoa no pedido). Até escolher, o fluxo não pode ser testado nem publicado, e o **Antes de publicar** mostra o item "Passo em outro site resolvido".
 
 ### Usar outro servidor do copiloto
 
@@ -107,39 +127,62 @@ A extensão já vem liberada para `localhost` e `127.0.0.1`. A gravação aberta
 3. O navegador pede permissão para aquele endereço. Aceite.
 4. Clique em **Testar conexão** para conferir.
 
-O botão **Gravar esta aba** usa esse servidor. O padrão é `http://localhost:3000`, que é o do `npm run dev`. Quando uma gravação depende de um servidor que ainda não foi liberado, a barra avisa e oferece **Abrir as opções**. Os passos ficam guardados e são enviados assim que o servidor é liberado.
+O botão **Entrar com a conta do Copiloto** usa esse servidor. O padrão é `http://localhost:3000`, que é o do `npm run dev`. Trocar o servidor com a extensão conectada faz ela sair da conta: entre de novo pelo ícone. Quando uma gravação depende de um servidor que ainda não foi liberado, a barra avisa e oferece **Abrir as opções**. Os passos ficam guardados e são enviados assim que o servidor é liberado.
 
 ### Do início ao fim: gravar com a extensão e executar pelo widget
 
 Com o `npm run dev` rodando e a extensão carregada:
 
 1. Abra http://localhost:4000, entre como **Ana Ribeiro** e clique em **Chamados** no menu.
-2. Clique no ícone do Copiloto na barra do navegador e depois em **Gravar esta aba**. O console abre em **Aprender fluxo**, com o **Começar gravação** aberto e a página `/chamados` preenchida. Se o console pedir login, entre com `rafael.lima@seusistema.com.br` / `copiloto123`: ele volta para o mesmo lugar.
-3. Em **Nome do fluxo**, escreva `Abrir chamado`. Deixe **Tarefa** em "Sem tarefa por enquanto" e clique em **Abrir e gravar**.
-4. Na aba do Horizonte que abriu, com a barra "Gravando · Abrir chamado" no topo, preencha o quadro **Abrir chamado**:
+2. Clique no ícone do Copiloto na barra do navegador. Na primeira vez, clique em **Entrar com a conta do Copiloto**: no console (entre com `rafael.lima@seusistema.com.br` / `copiloto123` se ele pedir), deixe **Horizonte** marcada e clique em **Conectar o gravador**. Feche essa aba e clique de novo no ícone.
+3. Clique em **Gravar esta aba**. O console abre em **Aprender fluxo**, com o **Começar gravação** aberto e a página `/chamados` preenchida.
+4. Em **Nome do fluxo**, escreva `Abrir chamado`. Deixe **Tarefa** em "Sem tarefa por enquanto" e clique em **Abrir e gravar**.
+5. Na aba do Horizonte que abriu, com a barra "Gravando · Abrir chamado" no topo, preencha o quadro **Abrir chamado**:
    - **Assunto:** `Impressora sem tinta`
    - **Cliente:** `Padaria Estrela`
    - **Prioridade:** `Alta`
    - **Descrição:** `A impressora do caixa parou de imprimir.`
 
    Depois clique no botão **Abrir chamado**.
-5. Clique em **Concluir** na barra. Ela mostra "Gravação enviada. Volte ao console para revisar." Pode fechar essa aba.
-6. Volte à aba do console. O fluxo está em **Revisar passos**, com um passo para cada coisa que você fez (6, neste exemplo). Clique em **Continuar para mapear**.
-7. Em **Mapear campos**, clique em **Criar tarefa com estes dados** e depois em **Continuar para testes**. O quadro **Número do registro criado** pode ficar em branco: sem ele, o copiloto procura o número no aviso de confirmação que o Horizonte mostra depois de abrir o chamado.
-8. Em **Testar**:
+6. Clique em **Concluir** na barra. Ela mostra "Gravação enviada. Volte ao console para revisar." Pode fechar essa aba.
+7. Volte à aba do console. O fluxo está em **Revisar passos**, com um passo para cada coisa que você fez (6, neste exemplo). Clique em **Continuar para mapear**.
+8. Em **Mapear campos**, clique em **Criar tarefa com estes dados** e depois em **Continuar para testes**. O quadro **Número do registro criado** pode ficar em branco: sem ele, o copiloto procura o número no aviso de confirmação que o Horizonte mostra depois de abrir o chamado.
+9. Em **Testar**:
    - Em **Rodar como**, escolha **Ana Ribeiro**.
    - Preencha os valores do teste, por exemplo Assunto `Teste do copiloto`, Cliente `Padaria Estrela`, Prioridade `Baixa` e Descrição `Teste do fluxo gravado.`
    - Clique em **Rodar teste**. O teste abre um chamado de verdade no Horizonte.
    - Quando aparecer "Deu certo", a linha **Registro criado** mostra o número que o Horizonte deu ao chamado, por exemplo `Chamado CH-2026-0153`. Para o copiloto ler sempre daquele lugar da tela, volte a **Mapear campos** e clique em **Usar este lugar**.
    - Clique em **Continuar para publicar**.
-9. Em **Publicar**, confira o resumo: o que o copiloto vai pedir, como executa, o **Custo previsto** e o último teste. Deixe **Mostrar no widget** ligado e clique em **Publicar versão 1**. O fluxo e a tarefa são publicados juntos, e a tarefa fica ativa para todos os perfis, Ana inclusive. Para escolher perfis, desmarque **Todos os perfis** antes de publicar.
-10. Volte ao Horizonte (como Ana Ribeiro). Abra o copiloto pelo botão no canto da tela ou com Ctrl+K e escreva:
+10. Em **Publicar**, confira o resumo: o que o copiloto vai pedir, como executa, o **Custo previsto** e o último teste. Deixe **Mostrar no widget** ligado e clique em **Publicar versão 1**. O fluxo e a tarefa são publicados juntos, e a tarefa fica ativa para todos os perfis, Ana inclusive. Para escolher perfis, desmarque **Todos os perfis** antes de publicar.
+11. Volte ao Horizonte (como Ana Ribeiro). Abra o copiloto pelo botão no canto da tela ou com Ctrl+K e escreva:
 
     `Abre um chamado para a Padaria Estrela sobre impressora sem tinta, prioridade alta`
-11. O copiloto confirma o assunto, a prioridade e o cliente e pergunta a descrição. Responda, por exemplo: `A impressora do caixa parou de imprimir os cupons fiscais.`
-12. Confira o cartão **Confirme: Abrir chamado** e clique em **Confirmar e executar**. O copiloto abre o chamado pela tela, com a sessão de Ana, num navegador que não aparece. Em alguns segundos, chega o recibo **Abrir chamado: feito**, com a linha **Chamado CH-2026-0154 · Padaria Estrela · Prioridade alta** (o número é o que o Horizonte deu, lido da tela) e o link **Abrir o chamado**, que abre o chamado novo no Horizonte.
+12. O copiloto confirma o assunto, a prioridade e o cliente e pergunta a descrição. Responda, por exemplo: `A impressora do caixa parou de imprimir os cupons fiscais.`
+13. Confira o cartão **Confirme: Abrir chamado** e clique em **Confirmar e executar**. O copiloto abre o chamado pela tela, com a sessão de Ana, num navegador que não aparece. Em alguns segundos, chega o recibo **Abrir chamado: feito**, com a linha **Chamado CH-2026-0154 · Padaria Estrela · Prioridade alta** (o número é o que o Horizonte deu, lido da tela) e o link **Abrir o chamado**, que abre o chamado novo no Horizonte.
 
 O mesmo caminho, sem a extensão, roda nos testes: `npx vitest run test/navegador/chamado-horizonte.test.ts`, na pasta `server`, sobe o Horizonte e o copiloto em portas livres e confere que o número do recibo é o do chamado criado.
+
+### Publicar nas lojas
+
+O pacote para a Chrome Web Store e para o Microsoft Edge Add-ons sai de um comando:
+
+```powershell
+npm run loja -w extension
+```
+
+Ele compila a extensão e cria a pasta `extension\dist-loja` com:
+
+- `copiloto-gravador-<versão>.zip`: o pacote para enviar às duas lojas (a versão vem de `extension/package.json`);
+- `icone-128.png`, `logo-300.png` e `promocional-440x280.png`: as imagens pedidas pelas lojas;
+- `listagem-pt-BR.md`: os textos da ficha (resumo, descrição, propósito único, justificativa de cada permissão e o formulário de privacidade). O original fica em `extension/loja/`.
+
+Para publicar:
+
+1. **Chrome:** em https://chrome.google.com/webstore/devconsole, crie o item com o `.zip`, preencha a ficha com os textos de `listagem-pt-BR.md`, envie as imagens e as capturas de tela (1280 × 800) e mande para revisão.
+2. **Edge:** em https://partner.microsoft.com/dashboard/microsoftedge, crie a extensão com o mesmo `.zip` e os mesmos textos.
+3. Quando as lojas aprovarem, ponha os endereços das páginas nas variáveis `EXTENSAO_URL_CHROME` e `EXTENSAO_URL_EDGE` do servidor. A página **Instalar o gravador** passa a mostrar os botões das lojas.
+
+A cada versão nova, aumente `version` em `extension/package.json`, rode o comando de novo e envie o `.zip` novo nas duas lojas.
 
 ## Claude
 
@@ -203,9 +246,13 @@ Para um sistema com API, dá para escrever um adaptador em `server/src/adaptador
 | `COPILOTO_CHAVE_MESTRA` | Cifra os segredos das empresas no banco. Sem ela, deriva do `SESSAO_SEGREDO`. Guarde-a: sem ela, as senhas das contas de serviço não abrem. |
 | `COPILOTO_ADMINS` | E-mails (separados por vírgula) da equipe Starta. Na primeira vez que o servidor sobe, cada e-mail sem conta recebe o link para ativar o acesso à Plataforma (senha e aplicativo autenticador); o link também sai no log. |
 | `COPILOTO_CADASTRO` | `fechado` desliga o cadastro de empresas novas pela tela de entrada. |
+| `SMTP_URL` | Provedor que envia os e-mails (confirmação de e-mail, convites, senha esquecida, ativação da equipe Starta, avisos de suporte e de cobrança), por exemplo `smtps://usuario:senha@smtp.provedor.com:465`. Sem ele, nenhum e-mail sai: cada um fica gravado em `DATA_DIR/caixa-de-saida`. |
+| `EMAIL_REMETENTE` | Remetente dos e-mails. Padrão: `Copiloto Starta <nao-responda@starta.site>`. |
 | `EMAIL_VENDAS` | Recebe por e-mail os pedidos de **Agendar demonstração** e **Falar com vendas** do site, os pedidos de **Mudar de plano** e, na cobrança manual, cada fatura a cobrar. Sem ela, tudo fica só no banco da plataforma. |
 | `TEXTOS_LEGAIS_DIR` | Pasta com os textos jurídicos aprovados (`termos.md`, `privacidade.md`, `contrato-lgpd.md`). O texto que faltar ali vem da minuta em `docs/legal`, com o aviso de revisão jurídica. |
-| `PUBLIC_URL` e `CONSOLE_URL` | Endereços públicos do servidor e do console (links de arquivos e de convite). |
+| `PUBLIC_URL` e `CONSOLE_URL` | Endereços públicos do servidor e do console (links de arquivos e de convite). A extensão só aceita o código de entrada vindo da aba de `CONSOLE_URL`. |
+| `EXTENSAO_URL_CHROME` e `EXTENSAO_URL_EDGE` | Páginas da extensão na Chrome Web Store e no Edge Add-ons. Vazias, a página **Instalar o gravador** explica a instalação pelo pacote. |
+| `EXTENSAO_AJUDA_URL` | Para onde aponta **Como instalar pelo pacote** (padrão: a seção deste README). |
 | `ASAAS_API_KEY` | Chave da conta do Asaas que cobra as faturas e os pacotes de créditos. Sem ela, a cobrança é manual (a Starta envia por e-mail e marca como paga no painel). No PowerShell, use aspas simples: `$env:ASAAS_API_KEY = '$aact_...'`. |
 | `ASAAS_AMBIENTE` | `sandbox` (padrão, para testar) ou `producao`. |
 | `ASAAS_WEBHOOK_TOKEN` | Token que você cadastra no webhook do Asaas, apontado para `{PUBLIC_URL}/api/pagamentos/asaas`. Sem ele, os avisos de pagamento são recusados. |

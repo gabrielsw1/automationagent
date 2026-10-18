@@ -317,6 +317,17 @@ export interface GravacaoEstado {
   nome: string;
   ativa: boolean;
   passos: number;
+  /** Para onde a gravação vai: "Envia para Horizonte Gestão · Rafael Lima". */
+  empresa?: string;
+  pessoa?: string | null;
+  /** Títulos dos passos até agora ("Preencher assunto"), para o painel "Passos gravados". */
+  itens?: string[];
+}
+
+/** Resposta de POST /api/gravacao/:token/eventos. */
+export interface GravacaoEventosAceitos {
+  passos: number;
+  itens?: string[];
 }
 
 /**

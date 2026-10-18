@@ -4,6 +4,8 @@ type Estado =
   | { tipo: 'gravando' }
   | { tipo: 'confirmar_cancelar' }
   | { tipo: 'ocupado'; texto: string }
+  /** Esperando algo de fora (a extensão: a internet voltar para enviar), com uma ação opcional. */
+  | { tipo: 'espera'; texto: string; acao: AcaoErro | null }
   | { tipo: 'final'; texto: string; sucesso: boolean };
 
 export interface AcoesBarra {
@@ -88,6 +90,13 @@ export class BarraGravacao {
     this.desenhar();
   }
 
+  /** Espera sem botões de gravar: "Sem conexão agora…", com "Tentar agora". */
+  mostrarEspera(texto: string, acao: AcaoErro | null = null): void {
+    this.estado = { tipo: 'espera', texto, acao };
+    this.erro = null;
+    this.desenhar();
+  }
+
   voltarAGravar(): void {
     this.estado = { tipo: 'gravando' };
     this.desenhar();
@@ -149,6 +158,15 @@ export class BarraGravacao {
       sp.setAttribute('aria-hidden', 'true');
       linha.appendChild(sp);
       linha.appendChild(el('span', 'cp-grav-titulo', s.texto));
+    } else if (s.tipo === 'espera') {
+      const sp = el('span', 'spinner');
+      sp.setAttribute('aria-hidden', 'true');
+      linha.appendChild(sp);
+      const t = el('span', 'cp-grav-titulo', s.texto);
+      t.setAttribute('role', 'status');
+      linha.appendChild(t);
+      const acao = s.acao;
+      if (acao) linha.appendChild(botao(acao.rotulo, 'btn btn-secondary btn-sm', () => acao.aoClicar()));
     } else {
       const ic = icone(s.sucesso ? ['M5 12.5l4.5 4.5L19 7.5'] : ['M8 8l8 8M16 8l-8 8']);
       ic.classList.add(s.sucesso ? 'text-success' : 'muted');

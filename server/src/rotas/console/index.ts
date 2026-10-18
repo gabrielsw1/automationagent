@@ -10,6 +10,7 @@ import conhecimento from './conhecimento.ts';
 import equipe from './equipe.ts';
 import eventos from './eventos.ts';
 import execucoes from './execucoes.ts';
+import extensao from './extensao.ts';
 import fluxos from './fluxos.ts';
 import guia from './guia.ts';
 import painel from './painel.ts';
@@ -39,6 +40,7 @@ const rotas: FastifyPluginAsync = async (app) => {
   await app.register(tarefas, { prefix: '/tarefas' });
   await app.register(execucoes, { prefix: '/execucoes' });
   await app.register(fluxos, { prefix: '/fluxos' });
+  await app.register(extensao, { prefix: '/extensao' });
   await app.register(prints, { prefix: '/prints' });
   await app.register(conhecimento, { prefix: '/conhecimento' });
   await app.register(canais, { prefix: '/canais' });

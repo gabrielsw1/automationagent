@@ -2,12 +2,13 @@
 // enviados) fica no chrome.storage.session: sobrevive à troca de página, à navegação para outro site
 // na mesma aba e ao service worker dormir, até concluir, cancelar ou fechar a aba.
 // Toda a rede passa por aqui (o CORS do site gravado não interfere) e usa a ApiGravacao do widget.
-import type { EventoGravado } from '@copiloto/shared';
+import { ehMensagemDoConsole, type EventoGravado } from '@copiloto/shared';
 import { ErroCliente, juntarUrl, pedirJson } from '@copiloto/widget/chat/api.ts';
 import { ApiGravacao } from '@copiloto/widget/gravador/envio.ts';
 import type { AvisoEstado, EstadoAba, Pedido, Resultado, Saude } from '../comum/mensagens.ts';
 import { origemDe, servidorConfigurado, temPermissao } from '../comum/servidor.ts';
 import { paginaGravavel, semParametros } from '../comum/parametros.ts';
+import { Conta } from './conta.ts';
 
 interface GravacaoAba {
   token: string;
@@ -16,8 +17,12 @@ interface GravacaoAba {
   passos: number;
   pendentes: EventoGravado[];
   ultimaUrl: string | null;
-  situacao: 'gravando' | 'sem_permissao';
+  situacao: 'gravando' | 'sem_permissao' | 'sem_conexao';
   aviso: string | null;
+  fluxoId?: string | null;
+  itens?: string[];
+  empresa?: string | null;
+  pessoa?: string | null;
 }
 
 const PREFIXO = 'aba:';
@@ -31,10 +36,25 @@ export const TEXTOS = {
   semConexao: (api: string) => `Não consegui falar com o copiloto em ${api}. Os passos ficam guardados e saem quando a conexão voltar.`,
   semPermissao: (api: string) =>
     `A extensão ainda não pode falar com o copiloto em ${api}. Libere esse endereço nas opções; os passos ficam guardados até lá.`,
+  /** Concluir sem internet (E8). */
+  esperandoConexao: (passos: number) =>
+    `Sem conexão agora. ${passos === 1 ? 'O passo está guardado e será enviado' : `Os ${passos} passos estão guardados e serão enviados`} quando a internet voltar.`,
+  semConta: 'Entre com a conta do Copiloto para gravar.',
 };
 
 function publico(g: GravacaoAba): EstadoAba {
-  return { situacao: g.situacao, nome: g.nome, passos: g.passos + g.pendentes.length, api: g.api, aviso: g.aviso };
+  return {
+    situacao: g.situacao,
+    nome: g.nome,
+    passos: g.passos + g.pendentes.length,
+    api: g.api,
+    aviso: g.aviso,
+    fluxoId: g.fluxoId ?? null,
+    itens: g.itens ?? [],
+    pendentes: g.pendentes.length,
+    empresa: g.empresa ?? null,
+    pessoa: g.pessoa ?? null,
+  };
 }
 
 /** Só o formato de um EventoGravado (o servidor valida de novo, campo a campo). */
@@ -42,6 +62,11 @@ function eventoValido(e: unknown): e is EventoGravado {
   if (!e || typeof e !== 'object') return false;
   const x = e as Partial<EventoGravado>;
   return typeof x.tipo === 'string' && TIPOS.has(x.tipo) && typeof x.ts === 'number' && typeof x.url === 'string';
+}
+
+/** Falha de rede (ou servidor fora do ar): vale guardar e tentar de novo. */
+function semRede(e: unknown): boolean {
+  return e instanceof ErroCliente && e.temporario;
 }
 
 function fimDaGravacao(e: unknown): boolean {
@@ -57,6 +82,8 @@ export interface OpcoesGravacoes {
   esperaMs?: number;
   /** Eventos por POST. O fetch com keepalive aceita até 64 KB de corpo: lotes pequenos. */
   tamanhoLote?: number;
+  /** Primeira espera para concluir de novo quando não havia conexão (depois dobra, até 30 s). */
+  esperaConexaoMs?: number;
 }
 
 export class Gravacoes {
@@ -67,10 +94,17 @@ export class Gravacoes {
   private readonly enviando = new Map<number, Promise<boolean>>();
   private readonly relogios = new Map<number, ReturnType<typeof setTimeout>>();
   private readonly falhas = new Map<number, number>();
+  private readonly esperaConexaoMs: number;
+  private readonly relogiosConclusao = new Map<number, ReturnType<typeof setTimeout>>();
+  private readonly tentativasConclusao = new Map<number, number>();
+  /** Conta da extensão (entrar, empresa, sair). */
+  readonly conta: Conta;
 
   constructor(opcoes: OpcoesGravacoes = {}) {
     this.esperaMs = opcoes.esperaMs ?? 800;
     this.tamanhoLote = opcoes.tamanhoLote ?? 10;
+    this.esperaConexaoMs = opcoes.esperaConexaoMs ?? 2000;
+    this.conta = new Conta((servidor) => this.saude(servidor), chrome.runtime.getManifest().version);
   }
 
   /** Atende uma mensagem. Da página, a aba é a de quem mandou; do popup, a que ele informa. */
@@ -78,6 +112,8 @@ export class Gravacoes {
     const daExtensao = !!remetente.url && remetente.url.startsWith(chrome.runtime.getURL(''));
     const abaPedida = 'abaId' in pedido ? pedido.abaId : undefined;
     const abaId = daExtensao ? abaPedida : remetente.tab?.id;
+    // A conta só se mexe pelo popup e pelas opções; a página do console só fala pelo pedido "console".
+    if (!daExtensao && ['conta', 'entrar', 'sair', 'recentes', 'gravarAba', 'abrirConsole', 'saude'].includes(pedido.tipo)) return null;
     switch (pedido.tipo) {
       case 'comecar':
         return abaId === undefined ? null : this.comecar(abaId, pedido.token, pedido.api);
@@ -91,10 +127,26 @@ export class Gravacoes {
         return abaId === undefined ? { ok: false, mensagem: 'Esta aba não está gravando.' } : this.cancelar(abaId);
       case 'permitir':
         return abaId === undefined ? null : this.abrirPermissao(abaId);
+      case 'tentarAgora':
+        return abaId === undefined ? { ok: false, mensagem: 'Esta aba não está gravando.' } : this.tentarAgora(abaId);
       case 'saude':
         return this.saude(pedido.servidor);
       case 'gravarAba':
         return this.gravarAba(pedido.url);
+      case 'abrirConsole':
+        return this.abrirConsole(pedido.fluxoId ?? null, pedido.api ?? null);
+      case 'conta':
+        return this.conta.estado();
+      case 'entrar':
+        return this.conta.entrar(typeof pedido.empresaId === 'string' ? pedido.empresaId : undefined);
+      case 'sair':
+        return this.conta.sair();
+      case 'recentes':
+        return this.conta.recentes();
+      case 'console':
+        // Só de uma aba (content script), nunca das páginas da extensão.
+        if (daExtensao || !remetente.tab || !ehMensagemDoConsole(pedido.mensagem)) return null;
+        return this.conta.doConsole(pedido.mensagem, remetente);
       default:
         return null;
     }
@@ -150,12 +202,24 @@ export class Gravacoes {
   /** Termina a gravação nesta aba: apaga o estado e avisa com o texto final. */
   private async encerrar(abaId: number, situacao: 'concluida' | 'cancelada' | 'encerrada', aviso: string): Promise<EstadoAba> {
     this.pararRelogio(abaId);
+    this.pararConclusao(abaId);
     const g = await this.naFila(abaId, async () => {
       const atual = await this.ler(abaId);
       await this.gravar(abaId, null);
       return atual;
     });
-    const estado: EstadoAba = { situacao, nome: g?.nome ?? null, passos: g ? g.passos : 0, api: g?.api ?? '', aviso };
+    const estado: EstadoAba = {
+      situacao,
+      nome: g?.nome ?? null,
+      passos: g ? g.passos : 0,
+      api: g?.api ?? '',
+      aviso,
+      fluxoId: g?.fluxoId ?? null,
+      itens: g?.itens ?? [],
+      pendentes: 0,
+      empresa: g?.empresa ?? null,
+      pessoa: g?.pessoa ?? null,
+    };
     this.avisar(abaId, estado);
     return estado;
   }
@@ -183,6 +247,10 @@ export class Gravacoes {
       ultimaUrl: null,
       situacao: permitido ? 'gravando' : 'sem_permissao',
       aviso: permitido ? null : TEXTOS.semPermissao(api),
+      fluxoId: null,
+      itens: [],
+      empresa: null,
+      pessoa: null,
     };
     await this.naFila(abaId, () => this.gravar(abaId, g));
     if (!permitido) return publico(g);
@@ -196,7 +264,16 @@ export class Gravacoes {
     try {
       const r = await new ApiGravacao(g.api, g.token).estado();
       if (!r.ativa) return this.encerrar(abaId, 'encerrada', TEXTOS.encerrada);
-      const novo = await this.mudar(abaId, (x) => ({ ...x, nome: r.nome || x.nome, passos: Math.max(x.passos, r.passos ?? 0), aviso: null }));
+      const novo = await this.mudar(abaId, (x) => ({
+        ...x,
+        nome: r.nome || x.nome,
+        passos: Math.max(x.passos, r.passos ?? 0),
+        aviso: null,
+        fluxoId: r.fluxoId ?? x.fluxoId ?? null,
+        itens: Array.isArray(r.itens) ? r.itens : (x.itens ?? []),
+        empresa: r.empresa ?? x.empresa ?? null,
+        pessoa: r.pessoa ?? x.pessoa ?? null,
+      }));
       return novo ? publico(novo) : publico(g);
     } catch (e) {
       if (e instanceof ErroCliente && (e.status === 404 || e.status === 410)) return this.encerrar(abaId, 'encerrada', TEXTOS.naoEncontrada);
@@ -271,7 +348,7 @@ export class Gravacoes {
   /** Manda o próximo lote; false quando não havia nada a mandar. */
   private async enviarProximo(abaId: number): Promise<boolean> {
     const g = await this.ler(abaId);
-    if (!g || g.situacao !== 'gravando' || g.pendentes.length === 0) return false;
+    if (!g || g.situacao === 'sem_permissao' || g.pendentes.length === 0) return false;
     this.pararRelogio(abaId);
     await this.enviarLote(abaId, g, g.pendentes.slice(0, this.tamanhoLote));
     return true;
@@ -286,7 +363,8 @@ export class Gravacoes {
         ...x,
         pendentes: x.pendentes.slice(lote.length),
         passos: typeof r?.passos === 'number' ? r.passos : x.passos,
-        aviso: null,
+        itens: Array.isArray(r?.itens) ? r.itens : x.itens,
+        aviso: x.situacao === 'sem_conexao' ? x.aviso : null,
       }));
     } catch (e) {
       if (fimDaGravacao(e)) {
@@ -295,8 +373,9 @@ export class Gravacoes {
       }
       const falhas = (this.falhas.get(abaId) ?? 0) + 1;
       this.falhas.set(abaId, falhas);
-      await this.mudar(abaId, (x) => ({ ...x, aviso: TEXTOS.semConexao(x.api) }));
-      this.agendar(abaId, Math.min(2000 * 2 ** (falhas - 1), 20_000));
+      await this.mudar(abaId, (x) => (x.situacao === 'sem_conexao' ? x : { ...x, aviso: TEXTOS.semConexao(x.api) }));
+      // Esperando para concluir: quem tenta de novo é o relógio da conclusão.
+      if (g.situacao !== 'sem_conexao') this.agendar(abaId, Math.min(2000 * 2 ** (falhas - 1), 20_000));
       throw e;
     }
   }
@@ -316,10 +395,47 @@ export class Gravacoes {
         await this.encerrar(abaId, 'encerrada', texto);
         return { ok: false, final: true, mensagem: texto };
       }
+      if (semRede(e)) {
+        // Sem internet (E8): a captura para, os passos ficam guardados e a conclusão tenta sozinha.
+        const novo = await this.mudar(abaId, (x) => ({ ...x, situacao: 'sem_conexao', aviso: TEXTOS.esperandoConexao(x.passos + x.pendentes.length) }));
+        this.pararRelogio(abaId);
+        if (!this.relogiosConclusao.has(abaId)) this.agendarConclusao(abaId);
+        return { ok: false, semConexao: true, mensagem: novo?.aviso ?? TEXTOS.esperandoConexao(g.passos) };
+      }
       return { ok: false, mensagem: mensagem(e, TEXTOS.semConexao(g.api)) };
     }
+    this.tentativasConclusao.delete(abaId);
     await this.encerrar(abaId, 'concluida', TEXTOS.concluida);
     return { ok: true };
+  }
+
+  /** "Tentar agora" (sem conexão): tenta concluir já, sem esperar o relógio. */
+  async tentarAgora(abaId: number): Promise<Resultado> {
+    const g = await this.ler(abaId);
+    if (!g) return { ok: false, final: true, mensagem: TEXTOS.encerrada };
+    this.pararConclusao(abaId);
+    return this.concluir(abaId);
+  }
+
+  private agendarConclusao(abaId: number): void {
+    this.pararConclusao(abaId, false);
+    const n = (this.tentativasConclusao.get(abaId) ?? 0) + 1;
+    this.tentativasConclusao.set(abaId, n);
+    const espera = Math.min(this.esperaConexaoMs * 2 ** (n - 1), 30_000);
+    this.relogiosConclusao.set(
+      abaId,
+      setTimeout(() => {
+        this.relogiosConclusao.delete(abaId);
+        void this.concluir(abaId);
+      }, espera),
+    );
+  }
+
+  private pararConclusao(abaId: number, esquecer = true): void {
+    const r = this.relogiosConclusao.get(abaId);
+    if (r) clearTimeout(r);
+    this.relogiosConclusao.delete(abaId);
+    if (esquecer) this.tentativasConclusao.delete(abaId);
   }
 
   async cancelar(abaId: number): Promise<Resultado> {
@@ -338,6 +454,9 @@ export class Gravacoes {
 
   /** Aba fechada: manda o que faltava (o fluxo continua em gravação no console) e esquece a aba. */
   async abaFechada(abaId: number): Promise<void> {
+    const g = await this.ler(abaId);
+    // Fechou a aba esperando a conexão para concluir: a conclusão continua, a aba não importa mais.
+    if (g?.situacao === 'sem_conexao') return;
     await this.descarregar(abaId).catch(() => {});
     this.pararRelogio(abaId);
     await this.naFila(abaId, () => this.gravar(abaId, null));
@@ -358,7 +477,11 @@ export class Gravacoes {
 
   /** O service worker acordou: retoma os envios que ficaram pela metade. */
   async retomar(): Promise<void> {
-    for (const abaId of await this.abas()) this.descarregar(abaId).catch(() => {});
+    for (const abaId of await this.abas()) {
+      const g = await this.ler(abaId);
+      if (g?.situacao === 'sem_conexao') this.agendarConclusao(abaId);
+      else this.descarregar(abaId).catch(() => {});
+    }
   }
 
   private async abrirPermissao(abaId: number): Promise<{ ok: true }> {
@@ -382,12 +505,39 @@ export class Gravacoes {
     }
   }
 
-  /** "Gravar esta aba": abre o Aprender fluxo do console com o endereço desta aba preenchido. */
+  /**
+   * "Gravar esta aba": abre o Aprender fluxo do console com o endereço desta aba preenchido, na
+   * empresa da conta da extensão (o console troca de empresa se estiver em outra).
+   */
   async gravarAba(url: string): Promise<Resultado> {
     if (!paginaGravavel(url)) return { ok: false, mensagem: 'Abra uma página do sistema (http ou https) para gravar.' };
-    const s = await this.saude();
-    if (!s.ok) return { ok: false, mensagem: s.mensagem, semPermissao: s.semPermissao };
-    await chrome.tabs.create({ url: `${s.urlConsole}/aprender?gravar=${encodeURIComponent(semParametros(url))}` });
+    const conta = await this.conta.guardada();
+    let busca = `gravar=${encodeURIComponent(semParametros(url))}`;
+    let urlConsole: string;
+    if (conta) {
+      if (!conta.sessao.podeGravar) return { ok: false, mensagem: `Seu perfil na ${conta.sessao.empresa.nome} não permite gravar fluxos.` };
+      urlConsole = conta.sessao.urlConsole;
+      busca += `&empresa=${encodeURIComponent(conta.sessao.empresa.id)}`;
+    } else {
+      const s = await this.saude();
+      if (!s.ok) return { ok: false, mensagem: s.mensagem, semPermissao: s.semPermissao };
+      urlConsole = s.urlConsole;
+    }
+    await chrome.tabs.create({ url: `${urlConsole.replace(/\/+$/, '')}/aprender?${busca}` });
+    return { ok: true };
+  }
+
+  /** "Abrir no console": o fluxo recém-enviado (ou o Aprender fluxo). */
+  async abrirConsole(fluxoId: string | null, api: string | null): Promise<Resultado> {
+    const conta = await this.conta.guardada();
+    let urlConsole = conta && (!api || origemDe(api) === conta.servidor) ? conta.sessao.urlConsole : null;
+    if (!urlConsole) {
+      const s = await this.saude(api ?? undefined);
+      if (!s.ok) return { ok: false, mensagem: s.mensagem, semPermissao: s.semPermissao };
+      urlConsole = s.urlConsole;
+    }
+    const caminho = fluxoId ? `/aprender/${encodeURIComponent(fluxoId)}` : '/aprender';
+    await chrome.tabs.create({ url: `${urlConsole.replace(/\/+$/, '')}${caminho}` });
     return { ok: true };
   }
 }

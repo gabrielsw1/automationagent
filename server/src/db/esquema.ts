@@ -337,4 +337,10 @@ export const MIGRACOES: string[] = [
   `
   ALTER TABLE fluxos ADD COLUMN resultado TEXT;
   `,
+  // 7: extensão do navegador. E-mail de quem gravou (as "Gravações recentes" do popup são da pessoa)
+  // e os passos em outro site que a pessoa removeu na revisão (a lista "Antes de publicar" mostra).
+  `
+  ALTER TABLE fluxos ADD COLUMN gravado_por_email TEXT;
+  ALTER TABLE fluxos ADD COLUMN outros_sites_removidos TEXT NOT NULL DEFAULT '[]';
+  `,
 ];

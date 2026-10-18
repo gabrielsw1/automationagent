@@ -192,6 +192,14 @@ export interface PassoFluxo {
   printId?: string;
   /** Pendências mostradas no console. Ex.: "falta mapear". */
   pendencia?: string;
+  /**
+   * Passo gravado em outro site, fora do sistema da empresa (ex.: "www.consultacnpj.com.br"). O
+   * copiloto só repete passos no sistema: na revisão, a pessoa remove o passo ou o mantém como
+   * instrução. Enquanto não decide, o fluxo não pode ser testado nem publicado.
+   */
+  outroSite?: string;
+  /** Mantido como instrução: não é executado; o copiloto e a ficha da tarefa mostram o texto. */
+  instrucao?: boolean;
 }
 
 export type EtapaFluxo = 'gravar' | 'revisar' | 'mapear' | 'testar' | 'publicar';
@@ -257,6 +265,23 @@ export interface Fluxo {
     registro?: RegistroLido | null;
   } | null;
   salvoEm: string;
+  /** Passos em outro site que a pessoa removeu na revisão (para a lista "Antes de publicar"). */
+  outrosSitesRemovidos?: { titulo: string; site: string }[];
+}
+
+/** Passo em outro site que ainda espera "Remover" ou "Manter como instrução". */
+export function passoOutroSitePendente(p: PassoFluxo): boolean {
+  return !!p.outroSite && !p.instrucao;
+}
+
+/** Passo que o robô executa (instruções ficam de fora). */
+export function passoExecutavel(p: PassoFluxo): boolean {
+  return !p.instrucao && !p.outroSite;
+}
+
+/** Texto de um passo mantido como instrução: "Consultar o CNPJ (em www.consultacnpj.com.br)". */
+export function textoInstrucao(p: Pick<PassoFluxo, 'titulo' | 'outroSite'>): string {
+  return p.outroSite && !p.titulo.includes(p.outroSite) ? `${p.titulo} (em ${p.outroSite})` : p.titulo;
 }
 
 /** Resposta de "Publicar" no Aprender fluxo (F3). */

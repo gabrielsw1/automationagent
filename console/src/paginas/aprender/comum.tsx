@@ -1,5 +1,5 @@
 // Tipos das respostas do servidor e peças pequenas usadas nas etapas do Aprender fluxo (C4).
-import type { Campo, EtapaFluxo, Fluxo, PassoFluxo, RegistroLido, TipoPasso } from '@copiloto/shared';
+import { passoExecutavel, type Campo, type EtapaFluxo, type Fluxo, type PassoFluxo, type RegistroLido, type TipoPasso } from '@copiloto/shared';
 
 /** POST /fluxos, GET /fluxos/:id/gravacao e POST /fluxos/:id/gravar. */
 export interface RespostaGravacao {
@@ -86,9 +86,14 @@ export function indiceEtapa(e: EtapaFluxo): number {
   return ETAPAS.findIndex((x) => x.id === e);
 }
 
-/** Passos que recebem um valor (preencher, selecionar). */
+/** Passos que recebem um valor (preencher, selecionar). Passo em outro site não recebe: o copiloto não o faz. */
 export function usaValor(p: PassoFluxo): boolean {
-  return p.tipo === 'preencher' || p.tipo === 'selecionar';
+  return (p.tipo === 'preencher' || p.tipo === 'selecionar') && passoExecutavel(p);
+}
+
+/** Passos feitos em outro site que ainda esperam a escolha: remover ou manter como instrução. */
+export function outrosSitesPendentes(f: Pick<Fluxo, 'passos'>): PassoFluxo[] {
+  return f.passos.filter((p) => !!p.outroSite && !p.instrucao);
 }
 
 /** O seletor escolhido do passo (ou null quando o passo não usa seletor). */
@@ -104,7 +109,8 @@ export function ehFragil(p: PassoFluxo): boolean {
 export function resumoDoPasso(p: PassoFluxo, campos: Campo[]): string {
   const partes = [`Passo ${p.n}`, ROTULO_TIPO[p.tipo]];
   const v = p.valor;
-  if (p.pendencia) partes.push('falta resolver');
+  if (p.outroSite) partes.push(p.instrucao ? 'instrução' : 'outro site, falta escolher');
+  else if (p.pendencia) partes.push('falta resolver');
   else if (v?.origem === 'campo') {
     const c = campos.find((x) => x.chave === v.campo);
     partes.push(`usa “${c?.rotulo ?? v.campo}”`);

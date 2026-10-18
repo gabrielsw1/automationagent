@@ -1,9 +1,10 @@
 // Content scripts: marca no <html>, token tirado da URL, barra "Gravando" no Shadow DOM (a do widget),
 // captura no mundo da página (a Captura do widget) e a ponte entre os dois mundos.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { MARCA_EXTENSAO, type EventoGravado } from '@copiloto/shared';
+import { FONTE_CONSOLE, FONTE_EXTENSAO, MARCA_EXTENSAO, type EventoGravado } from '@copiloto/shared';
 import type { EstadoAba, Pedido } from '../src/comum/mensagens.ts';
-import { GravacaoNaPagina, iniciarConteudo, marcarPagina, pegarParametros } from '../src/conteudo/gravacao.ts';
+import { GravacaoNaPagina, iniciarConteudo, ligarPonteDoConsole, marcarPagina, pegarParametros } from '../src/conteudo/gravacao.ts';
+import { textoDoBalao } from '../src/conteudo/painel.ts';
 import { EVENTO_CAPTURA, EVENTO_COMANDO, ehDoCopiloto, lerEvento } from '../src/conteudo/ponte.ts';
 import { instalarChrome } from './chrome-falso.ts';
 
@@ -42,7 +43,7 @@ beforeEach(() => {
 afterEach(() => {
   document.removeEventListener(EVENTO_COMANDO, guardarComando);
   document.documentElement.removeAttribute(MARCA_EXTENSAO);
-  document.querySelectorAll('copiloto-gravador, link[data-copiloto-fontes]').forEach((e) => e.remove());
+  document.querySelectorAll('copiloto-gravador, link[data-copiloto-fontes], style[data-copiloto]').forEach((e) => e.remove());
   document.body.replaceChildren();
   vi.unstubAllGlobals();
 });
@@ -147,6 +148,87 @@ describe('content script · gravando', () => {
     expect(g.estaCapturando).toBe(true);
   });
 
+  it('Concluir sem internet: a captura para e a barra espera a conexão, com "Tentar agora"', async () => {
+    const respostas: Record<string, unknown> = {
+      concluir: { ok: false, semConexao: true, mensagem: 'Sem conexão agora. Os 2 passos estão guardados e serão enviados quando a internet voltar.' },
+      tentarAgora: { ok: true },
+    };
+    ch.aoMensagem((p) => {
+      pedidos.push(p as Pedido);
+      return respostas[(p as Pedido).tipo];
+    });
+    const g = comecar(gravando({ passos: 2 }));
+    barra().botao('Concluir')!.click();
+    await vi.waitFor(() => expect(barra().texto()).toContain('Os 2 passos estão guardados'));
+    expect(g.estaCapturando).toBe(false);
+    expect(barra().botao('Concluir')).toBeUndefined();
+    // O aviso do fundo (situação sem_conexao) mantém a espera, sem religar a captura.
+    g.atualizar(gravando({ situacao: 'sem_conexao', passos: 2, aviso: 'Sem conexão agora.' }));
+    expect(g.estaCapturando).toBe(false);
+    barra().botao('Tentar agora')!.click();
+    await vi.waitFor(() => expect(barra().texto()).toContain('Gravação enviada. Volte ao console para revisar.'));
+    expect(pedidos.map((p) => p.tipo)).toEqual(['concluir', 'tentarAgora']);
+  });
+
+  it('painel "Passos gravados": os passos chegam ao vivo e o widget sai de cena', () => {
+    const g = comecar(gravando({ itens: [], pendentes: 0 }));
+    const painel = () => barra().raiz!.querySelector('.cpx-painel')!;
+    expect(painel().getAttribute('aria-label')).toBe('Passos gravados');
+    expect(painel().textContent).toContain('Os passos aparecem aqui assim que você clica ou preenche algo na página.');
+    expect(painel().textContent).toContain('O assistente do copiloto fica escondido enquanto você grava.');
+    expect(document.querySelector('style[data-copiloto]')?.textContent).toBe('copiloto-widget{display:none!important}');
+    g.atualizar(gravando({ passos: 3, itens: ['Abrir a página Chamados', 'Clicar em Novo chamado'], pendentes: 1 }));
+    expect([...painel().querySelectorAll('li')].map((li) => li.textContent)).toEqual(['1Abrir a página Chamados', '2Clicar em Novo chamado']);
+    expect(painel().textContent).toContain('Guardando 1 ação…');
+    // Recolher e mostrar de novo.
+    painel().querySelector<HTMLButtonElement>('[aria-label="Recolher os passos gravados"]')!.click();
+    expect(painel().querySelector('li')).toBeNull();
+    painel().querySelector<HTMLButtonElement>('[aria-label="Mostrar os passos gravados"]')!.click();
+    expect(painel().querySelectorAll('li')).toHaveLength(2);
+    // No fim, o painel sai e o widget volta.
+    g.atualizar({ ...gravando(), situacao: 'concluida', aviso: null });
+    expect(barra().raiz!.querySelector('.cpx-painel')).toBeNull();
+    expect(document.querySelector('style[data-copiloto]')).toBeNull();
+  });
+
+  it('balão no campo: mostra só o formato, nunca o valor; em senha, nem o formato', () => {
+    document.body.innerHTML = `
+      <input id="cnpj" type="text" value="12.345.678/0001-90">
+      <textarea id="obs">Cliente VIP</textarea>
+      <input id="senha" type="password" value="segredo123">
+      <input id="cartao" type="text" autocomplete="cc-number" value="4111 1111 1111 1111">
+      <input id="oculto" type="hidden" value="x">
+      <input id="vazio" type="email">
+      <select id="lista"><option>A</option></select>`;
+    comecar();
+    const balao = () => barra().raiz!.querySelector<HTMLElement>('.cpx-balao')!;
+    const focar = (id: string) => document.getElementById(id)!.dispatchEvent(new FocusEvent('focusin', { bubbles: true }));
+
+    focar('cnpj');
+    expect(balao().hidden).toBe(false);
+    expect(balao().textContent).toBe('Gravado só o formato:99.999.999/9999-99');
+    expect(balao().textContent).not.toContain('12.345');
+    const cnpj = document.getElementById('cnpj') as HTMLInputElement;
+    cnpj.value = '98.7';
+    cnpj.dispatchEvent(new Event('input', { bubbles: true }));
+    expect(balao().textContent).toBe('Gravado só o formato:99.9');
+
+    focar('obs');
+    expect(balao().textContent).toBe('Gravado só o formato:aaaaaaa aaa');
+
+    focar('senha');
+    expect(balao().textContent).toBe('Senha: nada é gravado, nem o formato');
+    focar('cartao');
+    expect(balao().textContent).toBe('Senha: nada é gravado, nem o formato');
+    expect(balao().textContent).not.toMatch(/9{4}/);
+
+    focar('vazio');
+    expect(balao().textContent).toBe('Gravado só o formato do que você digitar');
+    focar('lista');
+    expect(balao().hidden).toBe(true);
+    expect(textoDoBalao(document.getElementById('oculto')!)).toBeNull();
+  });
+
   it('Cancelar pede confirmação e descarta', async () => {
     ch.aoMensagem((p) => {
       pedidos.push(p as Pedido);
@@ -178,6 +260,61 @@ describe('content script · gravando', () => {
     g.atualizar({ ...gravando(), situacao: 'concluida', aviso: 'Gravação enviada. Volte ao console para revisar.' });
     expect(barra().texto()).toContain('Gravação enviada');
     expect(comandos).toEqual(['comecar', 'parar']);
+  });
+});
+
+describe('content script · ponte com o console', () => {
+  /** Mensagem como a página do console manda (window.postMessage na própria janela). */
+  const doConsole = (data: unknown, origem = location.origin, fonte: Window | null = window) =>
+    window.dispatchEvent(new MessageEvent('message', { data, origin: origem, source: fonte }));
+
+  it('repassa ao fundo e devolve a resposta à página, só para a mesma origem', async () => {
+    const respostas: MessageEvent[] = [];
+    const ouvir = (e: MessageEvent) => {
+      if (e.data?.fonte === FONTE_EXTENSAO) respostas.push(e);
+    };
+    window.addEventListener('message', ouvir);
+    const postar = vi.spyOn(window, 'postMessage');
+    ch.aoMensagem((p) => {
+      pedidos.push(p as Pedido);
+      return { fonte: FONTE_EXTENSAO, tipo: 'extensao:estado', id: 'e1', versao: '0.1.0', conexao: null, consoleConfigurado: false };
+    });
+    const desligar = ligarPonteDoConsole();
+    const pergunta = { fonte: FONTE_CONSOLE, tipo: 'extensao:estado', id: 'e1' };
+    doConsole(pergunta);
+    await vi.waitFor(() => expect(postar).toHaveBeenCalledTimes(1));
+    expect(pedidos).toEqual([{ tipo: 'console', mensagem: pergunta }]);
+    expect(postar).toHaveBeenCalledWith(expect.objectContaining({ fonte: FONTE_EXTENSAO, id: 'e1', versao: '0.1.0' }), location.origin);
+
+    // De outra origem, de outro quadro, ou fora do formato: nada vai ao fundo.
+    doConsole(pergunta, 'https://outro.site.com');
+    doConsole(pergunta, location.origin, null);
+    doConsole({ fonte: 'qualquer', tipo: 'extensao:estado', id: 'e2' });
+    doConsole({ fonte: FONTE_CONSOLE, tipo: 'extensao:conectar', id: 'e3', estado: 1 });
+    await new Promise((r) => setTimeout(r, 10));
+    expect(pedidos).toHaveLength(1);
+
+    // Resposta fora do formato não volta para a página.
+    ch.aoMensagem(() => ({ token: 'cpx_segredo' }));
+    doConsole(pergunta);
+    await new Promise((r) => setTimeout(r, 10));
+    expect(postar).toHaveBeenCalledTimes(1);
+    desligar();
+    window.removeEventListener('message', ouvir);
+    postar.mockRestore();
+  });
+
+  it('extensão atualizada com a aba aberta: a cópia antiga sai de cena', async () => {
+    ch.aoMensagem(() => gravando({ passos: 1 }));
+    history.replaceState(null, '', '/chamados?copiloto_gravacao=grv_1');
+    const antiga = await iniciarConteudo('0.1.0');
+    expect(antiga?.estaCapturando).toBe(true);
+    const nova = await iniciarConteudo('0.2.0');
+    expect(antiga?.estaCapturando).toBe(false);
+    expect(nova?.estaCapturando).toBe(true);
+    expect(document.querySelectorAll('copiloto-gravador')).toHaveLength(1);
+    expect(document.documentElement.getAttribute(MARCA_EXTENSAO)).toBe('0.2.0');
+    nova?.desligar();
   });
 });
 

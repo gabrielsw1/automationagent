@@ -22,6 +22,8 @@ const Painel = lazy(() => import('./paginas/painel/Painel.tsx'));
 const ListaTarefas = lazy(() => import('./paginas/tarefas/ListaTarefas.tsx'));
 const FichaTarefa = lazy(() => import('./paginas/tarefas/FichaTarefa.tsx'));
 const Aprender = lazy(() => import('./paginas/aprender/Aprender.tsx'));
+const InstalarGravador = lazy(() => import('./paginas/extensao/Instalar.tsx'));
+const ConectarExtensao = lazy(() => import('./paginas/extensao/Conectar.tsx'));
 const ListaExecucoes = lazy(() => import('./paginas/execucoes/ListaExecucoes.tsx'));
 const DetalheExecucao = lazy(() => import('./paginas/execucoes/DetalheExecucao.tsx'));
 const Conhecimento = lazy(() => import('./paginas/conhecimento/Conhecimento.tsx'));
@@ -100,6 +102,7 @@ function AreaLogada() {
             <Route path="/tarefas" element={<ListaTarefas />} />
             <Route path="/tarefas/:id" element={<FichaTarefa />} />
             <Route path="/aprender" element={<Aprender />} />
+            <Route path="/aprender/instalar" element={<InstalarGravador />} />
             <Route path="/aprender/:fluxoId" element={<Aprender />} />
             <Route path="/execucoes" element={<ListaExecucoes />} />
             <Route path="/execucoes/:id" element={<DetalheExecucao />} />
@@ -130,6 +133,8 @@ export default function App() {
             <Route path="/senha" element={<EsqueciSenha />} />
             <Route path="/senha-nova/:token" element={<SenhaNova />} />
             <Route path="/convite/:token" element={<Convite />} />
+            {/* Entrada da extensão do navegador: a sessão do console entrega um código de uso único a ela. */}
+            <Route path="/extensao/conectar" element={<ConectarExtensao />} />
             <Route path="/criar-conta/:etapa?" element={<Cadastro />} />
             <Route path="/site" element={<Site />} />
             <Route path="/termos" element={<PaginaLegal documento="termos" />} />

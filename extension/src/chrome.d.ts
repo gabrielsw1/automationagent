@@ -7,7 +7,15 @@ declare namespace chrome {
       tab?: tabs.Tab;
       id?: string;
       url?: string;
+      /** Origem da página ou do quadro que mandou (content scripts). */
+      origin?: string;
+      /** 0 no quadro principal da aba. */
+      frameId?: number;
     }
+    interface InstalledDetails {
+      reason: 'install' | 'update' | 'chrome_update' | 'shared_module_update';
+    }
+    const onInstalled: { addListener(fn: (detalhes: InstalledDetails) => void): void };
     interface Manifest {
       version: string;
       [chave: string]: unknown;
@@ -46,11 +54,21 @@ declare namespace chrome {
       active?: boolean;
       windowId?: number;
     }
-    function query(filtro: { active?: boolean; currentWindow?: boolean }): Promise<Tab[]>;
+    function query(filtro: { active?: boolean; currentWindow?: boolean; url?: string | string[] }): Promise<Tab[]>;
     function get(id: number): Promise<Tab>;
     function create(propriedades: { url: string; active?: boolean; openerTabId?: number }): Promise<Tab>;
     function sendMessage<R = unknown>(abaId: number, mensagem: unknown): Promise<R>;
     const onRemoved: { addListener(fn: (abaId: number) => void): void };
+  }
+
+  namespace scripting {
+    interface Injecao {
+      target: { tabId: number; allFrames?: boolean };
+      files: string[];
+      world?: 'ISOLATED' | 'MAIN';
+      injectImmediately?: boolean;
+    }
+    function executeScript(injecao: Injecao): Promise<unknown[]>;
   }
 
   namespace permissions {

@@ -35,24 +35,27 @@ function descricaoCampo(c: Campo): string {
   return partes.join(' ');
 }
 
-function descricaoTarefa(def: TarefaDefinicao): string {
+function descricaoTarefa(def: TarefaDefinicao, instrucoes: string[] = []): string {
   const linhas = [
     `${def.nome}: ${def.descricao}`,
     `Quando usar: ${def.quandoUsar}`,
     def.exemplos.length ? `Exemplos de pedidos: ${def.exemplos.map((e) => `"${e}"`).join('; ')}` : '',
+    instrucoes.length
+      ? `Instruções (passos feitos fora do sistema, que o copiloto não faz; se ajudar, diga à pessoa): ${instrucoes.join('; ')}.`
+      : '',
     'Chame com todos os dados que a pessoa já deu, mesmo que falte algum; o copiloto valida, pergunta o que falta e mostra o cartão de confirmação. Nada é gravado sem a confirmação dela.',
   ];
   return linhas.filter(Boolean).join('\n');
 }
 
-export function ferramentaDaTarefa(t: Pick<TarefaEmUso, 'slug' | 'definicao'>): FerramentaLlm {
+export function ferramentaDaTarefa(t: Pick<TarefaEmUso, 'slug' | 'definicao' | 'instrucoes'>): FerramentaLlm {
   const props: Record<string, { type: 'string'; description: string; enum?: string[] }> = {};
   for (const c of t.definicao.campos) {
     props[c.chave] = { type: 'string', description: descricaoCampo(c) };
   }
   return {
     name: nomeFerramenta(t.slug),
-    description: descricaoTarefa(t.definicao),
+    description: descricaoTarefa(t.definicao, t.instrucoes),
     input_schema: { type: 'object', properties: props, additionalProperties: false },
   };
 }
@@ -84,7 +87,7 @@ export const FERRAMENTAS_FIXAS: FerramentaLlm[] = [
   },
 ];
 
-export function ferramentasDe(tarefas: Pick<TarefaEmUso, 'slug' | 'definicao'>[]): FerramentaLlm[] {
+export function ferramentasDe(tarefas: Pick<TarefaEmUso, 'slug' | 'definicao' | 'instrucoes'>[]): FerramentaLlm[] {
   return [...tarefas.map(ferramentaDaTarefa), ...FERRAMENTAS_FIXAS];
 }
 

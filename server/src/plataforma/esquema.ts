@@ -311,4 +311,31 @@ export const MIGRACOES_PLATAFORMA: string[] = [
   CREATE INDEX contatos_criado ON contatos(criado_em);
   CREATE INDEX contatos_empresa ON contatos(empresa_id, criado_em);
   `,
+  // 6: extensão do navegador (gravador de fluxos). A extensão entra com a conta do console: o console
+  // entrega um código de uso único (2 minutos, preso à conta, à empresa e ao desafio da extensão) e
+  // a extensão troca código + verificador por um token próprio. Só os hashes ficam aqui. O token vale
+  // para uma conta numa empresa, só nas rotas da extensão, até "Sair" (ou a pessoa sair da equipe).
+  `
+  CREATE TABLE codigos_extensao (
+    codigo_hash TEXT PRIMARY KEY,
+    conta_id TEXT NOT NULL REFERENCES contas(id) ON DELETE CASCADE,
+    empresa_id TEXT NOT NULL REFERENCES empresas(id) ON DELETE CASCADE,
+    -- SHA-256 do verificador da extensão, em base64url.
+    desafio TEXT NOT NULL,
+    expira_em TEXT NOT NULL,
+    usado_em TEXT,
+    criado_em TEXT NOT NULL
+  );
+  CREATE TABLE tokens_extensao (
+    id TEXT PRIMARY KEY,
+    token_hash TEXT NOT NULL UNIQUE,
+    conta_id TEXT NOT NULL REFERENCES contas(id) ON DELETE CASCADE,
+    empresa_id TEXT NOT NULL REFERENCES empresas(id) ON DELETE CASCADE,
+    navegador TEXT,
+    criado_em TEXT NOT NULL,
+    usado_em TEXT,
+    revogado_em TEXT
+  );
+  CREATE INDEX tokens_extensao_conta ON tokens_extensao(conta_id, empresa_id);
+  `,
 ];

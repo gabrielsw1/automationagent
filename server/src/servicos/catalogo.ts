@@ -1,6 +1,6 @@
 // Catálogo de tarefas com versões. Cada publicação congela uma versão; o rascunho é editável.
 // O agente usa sempre a versão publicada (ou o rascunho, no modo de teste do console).
-import type { CasoDeTeste, StatusTarefa, TarefaDefinicao, UsuarioSistema } from '@copiloto/shared';
+import { textoInstrucao, type CasoDeTeste, type StatusTarefa, type TarefaDefinicao, type UsuarioSistema } from '@copiloto/shared';
 import { agoraIso, json, type Banco } from '../db/banco.ts';
 import { novoId } from '../util/ids.ts';
 
@@ -32,6 +32,8 @@ export interface TarefaEmUso {
   versao: number;
   status: StatusTarefa;
   definicao: TarefaDefinicao;
+  /** Passos do fluxo mantidos como instrução (feitos em outro site): o copiloto não faz, só avisa. */
+  instrucoes?: string[];
 }
 
 export function slugDe(nome: string): string {
@@ -208,9 +210,18 @@ export class Catalogo {
           if (liberados.length > 0 && !liberados.includes(usuario.id)) continue;
         }
       }
-      lista.push({ id: t.id, slug: t.slug, versao: v.versao, status: t.status, definicao: v.definicao });
+      const instrucoes = this.instrucoesDoFluxo(v.definicao.fluxoId);
+      lista.push({ id: t.id, slug: t.slug, versao: v.versao, status: t.status, definicao: v.definicao, ...(instrucoes.length ? { instrucoes } : {}) });
     }
     return lista;
+  }
+
+  /** Títulos dos passos mantidos como instrução no fluxo da tarefa (ex.: "Consultar o CNPJ em outro site"). */
+  instrucoesDoFluxo(fluxoId: string | null | undefined): string[] {
+    if (!fluxoId) return [];
+    const l = this.banco.um<{ passos: string }>('SELECT passos FROM fluxos WHERE id = ?', fluxoId);
+    const passos = json<{ titulo: string; instrucao?: boolean; outroSite?: string }[]>(l?.passos, []);
+    return passos.filter((p) => p.instrucao).map(textoInstrucao);
   }
 
   testes(tarefaId: string): CasoDeTeste[] {

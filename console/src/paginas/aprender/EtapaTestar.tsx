@@ -1,7 +1,7 @@
 // Etapa 4 · Testar: roda o fluxo de verdade no sistema, como uma pessoa escolhida, com valores de
 // teste, e mostra o que aconteceu em cada passo, com o print.
 import { useEffect, useMemo, useState } from 'react';
-import { fmt, type Campo as CampoTarefa, type Fluxo, type UsuarioSistema } from '@copiloto/shared';
+import { fmt, passoExecutavel, type Campo as CampoTarefa, type Fluxo, type UsuarioSistema } from '@copiloto/shared';
 import { api, type ErroApiCliente } from '../../api/cliente.ts';
 import { useApi } from '../../api/hooks.ts';
 import { Botao } from '../../componentes/Botao.tsx';
@@ -10,7 +10,7 @@ import { Icone } from '../../componentes/icones.tsx';
 import { Modal } from '../../componentes/Modal.tsx';
 import { useSessao } from '../../componentes/sessao.tsx';
 import { PrintPasso } from './PrintPasso.tsx';
-import { registroPorExtenso, type Destaque, type EventoTeste, type RespostaTeste } from './comum.tsx';
+import { outrosSitesPendentes, registroPorExtenso, type Destaque, type EventoTeste, type RespostaTeste } from './comum.tsx';
 
 function pct(n: number) {
   return `${Math.round(n * 100)}%`;
@@ -101,6 +101,19 @@ function ResultadoPassos({ fluxo, eventos, falhou }: { fluxo: Fluxo; eventos: Ev
         const ok = doPasso.find((e) => e.tipo === 'passo_ok');
         const falha = doPasso.find((e) => e.tipo === 'passo_falhou') ?? (falhou === p.n ? doPasso.at(-1) : undefined);
         const notas = doPasso.filter((e) => e.tipo === 'recuperacao' || e.tipo === 'aviso');
+        if (p.instrucao) {
+          return (
+            <li key={p.n} className="step">
+              <span className="step-dot" aria-hidden="true">
+                <Icone nome="info" tamanho="sm" />
+              </span>
+              <div className="stack-sm grow" style={{ gap: 2, minWidth: 0 }}>
+                <span className="small strong">{p.titulo}</span>
+                <span className="tiny muted">Instrução em {p.outroSite}: o copiloto não faz este passo, só mostra para a pessoa.</span>
+              </div>
+            </li>
+          );
+        }
         const estado = ok ? 'done' : falhou === p.n ? 'fail' : eventos === null && p.printId ? 'done' : '';
         const titulo = ok?.titulo ?? (falhou === p.n ? (falha?.titulo ?? p.titulo) : p.titulo);
         const printId = ok?.printId ?? falha?.printId ?? (eventos === null ? p.printId : undefined);
@@ -196,6 +209,7 @@ export function EtapaTestar({
   }, [usuarios.dados, resumo.eu.email, usuarioId]);
 
   const pendencias = fluxo.passos.filter((p) => p.pendencia);
+  const outroSite = outrosSitesPendentes(fluxo);
   const faltando = usados.filter((c) => c.obrigatorio && c.tipo !== 'pessoa' && !(valores[c.chave] ?? '').trim());
 
   const testar = async () => {
@@ -220,6 +234,20 @@ export function EtapaTestar({
       <Aviso tipo="aviso" titulo={`O teste roda de verdade no ${nomeSistema}`}>
         O navegador entra como a pessoa escolhida, com as permissões dela, e faz cada passo, inclusive salvar. Use um cliente ou dados de teste.
       </Aviso>
+
+      {outroSite.length ? (
+        <Aviso
+          tipo="erro"
+          titulo={outroSite.length === 1 ? 'Resolva o passo feito em outro site antes de testar' : 'Resolva os passos feitos em outro site antes de testar'}
+          acoes={
+            <Botao tamanho="sm" onClick={() => aoRevisarPasso(outroSite[0].n)}>
+              Resolver na revisão
+            </Botao>
+          }
+        >
+          {outroSite.map((p) => `Passo ${p.n} (${p.outroSite})`).join(' · ')}: escolha remover ou manter como instrução.
+        </Aviso>
+      ) : null}
 
       {pendencias.length ? (
         <Aviso tipo="erro" titulo="Resolva as pendências antes de testar" acoes={<Botao tamanho="sm" onClick={aoVoltar}>Voltar para mapear</Botao>}>
@@ -281,7 +309,7 @@ export function EtapaTestar({
                 icone="play"
                 bloco
                 carregando={rodando !== null}
-                disabled={!online || !usuarioId || faltando.length > 0 || pendencias.length > 0}
+                disabled={!online || !usuarioId || faltando.length > 0 || pendencias.length > 0 || outroSite.length > 0}
               >
                 {res ? 'Testar de novo' : 'Rodar teste'}
               </Botao>
@@ -304,7 +332,7 @@ export function EtapaTestar({
             <div className="row" role="status" aria-live="polite">
               <span className="spinner" aria-hidden="true" />
               <span className="small">
-                O navegador está fazendo os {fluxo.passos.length} passos no {nomeSistema}
+                O navegador está fazendo os {fluxo.passos.filter(passoExecutavel).length} passos no {nomeSistema}
                 {usuarioNome ? ` como ${usuarioNome}` : ''}… <Cronometro desde={rodando} />. Costuma levar menos de um minuto.
               </span>
             </div>

@@ -6,6 +6,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import {
   custoPrevisto,
   fmt,
+  passoExecutavel,
   type Campo,
   type Canais,
   type Fluxo,
@@ -21,7 +22,28 @@ import { Aviso } from '../../componentes/formulario.tsx';
 import { Icone } from '../../componentes/icones.tsx';
 import { SeloCaminho, SeloStatusTarefa } from '../../componentes/Selos.tsx';
 import { useToast } from '../../componentes/Toast.tsx';
-import { registroPorExtenso } from './comum.tsx';
+import { outrosSitesPendentes, registroPorExtenso } from './comum.tsx';
+
+/** Item "Passo em outro site resolvido" do Antes de publicar: null quando a gravação não saiu do sistema. */
+export function resumoOutrosSites(fluxo: Fluxo): { ok: boolean; titulo: string; texto: string } | null {
+  const pendentes = outrosSitesPendentes(fluxo);
+  const instrucoes = fluxo.passos.filter((p) => p.outroSite && p.instrucao);
+  const removidos = fluxo.outrosSitesRemovidos ?? [];
+  const total = pendentes.length + instrucoes.length + removidos.length;
+  if (!total) return null;
+  if (pendentes.length) {
+    return {
+      ok: false,
+      titulo: pendentes.length === 1 ? 'Falta resolver o passo em outro site' : `Falta resolver ${pendentes.length} passos em outro site`,
+      texto: `${pendentes.map((p) => `Passo ${p.n} (${p.outroSite})`).join(' · ')}: escolha remover ou manter como instrução.`,
+    };
+  }
+  const partes: string[] = [];
+  const sitesRemovidos = [...new Set(removidos.map((r) => r.site))];
+  if (sitesRemovidos.length) partes.push(`${removidos.length === 1 ? 'Passo' : 'Passos'} em ${sitesRemovidos.join(', ')} ${removidos.length === 1 ? 'removido' : 'removidos'}`);
+  if (instrucoes.length) partes.push(`${instrucoes.length === 1 ? '1 mantido' : `${instrucoes.length} mantidos`} como instrução`);
+  return { ok: true, titulo: total === 1 ? 'Passo em outro site resolvido' : 'Passos em outro site resolvidos', texto: partes.join(' · ') };
+}
 
 /** Um item de "Antes de publicar". */
 export interface ItemPronto {
@@ -100,7 +122,7 @@ export function EtapaPublicar({
   aoPublicado: (f: Fluxo) => void;
   /** A tarefa mudou no servidor (publicada, perfis): recarregar. */
   aoTarefaMudou: () => void;
-  aoIrPara: (etapa: 'mapear' | 'testar') => void;
+  aoIrPara: (etapa: 'revisar' | 'mapear' | 'testar') => void;
 }) {
   const toast = useToast();
   const navegar = useNavigate();
@@ -127,7 +149,10 @@ export function EtapaPublicar({
   const teste = fluxo.ultimoTeste;
   const testeOk = Boolean(teste?.ok);
   const semPerfil = Boolean(tarefa) && !todos && perfis.length === 0;
-  const pronto = pendencias.length === 0 && testeOk && fluxo.passos.length > 0 && !semPerfil;
+  // Passos em outro site: cada um removido ou mantido como instrução (o robô só faz os do sistema).
+  const outrosSites = resumoOutrosSites(fluxo);
+  const executaveis = fluxo.passos.filter(passoExecutavel);
+  const pronto = pendencias.length === 0 && testeOk && fluxo.passos.length > 0 && !semPerfil && (!outrosSites || outrosSites.ok);
   const caminho = def?.caminho ?? 'navegador';
   const nome = def?.nome ?? fluxo.nome;
   const versao = tarefa
@@ -135,7 +160,7 @@ export function EtapaPublicar({
       ? tarefa.publicada.versao
       : (tarefa.rascunho?.versao ?? (tarefa.publicada ? tarefa.publicada.versao + 1 : 1))
     : fluxo.versao;
-  const usados = new Set(fluxo.passos.flatMap((p) => (p.valor?.origem === 'campo' ? [p.valor.campo] : [])));
+  const usados = new Set(executaveis.flatMap((p) => (p.valor?.origem === 'campo' ? [p.valor.campo] : [])));
   const dados = campos.filter((c) => usados.has(c.chave));
   const obrigatorios = dados.filter((c) => c.obrigatorio).length;
   const pedidos = campos.filter((c) => c.perguntar !== false);
@@ -319,13 +344,28 @@ export function EtapaPublicar({
       titulo: 'Passos revisados',
       detalhe: pendencias.length
         ? `${pendencias.length} ${pendencias.length === 1 ? 'passo com pendência' : 'passos com pendência'}`
-        : `${fluxo.passos.length} ${fluxo.passos.length === 1 ? 'passo' : 'passos'} no ${nomeSistema}`,
+        : `${executaveis.length} ${executaveis.length === 1 ? 'passo' : 'passos'} no ${nomeSistema}`,
       acao: pendencias.length ? (
         <Botao tamanho="sm" variante="fantasma" onClick={() => aoIrPara('mapear')}>
           Resolver no mapeamento
         </Botao>
       ) : undefined,
     },
+    ...(outrosSites
+      ? [
+          {
+            chave: 'outro-site',
+            ok: outrosSites.ok,
+            titulo: outrosSites.titulo,
+            detalhe: outrosSites.texto,
+            acao: !outrosSites.ok ? (
+              <Botao tamanho="sm" variante="fantasma" onClick={() => aoIrPara('revisar')}>
+                Resolver na revisão
+              </Botao>
+            ) : undefined,
+          },
+        ]
+      : []),
     {
       chave: 'campos',
       ok: !fluxo.passos.some((p) => p.pendencia && p.valor?.origem !== 'fixo'),

@@ -18,6 +18,7 @@ import rotasGravacao from './rotas/gravacao.ts';
 import rotasConsole from './rotas/console/index.ts';
 import rotasPlataforma from './rotas/plataforma/index.ts';
 import rotasPublicas from './rotas/publico.ts';
+import rotasExtensao from './rotas/extensao.ts';
 import rotasPagamentos from './rotas/pagamentos.ts';
 
 declare module 'fastify' {
@@ -29,6 +30,8 @@ declare module 'fastify' {
 
 export interface OpcoesApp {
   logger?: boolean;
+  /** Pasta do console compilado (padrão: console/dist). O teste da extensão compila numa pasta temporária. */
+  distConsole?: string;
 }
 
 export async function criarApp(plataforma: Plataforma, opcoes: OpcoesApp = {}): Promise<FastifyInstance> {
@@ -100,6 +103,8 @@ export async function criarApp(plataforma: Plataforma, opcoes: OpcoesApp = {}): 
 
   await app.register(rotasWidget, { prefix: '/api/widget' });
   await app.register(rotasGravacao, { prefix: '/api/gravacao' });
+  // Extensão do navegador: entrada com a conta do console e gravações recentes (token próprio).
+  await app.register(rotasExtensao, { prefix: '/api/extensao' });
   await app.register(rotasConsole, { prefix: '/api/console' });
   await app.register(rotasPlataforma, { prefix: '/api/plataforma' });
   // Site do produto (sem sessão): planos, pedidos de contato e textos jurídicos.
@@ -124,7 +129,7 @@ export async function criarApp(plataforma: Plataforma, opcoes: OpcoesApp = {}): 
   });
 
   // Console compilado (produção). Em dev o console roda no Vite (porta 5173) com proxy para cá.
-  const distConsole = path.join(RAIZ_REPO, 'console', 'dist');
+  const distConsole = opcoes.distConsole ?? path.join(RAIZ_REPO, 'console', 'dist');
   if (fs.existsSync(path.join(distConsole, 'index.html'))) {
     await app.register(estatico, { root: distConsole, prefix: '/', wildcard: false });
     app.setNotFoundHandler((request, reply) => {
