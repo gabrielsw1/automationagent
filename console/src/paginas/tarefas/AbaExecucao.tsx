@@ -2,7 +2,7 @@
 // gravado), e o fluxo reserva quando a API falha.
 import { useId, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { fmt, type ExecucaoApi, type Fluxo, type MetodoHttp, type TarefaDefinicao, type Transformacao } from '@copiloto/shared';
+import { fmt, passoExecutavel, textoInstrucao, type ExecucaoApi, type Fluxo, type MetodoHttp, type TarefaDefinicao, type Transformacao } from '@copiloto/shared';
 import { api, type ErroApiCliente } from '../../api/cliente.ts';
 import { useApi } from '../../api/hooks.ts';
 import { Botao } from '../../componentes/Botao.tsx';
@@ -53,8 +53,14 @@ function apiPadrao(def: TarefaDefinicao): ExecucaoApi {
 function descricaoFluxo(f: Fluxo): string {
   const partes = [`Fluxo “${f.nome}”`];
   if (f.gravadoPor && f.gravadoEm) partes.push(`gravado por ${f.gravadoPor} em ${fmt.data(f.gravadoEm)}`);
-  partes.push(`com ${f.passos.length} ${f.passos.length === 1 ? 'passo' : 'passos'}`);
+  const feitos = f.passos.filter(passoExecutavel).length;
+  partes.push(`com ${feitos} ${feitos === 1 ? 'passo' : 'passos'}`);
   return partes.join(', ');
+}
+
+/** Passos mantidos como instrução (feitos em outro site): o copiloto mostra à pessoa no pedido, não faz. */
+function instrucoesDoFluxo(f: Fluxo): string[] {
+  return f.passos.filter((p) => p.instrucao).map(textoInstrucao);
 }
 
 function EscolherFluxo({
@@ -118,6 +124,16 @@ function EscolherFluxo({
             : ' Ainda não testado.'}
           {doFluxo.status !== 'publicado' ? ' Publique o fluxo em Aprender fluxo para o copiloto poder usá-lo.' : ''}
         </p>
+      ) : null}
+      {doFluxo && instrucoesDoFluxo(doFluxo).length ? (
+        <div className="stack-sm" style={{ gap: 'var(--s-1)' }}>
+          <p className="small strong">O copiloto mostra estas instruções a quem pedir, porque são feitas em outro site:</p>
+          <ul className="small" style={{ margin: 0, paddingLeft: 'var(--s-5)' }}>
+            {instrucoesDoFluxo(doFluxo).map((t) => (
+              <li key={t}>{t}</li>
+            ))}
+          </ul>
+        </div>
       ) : null}
     </div>
   );

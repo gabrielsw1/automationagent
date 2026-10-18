@@ -1,0 +1,56 @@
+/* Painel "Passos gravados" e balão de formato (dentro do Shadow DOM da barra). Só var(--token).
+   Escuros, para ninguém confundir com uma tela do sistema que está sendo gravado. */
+.cpx-painel {
+  position: fixed; right: var(--s-4); bottom: var(--s-4); z-index: 2147483001;
+  width: 288px; max-width: calc(100vw - 32px); max-height: min(56vh, 420px);
+  display: flex; flex-direction: column; gap: var(--s-2);
+  padding: var(--s-3) var(--s-3) var(--s-3) var(--s-4);
+  background: var(--ink-900); color: var(--white);
+  border-radius: var(--r-lg); box-shadow: var(--sh-lg);
+  font-family: var(--font-sans); font-size: var(--fs-13); line-height: 1.4;
+}
+.cpx-painel.cpx-recolhido { max-height: none; padding-bottom: var(--s-3); }
+.cpx-painel-topo { display: flex; align-items: center; justify-content: space-between; gap: var(--s-2); }
+.cpx-painel-titulo { margin: 0; display: inline-flex; align-items: center; gap: var(--s-2); font-weight: 700; font-size: var(--fs-14); }
+.cpx-painel-conta {
+  min-width: 22px; height: 20px; padding: 0 6px; border-radius: 999px; display: inline-grid; place-items: center;
+  background: var(--brand-600); color: var(--white); font-size: var(--fs-12); font-variant-numeric: tabular-nums;
+}
+.cpx-painel-alternar {
+  all: unset; cursor: pointer; width: 28px; height: 28px; display: grid; place-items: center; border-radius: var(--r-md);
+  color: var(--white); font-size: 14px;
+}
+.cpx-painel-alternar:hover { background: color-mix(in srgb, var(--white) 12%, transparent); }
+.cpx-painel-alternar:focus-visible { outline: 2px solid var(--brand-200); outline-offset: 2px; }
+.cpx-painel-lista {
+  list-style: none; margin: 0; padding: 0 var(--s-1) 0 0; overflow-y: auto; min-height: 0; flex: 1;
+  display: flex; flex-direction: column; gap: 2px;
+}
+.cpx-painel-lista li { display: flex; align-items: baseline; gap: var(--s-2); padding: 4px 6px; border-radius: var(--r-sm); }
+.cpx-painel-lista li.cpx-ultimo { background: color-mix(in srgb, var(--white) 10%, transparent); }
+.cpx-n { flex: none; width: 18px; text-align: right; color: color-mix(in srgb, var(--white) 55%, transparent); font-variant-numeric: tabular-nums; font-size: var(--fs-12); }
+.cpx-t { min-width: 0; overflow-wrap: anywhere; }
+.cpx-painel-vazio, .cpx-painel-nota, .cpx-painel-guardando { margin: 0; font-size: var(--fs-12); color: color-mix(in srgb, var(--white) 70%, transparent); }
+.cpx-painel-nota { border-top: 1px solid color-mix(in srgb, var(--white) 14%, transparent); padding-top: var(--s-2); }
+.cpx-painel-guardando { display: flex; align-items: center; gap: var(--s-2); }
+.cpx-giro {
+  width: 12px; height: 12px; border-radius: 50%; flex: none;
+  border: 2px solid color-mix(in srgb, var(--white) 30%, transparent); border-top-color: var(--white);
+  animation: cpx-girar .8s linear infinite;
+}
+@keyframes cpx-girar { to { transform: rotate(360deg); } }
+
+.cpx-balao {
+  position: fixed; z-index: 2147483003; max-width: min(360px, calc(100vw - 16px));
+  display: inline-flex; align-items: baseline; gap: 6px; padding: 5px 10px;
+  background: var(--ink-900); color: var(--white); border-radius: var(--r-md); box-shadow: var(--sh-md);
+  font-family: var(--font-sans); font-size: var(--fs-12); line-height: 1.35; pointer-events: none;
+}
+.cpx-balao[hidden] { display: none; }
+.cpx-balao-rotulo { color: color-mix(in srgb, var(--white) 75%, transparent); }
+.cpx-balao-formato { font-family: var(--font-mono); font-weight: 600; letter-spacing: .02em; }
+.cpx-balao-senha { background: var(--ink-700); }
+
+@media (prefers-reduced-motion: reduce) {
+  .cpx-giro { animation: none; }
+}

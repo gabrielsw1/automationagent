@@ -12,6 +12,7 @@ import crypto from 'node:crypto';
 import {
   creditosDaExecucao,
   fmt,
+  passoExecutavel,
   validarTarefa,
   type AcaoBloco,
   type Bloco,
@@ -1297,7 +1298,8 @@ export class Motor {
         acoes: [{ rotulo: 'Falar com uma pessoa', acao: 'humano', estilo: 'primario' }],
       });
     }
-    const visiveis = fluxo.passos.filter((p) => p.tipo !== 'esperar');
+    // Passos mantidos como instrução (feitos em outro site) não rodam: não entram no progresso.
+    const visiveis = fluxo.passos.filter((p) => p.tipo !== 'esperar' && passoExecutavel(p));
     const indice = new Map<number, number>();
     visiveis.forEach((p, i) => indice.set(p.n, i + 1));
     const etapas = [etapa(`Entrando no ${this.sistema()} como ${primeiro}`), ...visiveis.map((p) => etapa(p.titulo))];

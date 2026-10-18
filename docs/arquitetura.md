@@ -10,7 +10,7 @@ Documento de referência para quem mexe no código. Os tipos citados estão em `
 | Servidor do copiloto | `server/` | 3000 | API do widget, API do console, agente (Claude), motor de execução, navegador (Playwright), conhecimento, SQLite |
 | Console | `console/` | 5173 (Vite, com proxy de `/api` e `/copiloto.js` para 3000) | Administração: telas C0–C9 do design |
 | Widget | `widget/` | — (compilado em `widget/dist/copiloto.js`, servido pelo servidor em `/copiloto.js`) | Chat embutido no sistema anfitrião (Shadow DOM) + gravador de fluxos |
-| Extensão do navegador | `extension/` | — (compilada em `extension/dist`, carregada sem compactação no Chrome ou no Edge) | Grava fluxos em qualquer site, com a captura e a barra do widget; fala com o servidor pelo service worker |
+| Extensão do navegador | `extension/` | — (compilada em `extension/dist`, carregada sem compactação no Chrome ou no Edge; pacote das lojas em `extension/dist-loja` com `npm run loja -w extension`) | Grava fluxos em qualquer site, com a captura e a barra do widget; fala com o servidor pelo service worker |
 | Sistema de exemplo "Horizonte" | `sample-system/` | 4000 | Sistema fictício com API REST e telas HTML, para demonstrar tudo sem o sistema real |
 | Contratos | `shared/` | — | Tipos TypeScript, validação de campos, formatação pt-BR, `styles/tokens.css` (único arquivo de cores) e `styles/base.css` |
 
@@ -267,9 +267,51 @@ Quem grava:
 
 Os dois nunca enviam valores digitados: só o formato (`formatoDoValor` de `shared/src/validacao.ts`).
 
-`GET /api/saude` → `{ ok, modoSimulado, sistema, urlConsole }`. A extensão lê `urlConsole` (`CONSOLE_URL`) para o
-"Gravar esta aba" do popup, que abre `{urlConsole}/aprender?gravar=<endereço da aba>`: o console abre o "Começar
-gravação" com a página preenchida e, no modal, diz se a extensão está instalada (pela marca no `<html>`).
+`GET /api/saude` → `{ ok, modoSimulado, sistema, urlConsole }`. A extensão lê `urlConsole` (`CONSOLE_URL`) para a
+entrada e para o "Gravar esta aba" do popup, que abre `{urlConsole}/aprender?gravar=<endereço da aba>&empresa=<id>`: o
+console troca para a empresa da extensão (se for outra da conta), abre o "Começar gravação" com a página preenchida e,
+no modal, diz se a extensão está instalada (pela marca no `<html>`).
+
+Passos em outro site: na hora de aprender, o servidor marca `outroSite` (host) em todo passo cujo endereço não é do
+sistema da empresa (`server/src/navegador/outros-sites.ts`), com o endereço completo, e uma troca de site vira um
+passo "Abrir o site …". Na revisão, `POST /api/console/fluxos/:id/passos/:n/outro-site { decisao: remover | instrucao | desfazer }`
+→ `Fluxo`: "remover" tira o passo (e guarda `{ titulo, site }` em `outrosSitesRemovidos`), "instrucao" marca
+`instrucao: true` (o executor pula; o catálogo manda o texto para o agente como instrução para a pessoa). Com algum
+passo sem escolha, testar e publicar respondem 409 `outro_site_pendente`.
+
+### Conta da extensão (`/api/extensao`, token Bearer)
+
+Tipos e mensagens em `shared/src/extensao.ts`. A senha nunca passa pela extensão:
+
+1. O popup pede "Entrar"; o service worker gera `estado` e um `verificador` secreto (guardados em
+   `chrome.storage.session`, valem 15 minutos) e abre `{urlConsole}/extensao/conectar?estado=…&desafio=<SHA-256 do verificador, base64url>`.
+2. A página do console (sessão por cookie) mostra as empresas da conta; `POST /api/console/extensao/codigo { empresaId, desafio }`
+   (só Admin e Editor de tarefas na empresa escolhida; nunca no modo suporte) → `{ codigo, expiraEm }`. O código vale
+   2 minutos, é de uso único e fica preso à conta, à empresa e ao desafio; o banco guarda só o hash.
+3. A página manda `{ fonte: 'copiloto-console', tipo: 'extensao:conectar', id, estado, codigo }` por
+   `window.postMessage` para a própria origem. O content script só aceita mensagens da própria janela e da mesma origem,
+   no formato certo; o service worker só aceita a entrada vinda do quadro principal de uma aba cuja origem é a do
+   console configurado no servidor e com o `estado` que ele mesmo criou.
+4. O service worker troca `POST /api/extensao/trocar { codigo, verificador, navegador }` → `{ token: 'cpx_…', sessao }`.
+   Código desconhecido, vencido, já usado ou com verificador errado → 401 (o código é gasto na primeira tentativa).
+   O token fica em `chrome.storage.local`; no servidor, só o hash (`tokens_extensao`, banco da plataforma).
+
+O token vale só em `/api/extensao/*` (o servidor só lê o cabeçalho `Authorization` nesse prefixo; as rotas do console
+continuam exigindo o cookie), para uma conta numa empresa, enquanto a pessoa estiver ativa na equipe. Ele é revogado em
+`POST /api/extensao/sair`, ao entrar de novo (o anterior sai), em "Sair de todos os outros aparelhos", ao sair da
+equipe e quando a empresa é suspensa.
+
+| Rota | Corpo → resposta |
+|---|---|
+| `POST /api/extensao/trocar` | `PedidoTrocaExtensao` → `TokenExtensao` |
+| `GET /api/extensao/sessao` | → `SessaoExtensao` (empresa, pessoa, perfil, `podeGravar`, empresas para "Trocar", `urlConsole`) |
+| `GET /api/extensao/gravacoes` | → `GravacoesRecentes` (as da pessoa na empresa: gravando, enviada, em revisão, publicada) |
+| `POST /api/extensao/sair` | → `{ ok }` (revoga o token) |
+| `GET /api/console/extensao` | → `InfoExtensao` (lojas, ajuda do pacote, quem pode gravar) |
+| `POST /api/console/extensao/codigo` | `PedidoCodigoExtensao` → `CodigoExtensao` |
+
+A página `/aprender/instalar` (E1) e a `/extensao/conectar` perguntam o estado à extensão pela mesma conversa
+(`extensao:estado`): a versão vem sempre; a conta só vai para a aba do console configurado.
 
 | Rota | Corpo → resposta |
 |---|---|

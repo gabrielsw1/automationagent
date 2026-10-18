@@ -17,7 +17,8 @@ export function manifesto(versao: string) {
     action: { default_title: 'Copiloto: gravar fluxo', default_popup: 'popup.html', default_icon: icones },
     options_ui: { page: 'opcoes.html', open_in_tab: true },
     background: { service_worker: 'fundo.js' },
-    permissions: ['storage', 'activeTab'],
+    // scripting: logo depois de instalar, põe a extensão nas abas já abertas (o console percebe sem recarregar).
+    permissions: ['storage', 'activeTab', 'scripting'],
     // O copiloto local já vem liberado; outros servidores são liberados nas opções.
     host_permissions: ['http://localhost/*', 'http://127.0.0.1/*'],
     optional_host_permissions: sites,

@@ -42,5 +42,13 @@ export function icone(caminhos: string[], classe = 'i i-sm'): SVGSVGElement {
 export const ICONES = {
   alerta: ['M12 9v4M12 17h.01', 'M10.3 3.9L2.4 18a2 2 0 001.7 3h15.8a2 2 0 001.7-3L13.7 3.9a2 2 0 00-3.4 0z'],
   check: ['M5 12.5l4.5 4.5L19 7.5'],
-  externo: ['M14 4h6v6', 'M20 4l-9 9', 'M18 14v5a1 1 0 01-1 1H5a1 1 0 01-1-1V7a1 1 0 011-1h5'],
+  externo: ['M14 4h6v6M20 4l-9 9', 'M18 14v6H4V6h6'],
+  /** Botão de gravar (círculo com o ponto). */
+  gravar: ['M12 3a9 9 0 110 18 9 9 0 010-18z', 'M12 8.5a3.5 3.5 0 110 7 3.5 3.5 0 010-7z'],
+  pessoa: ['M12 4a4 4 0 110 8 4 4 0 010-8z', 'M4 21a8 8 0 0116 0'],
+  cadeado: ['M6 11h12v10H6z', 'M8 11V7a4 4 0 018 0v4'],
+  semRede: ['M2 8.5a16 16 0 0120 0M5 12a11 11 0 0114 0M8.5 15.5a6 6 0 017 0M12 19.5v.01', 'M3 3l18 18'],
+  tentar: ['M20 11a8 8 0 10-2.3 5.7', 'M20 4v7h-7'],
+  fechar: ['M6 6l12 12M18 6L6 18'],
+  info: ['M12 3a9 9 0 110 18 9 9 0 010-18z', 'M12 11v6M12 7.5v.01'],
 };

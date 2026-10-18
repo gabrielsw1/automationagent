@@ -4,6 +4,7 @@
 import { z } from 'zod';
 import type { Campo, EventoGravado, PassoFluxo, SeletorCandidato, TipoCampo, TipoPasso } from '@copiloto/shared';
 import type { Llm } from '../llm/tipos.ts';
+import { enderecoSemGravador, hostDoSistema, outroSiteDe, podarCamposSugeridos } from './outros-sites.ts';
 import { candidatosDe, dataCampoDe, ehCampoDeDigitar, ehClicavel, nomeVisivel, opcoesDoContexto } from './seletores.ts';
 import {
   caminhoDe,
@@ -60,29 +61,46 @@ function rotuloDoCampo(el: ElementoGravado): string {
   return encurtar(el.rotulo || el.ariaLabel || el.placeholder || (el.name ? maiusculaInicial(humanizar(el.name)) : '') || el.texto || 'campo', 80);
 }
 
-/** Converte a gravação em passos por regras fixas (também é a simulação do Claude). */
-export function converterPorRegras(eventos: EventoGravado[], camposTarefa: Campo[] = []): ResultadoAprendizado {
+/**
+ * Converte a gravação em passos por regras fixas (também é a simulação do Claude). Com `urlSistema`
+ * (o endereço do sistema da empresa), passos em outro site guardam o endereço completo e ficam
+ * marcados com `outroSite`; esses não viram campo da tarefa (o copiloto não repete fora do sistema).
+ */
+export function converterPorRegras(eventos: EventoGravado[], camposTarefa: Campo[] = [], urlSistema?: string | null): ResultadoAprendizado {
   const ordenados = [...eventos].sort((a, b) => a.ts - b.ts);
   const lista: Rascunho[] = [];
+  const hostSistema = hostDoSistema(urlSistema);
   let paginaAtual: string | null = null;
   let ultimoCliqueTs = -Infinity;
+  /** Página sem a busca; em outro site, com o host na frente (o mesmo caminho em outro site é outra página). */
+  const paginaDe = (url: string) => {
+    const site = outroSiteDe(url, hostSistema);
+    return `${site ? `//${site}` : ''}${caminhoDe(url).split('?')[0]}`;
+  };
+  const siteDaPagina = (pagina: string) => (pagina.startsWith('//') ? pagina.slice(2).split('/')[0] : null);
 
   const novo = (tipo: TipoPasso, titulo: string, ev: EventoGravado, extra: Partial<PassoFluxo> = {}): Rascunho => {
     const el = ev.elemento;
+    const site = outroSiteDe(ev.url, hostSistema);
     const r: Rascunho = {
       passo: {
         n: 0,
         tipo,
         titulo,
-        url: caminhoDe(ev.url),
+        url: site ? enderecoSemGravador(ev.url) : caminhoDe(ev.url),
         seletores: el ? candidatosDe(el, tipo) : [],
         seletorEscolhido: 0,
         ...extra,
+        ...(site ? { outroSite: site } : {}),
       },
       elemento: el,
       chaveElemento: el ? chaveDoElemento(el) : undefined,
       ts: ev.ts,
     };
+    if (site) {
+      r.passo.url = enderecoSemGravador(ev.url);
+      delete r.passo.pendencia;
+    }
     lista.push(r);
     return r;
   };
@@ -93,13 +111,21 @@ export function converterPorRegras(eventos: EventoGravado[], camposTarefa: Campo
     switch (ev.tipo) {
       case 'navegar': {
         const caminho = caminhoDe(ev.url);
-        const semBusca = caminho.split('?')[0];
+        const pagina = paginaDe(ev.url);
+        const site = outroSiteDe(ev.url, hostSistema);
         const causadaPorClique = ev.ts - ultimoCliqueTs < 5_000;
-        if (lista.length === 0 || (!causadaPorClique && semBusca !== paginaAtual)) {
-          const tela = nomeDaTela(ev.url, ev.tituloPagina);
-          novo('navegar', `Abrir a tela de ${tela}`, ev, { url: caminho, rotuloElemento: maiusculaInicial(tela), seletores: [] });
+        // Entrar ou sair de outro site é sempre um passo, mesmo depois de um clique: a revisão mostra
+        // a saída do sistema, e a volta abre a tela do sistema de novo (sem depender do outro site).
+        const trocouDeSite = paginaAtual !== null && (site ?? null) !== siteDaPagina(paginaAtual);
+        if (lista.length === 0 || (pagina !== paginaAtual && (!causadaPorClique || trocouDeSite))) {
+          if (site) {
+            novo('navegar', `Abrir o site ${site}`, ev, { rotuloElemento: site, seletores: [] });
+          } else {
+            const tela = nomeDaTela(ev.url, ev.tituloPagina);
+            novo('navegar', `Abrir a tela de ${tela}`, ev, { url: caminho, rotuloElemento: maiusculaInicial(tela), seletores: [] });
+          }
         }
-        paginaAtual = semBusca;
+        paginaAtual = pagina;
         break;
       }
       case 'clique': {
@@ -109,14 +135,14 @@ export function converterPorRegras(eventos: EventoGravado[], camposTarefa: Campo
         if (ehCampoDeDigitar(el) || tag === 'select' || tag === 'option' || tag === 'label' || tag === 'textarea') break;
         if (!ehClicavel(el) && !el.texto) break;
         ultimoCliqueTs = ev.ts;
-        if (paginaAtual === null) paginaAtual = caminhoDe(ev.url).split('?')[0];
+        if (paginaAtual === null) paginaAtual = paginaDe(ev.url);
         const nome = nomeVisivel(el) || 'elemento';
         novo('clique', `Clicar em ${nome}`, ev, { rotuloElemento: nome });
         break;
       }
       case 'preencher': {
         if (!el) break;
-        if (paginaAtual === null) paginaAtual = caminhoDe(ev.url).split('?')[0];
+        if (paginaAtual === null) paginaAtual = paginaDe(ev.url);
         const chave = chaveDoElemento(el);
         if (ultimo && ultimo.passo.tipo === 'preencher' && ultimo.chaveElemento === chave) {
           if (ev.formatoValor !== undefined) ultimo.passo.formatoGravado = ev.formatoValor;
@@ -129,7 +155,7 @@ export function converterPorRegras(eventos: EventoGravado[], camposTarefa: Campo
       }
       case 'selecionar': {
         if (!el) break;
-        if (paginaAtual === null) paginaAtual = caminhoDe(ev.url).split('?')[0];
+        if (paginaAtual === null) paginaAtual = paginaDe(ev.url);
         const chave = chaveDoElemento(el);
         const rotulo = rotuloDoCampo(el);
         const formato = ev.opcaoTexto ? ev.opcaoTexto.replace(/\d/g, '9') : undefined;
@@ -175,8 +201,10 @@ export function converterPorRegras(eventos: EventoGravado[], camposTarefa: Campo
   }
 
   lista.forEach((r, i) => (r.passo.n = i + 1));
-  const camposSugeridos = sugerirCampos(lista);
-  mapearValores(lista, camposSugeridos, camposTarefa);
+  // Passos em outro site não viram campo nem são mapeados: o copiloto não os repete.
+  const doSistema = lista.filter((r) => !r.passo.outroSite);
+  const camposSugeridos = sugerirCampos(doSistema);
+  mapearValores(doSistema, camposSugeridos, camposTarefa);
   return { passos: lista.map((r) => r.passo), camposSugeridos };
 }
 
@@ -346,7 +374,8 @@ function paraSaida(r: ResultadoAprendizado): SaidaAprendizado {
 }
 
 /** Normaliza a saída do Claude: numera, garante índices válidos e confere os campos citados. */
-function deSaida(s: SaidaAprendizado, camposTarefa: Campo[]): ResultadoAprendizado {
+function deSaida(s: SaidaAprendizado, camposTarefa: Campo[], urlSistema?: string | null): ResultadoAprendizado {
+  const hostSistema = hostDoSistema(urlSistema);
   const camposSugeridos: Campo[] = [];
   for (const c of s.camposSugeridos) {
     const chave = chaveDe(c.chave);
@@ -366,32 +395,39 @@ function deSaida(s: SaidaAprendizado, camposTarefa: Campo[]): ResultadoAprendiza
       seletorEscolhido: seletores.length ? Math.min(Math.max(0, p.seletorEscolhido), seletores.length - 1) : 0,
     };
     if (p.rotuloElemento) passo.rotuloElemento = p.rotuloElemento;
-    if (p.url) passo.url = caminhoDe(p.url);
+    const site = outroSiteDe(p.url ?? undefined, hostSistema);
+    if (p.url) passo.url = site ? enderecoSemGravador(p.url) : caminhoDe(p.url);
+    if (site) passo.outroSite = site;
     if (p.formatoGravado) passo.formatoGravado = p.formatoGravado;
     if (p.gera) passo.gera = chaveDe(p.gera);
-    if (p.tipo === 'preencher' || p.tipo === 'selecionar') {
+    if (!site && (p.tipo === 'preencher' || p.tipo === 'selecionar')) {
       if (p.campo && chavesValidas.has(p.campo)) passo.valor = { origem: 'campo', campo: p.campo };
       else if (p.valorFixo) passo.valor = { origem: 'fixo', valor: p.valorFixo };
     }
-    const pendencia = p.pendencia?.trim() || pendenciaDe(passo);
+    const pendencia = site ? undefined : p.pendencia?.trim() || pendenciaDe(passo);
     if (pendencia) passo.pendencia = pendencia;
     return passo;
   });
-  return { passos, camposSugeridos };
+  // Campos que só os passos de outro site usavam saem (esses passos não viram dado da tarefa).
+  const antes = s.passos.map((p) => ({ valor: p.campo ? { origem: 'campo' as const, campo: p.campo } : undefined })) as PassoFluxo[];
+  return { passos, camposSugeridos: podarCamposSugeridos(camposSugeridos, antes, passos) };
 }
 
 /** Pendência calculada do passo (o que falta para o fluxo rodar). */
 export function pendenciaDe(p: PassoFluxo): string | undefined {
+  // Em outro site, a escolha "Remover" ou "Manter como instrução" vem antes de qualquer pendência.
+  if (p.outroSite || p.instrucao) return undefined;
   if ((p.tipo === 'preencher' || p.tipo === 'selecionar') && !p.valor) return 'falta mapear';
   if (p.tipo !== 'navegar' && p.tipo !== 'esperar' && p.seletores.length === 0) return 'Marque o elemento da tela deste passo.';
   return undefined;
 }
 
 /** Eventos sem o HTML longo de contexto, para caber na conversa com o Claude. */
-function eventosParaPrompt(eventos: EventoGravado[]) {
+function eventosParaPrompt(eventos: EventoGravado[], urlSistema?: string | null) {
+  const host = hostDoSistema(urlSistema);
   return eventos.map((e) => ({
     ...e,
-    url: caminhoDe(e.url),
+    url: outroSiteDe(e.url, host) ? enderecoSemGravador(e.url) : caminhoDe(e.url),
     elemento: e.elemento ? { ...e.elemento, contexto: e.elemento.contexto ? encurtar(e.elemento.contexto, 600) : undefined } : undefined,
   }));
 }
@@ -404,16 +440,23 @@ export async function aprenderFluxo(
   llm: Llm,
   eventos: EventoGravado[],
   camposTarefa: Campo[] = [],
+  urlSistema?: string | null,
 ): Promise<ResultadoAprendizado> {
-  const porRegras = converterPorRegras(eventos, camposTarefa);
+  const porRegras = converterPorRegras(eventos, camposTarefa, urlSistema);
   if (eventos.length === 0) return porRegras;
+  const foraDoSistema = porRegras.passos.filter((p) => p.outroSite).length;
   const texto = [
-    `Eventos gravados (${eventos.length}):\n${JSON.stringify(eventosParaPrompt(eventos))}`,
+    `Eventos gravados (${eventos.length}):\n${JSON.stringify(eventosParaPrompt(eventos, urlSistema))}`,
     `Rascunho por regras:\n${JSON.stringify(paraSaida(porRegras))}`,
     camposTarefa.length
       ? `Campos da tarefa (use estas chaves no campo de cada passo):\n${JSON.stringify(camposTarefa.map((c) => ({ chave: c.chave, rotulo: c.rotulo, tipo: c.tipo, opcoes: c.opcoes })))}`
       : 'A tarefa ainda não existe: sugira os campos e ligue cada passo de preencher/selecionar a um campo sugerido.',
-  ].join('\n\n');
+    foraDoSistema
+      ? `Parte do caminho foi feita fora do sistema${urlSistema ? ` (${urlSistema})` : ''}. Mantenha esses passos, com o endereço completo (https://...) na url de cada um, e não ligue nenhum deles a campo: a pessoa decide na revisão se remove ou mantém como instrução.`
+      : '',
+  ]
+    .filter(Boolean)
+    .join('\n\n');
   const { dados } = await llm.estruturado({
     modelo: 'principal',
     finalidade: 'aprender_fluxo',
@@ -423,7 +466,10 @@ export async function aprenderFluxo(
     maxTokens: 16000,
     simulacao: () => paraSaida(porRegras),
   });
-  const resultado = deSaida(dados, camposTarefa);
-  // Nunca devolve menos do que as regras conseguiram (resposta vazia ou truncada).
-  return resultado.passos.length === 0 && porRegras.passos.length > 0 ? porRegras : resultado;
+  const resultado = deSaida(dados, camposTarefa, urlSistema);
+  // Nunca devolve menos do que as regras conseguiram (resposta vazia ou truncada), nem esconde um
+  // passo feito em outro site (a revisão precisa mostrar).
+  if (resultado.passos.length === 0 && porRegras.passos.length > 0) return porRegras;
+  if (resultado.passos.filter((p) => p.outroSite).length < foraDoSistema) return porRegras;
+  return resultado;
 }

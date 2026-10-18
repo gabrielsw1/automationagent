@@ -166,6 +166,15 @@ const P = {
       <path d="M3 10h18M16 15h2" />
     </>
   ),
+  /** Extensão do navegador (peça de quebra-cabeça, como no Chrome). */
+  extensao: <path d="M10 4h4v3a2 2 0 104 0V4h2v6h-3a2 2 0 100 4h3v6H4V4h6" />,
+  /** Fixar o ícone da extensão na barra. */
+  alfinete: (
+    <>
+      <path d="M9 4h6l-1 6 3 3H7l3-3z" />
+      <path d="M12 13v7" />
+    </>
+  ),
   /** Plataforma › Configurações. */
   engrenagem: (
     <>

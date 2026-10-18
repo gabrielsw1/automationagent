@@ -8,6 +8,8 @@ export interface LinhaFluxo extends Fluxo {
   eventosGravados: EventoGravado[];
   tokenGravacao: string | null;
   criadoEm: string;
+  /** E-mail de quem gravou (as "Gravações recentes" da extensão). */
+  gravadoPorEmail: string | null;
 }
 
 function deLinha(l: Record<string, unknown>): LinhaFluxo {
@@ -29,12 +31,14 @@ function deLinha(l: Record<string, unknown>): LinhaFluxo {
     eventosGravados: json<EventoGravado[]>(l.eventos_gravados, []),
     tokenGravacao: (l.token_gravacao as string | null) ?? null,
     criadoEm: String(l.criado_em),
+    gravadoPorEmail: (l.gravado_por_email as string | null) ?? null,
+    outrosSitesRemovidos: json<NonNullable<Fluxo['outrosSitesRemovidos']>>(l.outros_sites_removidos, []),
   };
 }
 
 /** Só o que vai para o console (sem os eventos brutos nem o token). */
 export function publico(f: LinhaFluxo): Fluxo {
-  const { eventosGravados: _e, tokenGravacao: _t, criadoEm: _c, ...fluxo } = f;
+  const { eventosGravados: _e, tokenGravacao: _t, criadoEm: _c, gravadoPorEmail: _g, ...fluxo } = f;
   return fluxo;
 }
 
@@ -73,7 +77,7 @@ export class Fluxos {
   }
 
   /** Fluxo novo, já em gravação, com um token secreto para o gravador do widget. */
-  criar(dados: { nome: string; tarefaId: string | null; urlInicial: string; por: string }): LinhaFluxo {
+  criar(dados: { nome: string; tarefaId: string | null; urlInicial: string; por: string; email?: string | null }): LinhaFluxo {
     const id = novoId('flx');
     const agora = agoraIso();
     this.banco.inserir('fluxos', {
@@ -88,6 +92,7 @@ export class Fluxos {
       eventos_gravados: [],
       token_gravacao: this.novoToken(),
       gravado_por: dados.por,
+      gravado_por_email: dados.email?.toLowerCase() ?? null,
       gravado_em: null,
       duracao_gravacao_ms: null,
       url_inicial: dados.urlInicial,
@@ -117,6 +122,7 @@ export class Fluxos {
       versao: maior + 1,
       passos: origem.passos.map(({ printId: _p, ...p }) => p),
       campos_sugeridos: origem.camposSugeridos,
+      outros_sites_removidos: origem.outrosSitesRemovidos ?? [],
       eventos_gravados: origem.eventosGravados,
       token_gravacao: null,
       gravado_por: por,
@@ -131,14 +137,16 @@ export class Fluxos {
   }
 
   /** Recomeça a gravação (novo token; os eventos anteriores são descartados). */
-  regravar(id: string, por: string, urlInicial?: string): LinhaFluxo {
+  regravar(id: string, por: string, urlInicial?: string, email?: string | null): LinhaFluxo {
     this.banco.atualizar('fluxos', id, {
       etapa: 'gravar',
       status: 'gravando',
       eventos_gravados: [],
       passos: [],
+      outros_sites_removidos: [],
       token_gravacao: this.novoToken(),
       gravado_por: por,
+      gravado_por_email: email?.toLowerCase() ?? null,
       gravado_em: null,
       duracao_gravacao_ms: null,
       ultimo_teste: null,

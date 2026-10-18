@@ -193,6 +193,27 @@ describe('executor do navegador (Chromium)', { timeout: 60_000 }, () => {
     expect(p.eventos.find((e) => e.tipo === 'passo_ok' && e.passo === 3)?.detalhe).toBe('Opção “10/2026”');
   });
 
+  it('pula o passo mantido como instrução (feito em outro site): o robô só repete no sistema', async () => {
+    telas.estado.versao = 'v1';
+    const fluxo = fluxoBoleto();
+    const instrucao: PassoFluxo = {
+      n: 2,
+      tipo: 'preencher',
+      titulo: 'Preencher CNPJ',
+      url: 'https://consulta.cnpj.exemplo/busca',
+      seletores: [{ seletor: '#nao-existe-aqui', estabilidade: 'estavel', motivo: 'id' }],
+      seletorEscolhido: 0,
+      outroSite: 'consulta.cnpj.exemplo',
+      instrucao: true,
+    };
+    fluxo.passos = [fluxo.passos[0], instrucao, ...fluxo.passos.slice(1).map((x) => ({ ...x, n: x.n + 1 }))];
+    const p = pedido({ fluxo });
+    const r = await navegador.executar(p);
+    expect(r).toMatchObject({ ok: true });
+    const feitos = p.eventos.filter((e) => e.tipo === 'passo_ok').map((e) => e.passo);
+    expect(feitos).toEqual([1, 3, 4, 5, 6, 7, 8]);
+  });
+
   it('recupera pela tela quando o campo mudou de nome e rótulo (regra simulada)', async () => {
     telas.estado.versao = 'v2';
     const p = pedido();

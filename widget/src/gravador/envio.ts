@@ -1,6 +1,6 @@
 // Envio dos eventos gravados em lotes (POST /api/gravacao/:token/eventos).
 // O que ainda não foi enviado fica no sessionStorage, para sobreviver à troca de página.
-import type { EventoGravado, GravacaoEstado } from '@copiloto/shared';
+import type { EventoGravado, GravacaoEstado, GravacaoEventosAceitos } from '@copiloto/shared';
 import { juntarUrl, pedirJson } from '../chat/api.ts';
 import { armazenamento, type Armazenamento } from '../chat/util.ts';
 
@@ -16,7 +16,7 @@ export class ApiGravacao {
   }
 
   eventos(eventos: EventoGravado[]) {
-    return pedirJson<{ passos: number }>(`${this.base}/eventos`, {
+    return pedirJson<GravacaoEventosAceitos>(`${this.base}/eventos`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ eventos }),

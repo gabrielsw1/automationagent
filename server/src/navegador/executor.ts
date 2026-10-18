@@ -5,7 +5,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { chromium, errors, type Browser, type BrowserContext, type Locator, type Page } from 'playwright';
-import { casarOpcao, interpretarHora, somenteDigitos, type PassoFluxo } from '@copiloto/shared';
+import { casarOpcao, interpretarHora, passoExecutavel, somenteDigitos, type PassoFluxo } from '@copiloto/shared';
 import type { Config } from '../config.ts';
 import type { Banco } from '../db/banco.ts';
 import { ErroAcessoSistema, type AdaptadorSistema, type CookieNavegador, type SessaoNavegador } from '../adaptadores/tipos.ts';
@@ -362,7 +362,8 @@ class ExecucaoFluxo {
     pedido.sinal.addEventListener('abort', aoCancelar, { once: true });
     try {
       await this.abrirSessao();
-      const passos = pedido.fluxo.passos;
+      // Passos em outro site mantidos como instrução ficam de fora: o copiloto só repete no sistema.
+      const passos = pedido.fluxo.passos.filter(passoExecutavel);
       if (passos[0]?.tipo !== 'navegar') await this.irPara(pedido.fluxo.urlInicial ?? '/');
       for (const passo of passos) {
         this.verificarCancelamento();

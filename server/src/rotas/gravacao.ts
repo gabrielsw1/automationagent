@@ -4,7 +4,7 @@
 // digitados, só o formato.
 import type { FastifyPluginAsync } from 'fastify';
 import { z } from 'zod';
-import type { EventoGravado, GravacaoEstado } from '@copiloto/shared';
+import type { EventoGravado, GravacaoEstado, GravacaoEventosAceitos, PassoFluxo } from '@copiloto/shared';
 import { aprenderFluxo, converterPorRegras } from '../navegador/aprender.ts';
 import { Fluxos, type LinhaFluxo } from '../navegador/fluxos.ts';
 import { agoraIso } from '../db/banco.ts';
@@ -62,8 +62,25 @@ function semValores(e: EventoGravado): EventoGravado {
   return limpo;
 }
 
-export function estadoGravacao(f: LinhaFluxo): GravacaoEstado {
-  return { fluxoId: f.id, nome: f.nome, ativa: f.status === 'gravando', passos: f.passos.length };
+/** Títulos para o painel "Passos gravados" da extensão (os últimos 60; só verbo e rótulo, nunca valor). */
+function itensDe(passos: PassoFluxo[]): string[] {
+  return passos.slice(-60).map((p) => p.titulo);
+}
+
+export function estadoGravacao(f: LinhaFluxo, ctx?: Contexto): GravacaoEstado {
+  return {
+    fluxoId: f.id,
+    nome: f.nome,
+    ativa: f.status === 'gravando',
+    passos: f.passos.length,
+    ...(ctx ? { empresa: ctx.empresa.nome, pessoa: f.gravadoPor } : {}),
+    itens: itensDe(f.passos),
+  };
+}
+
+/** Endereço do sistema da empresa: passos fora dele ficam marcados como "outro site". */
+export function urlDoSistema(ctx: Contexto): string | null {
+  return ctx.adaptador.urlBase || null;
 }
 
 /**
@@ -74,7 +91,7 @@ export function concluirGravacao(ctx: Contexto, fluxo: LinhaFluxo): LinhaFluxo {
   const fluxos = new Fluxos(ctx.banco, ctx.empresa.id);
   const eventos = fluxo.eventosGravados;
   const camposTarefa = camposDaTarefa(ctx, fluxo.tarefaId);
-  const { passos, camposSugeridos } = converterPorRegras(eventos, camposTarefa);
+  const { passos, camposSugeridos } = converterPorRegras(eventos, camposTarefa, urlDoSistema(ctx));
   const tempos = eventos.map((e) => e.ts).filter((t) => Number.isFinite(t));
   const duracao = tempos.length > 1 ? Math.max(...tempos) - Math.min(...tempos) : null;
   const atualizado = fluxos.atualizar(fluxo.id, {
@@ -93,7 +110,7 @@ export function concluirGravacao(ctx: Contexto, fluxo: LinhaFluxo): LinhaFluxo {
 
 async function aprenderEmSegundoPlano(ctx: Contexto, fluxo: LinhaFluxo) {
   try {
-    const r = await aprenderFluxo(ctx.llm, fluxo.eventosGravados, camposDaTarefa(ctx, fluxo.tarefaId));
+    const r = await aprenderFluxo(ctx.llm, fluxo.eventosGravados, camposDaTarefa(ctx, fluxo.tarefaId), urlDoSistema(ctx));
     const fluxos = new Fluxos(ctx.banco, ctx.empresa.id);
     const agora = fluxos.obter(fluxo.id);
     if (!agora || agora.salvoEm !== fluxo.salvoEm || agora.status !== 'rascunho') return;
@@ -129,10 +146,11 @@ const rotas: FastifyPluginAsync = async (app) => {
   };
 
   app.get<{ Params: { token: string } }>('/:token', async (request): Promise<GravacaoEstado> => {
-    return estadoGravacao(doToken(request.params.token).f);
+    const { ctx, f } = doToken(request.params.token);
+    return estadoGravacao(f, ctx);
   });
 
-  app.post<{ Params: { token: string } }>('/:token/eventos', async (request) => {
+  app.post<{ Params: { token: string } }>('/:token/eventos', async (request): Promise<GravacaoEventosAceitos> => {
     const { ctx, fluxos, f } = doToken(request.params.token);
     ativa(f);
     const r = PedidoEventos.safeParse(request.body);
@@ -142,10 +160,10 @@ const rotas: FastifyPluginAsync = async (app) => {
     }
     const novos = (r.data.eventos as EventoGravado[]).map(semValores);
     const todos = [...f.eventosGravados, ...novos];
-    const { passos } = converterPorRegras(todos, camposDaTarefa(ctx, f.tarefaId));
+    const { passos } = converterPorRegras(todos, camposDaTarefa(ctx, f.tarefaId), urlDoSistema(ctx));
     fluxos.acrescentarEventos(f.id, novos, passos);
     ctx.eventos.emitirConsole({ tipo: 'fluxo', fluxoId: f.id, etapa: 'gravar', passos: passos.length });
-    return { passos: passos.length };
+    return { passos: passos.length, itens: itensDe(passos) };
   });
 
   app.post<{ Params: { token: string } }>('/:token/concluir', async (request) => {

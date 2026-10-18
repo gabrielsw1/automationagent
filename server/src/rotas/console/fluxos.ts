@@ -2,18 +2,19 @@
 // navegador e publicar. Ver docs/arquitetura.md, "Gravador de fluxos" e "API do console".
 import type { FastifyPluginAsync, FastifyRequest } from 'fastify';
 import { z } from 'zod';
-import { validarCampo, type Campo, type Fluxo, type PassoFluxo, type TarefaDefinicao } from '@copiloto/shared';
+import { passoExecutavel, validarCampo, type Campo, type Fluxo, type PassoFluxo, type TarefaDefinicao } from '@copiloto/shared';
 import { exigir, membro } from '../../auth/console.ts';
 import { ctxDe, type Contexto } from '../../contexto.ts';
 import { aprenderFluxo, pendenciaDe } from '../../navegador/aprender.ts';
 import { Fluxos, publico, type LinhaFluxo } from '../../navegador/fluxos.ts';
+import { marcarOutrosSites, outrosSitesPendentes, podarCamposSugeridos } from '../../navegador/outros-sites.ts';
 import { apagarPrint, apagarPrintsDoFluxo } from '../../navegador/prints.ts';
 import { minusculaInicial } from '../../navegador/texto.ts';
 import type { EventoNavegador, ResultadoNavegador } from '../../navegador/tipos.ts';
 import { ErroLlm, RecusaDoModelo } from '../../llm/tipos.ts';
 import { agoraIso } from '../../db/banco.ts';
 import { ErroHttp, conflito, naoEncontrado, pedidoInvalido } from '../../util/erros.ts';
-import { camposDaTarefa, concluirGravacao } from '../gravacao.ts';
+import { camposDaTarefa, concluirGravacao, urlDoSistema } from '../gravacao.ts';
 
 const TIPOS_PASSO = ['navegar', 'clique', 'preencher', 'selecionar', 'leitura', 'download', 'esperar'] as const;
 const TIPOS_CAMPO = ['texto', 'documento', 'email', 'telefone', 'lista', 'data', 'hora', 'numero', 'moeda', 'pessoa'] as const;
@@ -44,6 +45,14 @@ const Passo = z.object({
   gera: z.string().max(60).optional(),
   printId: z.string().max(60).optional(),
   pendencia: z.string().max(300).optional(),
+  // A marca de outro site vem sempre do endereço (o servidor confere); a instrução só vale nela.
+  outroSite: z.string().max(300).optional(),
+  instrucao: z.boolean().optional(),
+});
+
+const PedidoOutroSite = z.object({
+  /** remover: tira o passo; instrucao: mantém como texto, sem executar; desfazer: volta a perguntar. */
+  decisao: z.enum(['remover', 'instrucao', 'desfazer']),
 });
 
 const CampoZ = z.looseObject({
@@ -146,9 +155,14 @@ function camposDoFluxo(ctx: Contexto, f: Pick<LinhaFluxo, 'tarefaId' | 'camposSu
   return daTarefa.length ? daTarefa : f.camposSugeridos;
 }
 
-/** Passos editados: numera, corrige índices e recalcula as pendências. */
-function prepararPassos(passos: z.infer<typeof Passo>[], chaves: Set<string>): PassoFluxo[] {
+/** Passos editados: numera, corrige índices, confere a marca de outro site e recalcula as pendências. */
+function prepararPassos(passos: z.infer<typeof Passo>[], chaves: Set<string>, urlSistema: string | null): PassoFluxo[] {
+  const marcados = marcarOutrosSites(
+    passos.map((p) => ({ ...p, n: 0 }) as PassoFluxo),
+    urlSistema,
+  );
   return passos.map((p, i) => {
+    const site = marcados[i].outroSite;
     const passo: PassoFluxo = {
       n: i + 1,
       tipo: p.tipo,
@@ -161,9 +175,13 @@ function prepararPassos(passos: z.infer<typeof Passo>[], chaves: Set<string>): P
     if (p.formatoGravado) passo.formatoGravado = p.formatoGravado;
     if (p.gera) passo.gera = p.gera;
     if (p.printId) passo.printId = p.printId;
-    if (p.valor && (p.tipo === 'preencher' || p.tipo === 'selecionar' || p.tipo === 'esperar')) passo.valor = p.valor;
+    if (p.valor && !site && (p.tipo === 'preencher' || p.tipo === 'selecionar' || p.tipo === 'esperar')) passo.valor = p.valor;
+    if (site) {
+      passo.outroSite = site;
+      if (p.instrucao) passo.instrucao = true;
+    }
     let pendencia = pendenciaDe(passo);
-    if (!pendencia && passo.valor?.origem === 'campo' && chaves.size > 0 && !chaves.has(passo.valor.campo)) {
+    if (!pendencia && !site && passo.valor?.origem === 'campo' && chaves.size > 0 && !chaves.has(passo.valor.campo)) {
       pendencia = `O dado “${passo.valor.campo}” não existe na tarefa. Escolha outro.`;
     }
     if (pendencia) passo.pendencia = pendencia;
@@ -205,7 +223,7 @@ const rotas: FastifyPluginAsync = async (app) => {
     if (!r.success) throw pedidoInvalido(primeiraMensagem(r.error, 'Informe o nome do fluxo e a página onde a tarefa começa.'));
     tarefaExiste(ctx, r.data.tarefaId);
     const urlInicial = caminhoInicial(adaptador.urlBase, r.data.urlInicial, adaptador.nome);
-    const f = fluxos.criar({ nome: r.data.nome, tarefaId: r.data.tarefaId ?? null, urlInicial, por: nomeDe(request) });
+    const f = fluxos.criar({ nome: r.data.nome, tarefaId: r.data.tarefaId ?? null, urlInicial, por: nomeDe(request), email: membro(request).email });
     auditoria.registrar(nomeDe(request), 'começou a gravar o fluxo', f.nome, `Página inicial ${urlInicial}`);
     avisar(ctx, f);
     return respostaGravacao(ctx, f);
@@ -242,8 +260,15 @@ const rotas: FastifyPluginAsync = async (app) => {
     let passos = f.passos;
     if (d.passos !== undefined || d.tarefaId !== undefined || d.camposSugeridos !== undefined) {
       const chaves = new Set(camposDoFluxo(ctx, { tarefaId: d.tarefaId !== undefined ? d.tarefaId : f.tarefaId, camposSugeridos }).map((c) => c.chave));
-      passos = prepararPassos(d.passos ?? f.passos, chaves);
+      passos = prepararPassos(d.passos ?? f.passos, chaves, urlDoSistema(ctx));
       campos.passos = passos;
+      // "Desfazer" depois de remover um passo em outro site: ele volta e sai da lista dos removidos.
+      const removidos = f.outrosSitesRemovidos ?? [];
+      if (removidos.length) {
+        const presentes = new Set(passos.filter((p) => p.outroSite).map((p) => `${p.titulo}\u0000${p.outroSite}`));
+        const ficam = removidos.filter((x) => !presentes.has(`${x.titulo}\u0000${x.site}`));
+        if (ficam.length !== removidos.length) campos.outros_sites_removidos = ficam;
+      }
       const outraTarefa = d.tarefaId !== undefined && d.tarefaId !== f.tarefaId;
       if (outraTarefa || semPrints(passos) !== semPrints(f.passos)) campos.ultimo_teste = null;
     }
@@ -294,7 +319,7 @@ const rotas: FastifyPluginAsync = async (app) => {
     const urlInicial = corpo.success && corpo.data.urlInicial ? caminhoInicial(adaptador.urlBase, corpo.data.urlInicial, adaptador.nome) : undefined;
     if (f.status === 'publicado') f = fluxos.novaVersao(f, nomeDe(request));
     apagarPrintsDoFluxo(banco, ctx.config.dirDados, f.id);
-    const regravado = fluxos.regravar(f.id, nomeDe(request), urlInicial);
+    const regravado = fluxos.regravar(f.id, nomeDe(request), urlInicial, membro(request).email);
     auditoria.registrar(nomeDe(request), 'começou a gravar de novo o fluxo', regravado.nome, `versão ${regravado.versao}`);
     avisar(ctx, regravado);
     return respostaGravacao(ctx, regravado);
@@ -343,7 +368,7 @@ const rotas: FastifyPluginAsync = async (app) => {
     if (f.eventosGravados.length === 0) throw conflito('Este fluxo não tem gravação para aprender. Grave a tarefa na tela primeiro.');
     let r;
     try {
-      r = await aprenderFluxo(ctx.llm, f.eventosGravados, camposDaTarefa(ctx, f.tarefaId));
+      r = await aprenderFluxo(ctx.llm, f.eventosGravados, camposDaTarefa(ctx, f.tarefaId), urlDoSistema(ctx));
     } catch (e) {
       if (e instanceof ErroLlm || e instanceof RecusaDoModelo) {
         throw new ErroHttp(503, 'claude_indisponivel', 'O Claude não respondeu agora. Os passos que já estão aqui continuam valendo; tente de novo em instantes.');
@@ -353,10 +378,55 @@ const rotas: FastifyPluginAsync = async (app) => {
     const atualizado = fluxos.atualizar(f.id, {
       passos: r.passos,
       campos_sugeridos: r.camposSugeridos,
+      outros_sites_removidos: [],
       etapa: 'revisar',
       ultimo_teste: null,
     });
     auditoria.registrar(nomeDe(request), 'pediu ao Claude para organizar o fluxo', f.nome, `${r.passos.length} passos`);
+    avisar(ctx, atualizado);
+    return publico(atualizado);
+  });
+
+  /**
+   * Passo em outro site (F1): "Remover" tira o passo do fluxo; "Manter como instrução" deixa o texto
+   * para o copiloto e a ficha da tarefa, sem executar; "Desfazer" volta a perguntar. O teste e a
+   * publicação esperam todos os passos de outro site resolvidos.
+   */
+  app.post<{ Params: { id: string; n: string } }>('/:id/passos/:n/outro-site', { preHandler: exigir('editar') }, async (request): Promise<Fluxo> => {
+    const ctx = ctxDe(request);
+    const fluxos = new Fluxos(ctx.banco, ctx.empresa.id);
+    const f = obter(fluxos, request.params.id);
+    if (f.status === 'gravando') throw conflito('A gravação ainda está em andamento. Conclua a gravação antes de revisar os passos.');
+    if (f.status === 'publicado') throw conflito('Este fluxo já está publicado e em uso. Crie uma nova versão para mudar os passos.');
+    const r = PedidoOutroSite.safeParse(request.body ?? {});
+    if (!r.success) throw pedidoInvalido('Escolha remover o passo ou mantê-lo como instrução.');
+    const n = Number(request.params.n);
+    const alvo = f.passos.find((p) => p.n === n);
+    if (!alvo) throw naoEncontrado('Passo');
+    if (!alvo.outroSite) throw conflito('Este passo é do próprio sistema: não precisa dessa escolha.');
+    const decisao = r.data.decisao;
+    let passos: PassoFluxo[];
+    let removidos = f.outrosSitesRemovidos ?? [];
+    if (decisao === 'remover') {
+      passos = f.passos.filter((p) => p.n !== n).map((p, i) => ({ ...p, n: i + 1 }));
+      removidos = [...removidos, { titulo: alvo.titulo, site: alvo.outroSite }];
+    } else {
+      passos = f.passos.map((p) => {
+        if (p.n !== n) return p;
+        if (decisao === 'instrucao') return { ...p, instrucao: true };
+        const { instrucao: _i, ...resto } = p;
+        return resto;
+      });
+    }
+    const camposSugeridos = podarCamposSugeridos(f.camposSugeridos, f.passos, passos);
+    const atualizado = fluxos.atualizar(f.id, {
+      passos,
+      campos_sugeridos: camposSugeridos,
+      outros_sites_removidos: removidos,
+      ultimo_teste: null,
+    });
+    const acao = { remover: 'removeu o passo em outro site do fluxo', instrucao: 'manteve como instrução o passo em outro site do fluxo', desfazer: 'voltou a marcar o passo em outro site do fluxo' }[decisao];
+    ctx.auditoria.registrar(nomeDe(request), acao, f.nome, `Passo ${n}: ${alvo.titulo} (${alvo.outroSite})`);
     avisar(ctx, atualizado);
     return publico(atualizado);
   });
@@ -385,6 +455,7 @@ const rotas: FastifyPluginAsync = async (app) => {
     if (!r.success) throw pedidoInvalido(primeiraMensagem(r.error, 'Informe os valores do teste e o usuário do sistema.'));
     if (f.status === 'gravando') throw conflito('A gravação ainda está em andamento. Conclua a gravação antes de testar.');
     if (f.passos.length === 0) throw conflito('Este fluxo ainda não tem passos para testar.');
+    exigirOutrosSitesResolvidos(f, 'testar');
     if (testando.has(f.id)) throw conflito('Já há um teste deste fluxo rodando. Espere ele terminar.');
 
     let usuario;
@@ -485,6 +556,7 @@ const rotas: FastifyPluginAsync = async (app) => {
     if (f.status === 'gravando') throw conflito('A gravação ainda está em andamento. Conclua, revise e teste antes de publicar.');
     if (f.status === 'publicado') throw conflito('Este fluxo já está publicado.');
     if (f.passos.length === 0) throw conflito('Este fluxo não tem passos. Grave a tarefa na tela primeiro.');
+    exigirOutrosSitesResolvidos(f, 'publicar');
     const pendentes = f.passos.filter((p) => p.pendencia);
     if (pendentes.length) {
       throw conflito(`Resolva as pendências antes de publicar: ${pendentes.map((p) => `passo ${p.n} (${p.pendencia})`).join('; ')}.`);
@@ -506,9 +578,21 @@ const rotas: FastifyPluginAsync = async (app) => {
   });
 };
 
+/** O robô não repete passos fora do sistema: cada um precisa de "Remover" ou "Manter como instrução". */
+function exigirOutrosSitesResolvidos(f: LinhaFluxo, acao: 'testar' | 'publicar') {
+  const pendentes = outrosSitesPendentes(f.passos);
+  if (!pendentes.length) return;
+  const quais = pendentes.map((p) => `passo ${p.n} (${p.outroSite})`).join('; ');
+  throw new ErroHttp(
+    409,
+    'outro_site_pendente',
+    `Antes de ${acao}, resolva ${pendentes.length === 1 ? 'o passo feito' : 'os passos feitos'} em outro site: ${quais}. Escolha remover ou manter como instrução.`,
+  );
+}
+
 /** Valida e normaliza os valores do teste pelos campos (data ISO, CNPJ formatado...). */
 function validarValores(campos: Campo[], passos: PassoFluxo[], entrada: Record<string, string | number | boolean | null>): Record<string, string> {
-  const usados = new Set(passos.flatMap((p) => (p.valor?.origem === 'campo' ? [p.valor.campo] : [])));
+  const usados = new Set(passos.filter(passoExecutavel).flatMap((p) => (p.valor?.origem === 'campo' ? [p.valor.campo] : [])));
   const valores: Record<string, string> = {};
   const faltando: string[] = [];
   const erros: string[] = [];
@@ -556,7 +640,7 @@ export function definicaoPadrao(f: Pick<LinhaFluxo, 'id' | 'nome' | 'passos' | '
   const campos = f.camposSugeridos.length
     ? f.camposSugeridos
     : f.passos
-        .filter((p) => p.valor?.origem === 'campo')
+        .filter((p) => passoExecutavel(p) && p.valor?.origem === 'campo')
         .map((p) => ({ chave: (p.valor as { campo: string }).campo, rotulo: p.rotuloElemento ?? p.titulo, tipo: 'texto' as const, obrigatorio: true, pergunta: `Qual é ${p.rotuloElemento ?? 'o valor'}?` }));
   const leituras = f.passos.filter((p) => p.tipo === 'leitura' && p.gera).map((p) => p.gera!);
   const segundos = Math.max(10, f.passos.length * 4);

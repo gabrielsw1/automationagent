@@ -2,7 +2,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import type { Fluxo, GravacaoEstado, TarefaDefinicao } from '@copiloto/shared';
+import type { EventoGravado, Fluxo, GravacaoEstado, TarefaDefinicao } from '@copiloto/shared';
+import { ferramentaDaTarefa } from '../../src/agente/ferramentas.ts';
 import type { Contexto } from '../../src/contexto.ts';
 import type { EventoConsole } from '../../src/eventos.ts';
 import { salvarPrint } from '../../src/navegador/prints.ts';
@@ -94,15 +95,28 @@ describe('gravador de fluxos (/api/gravacao)', () => {
     expect(JSON.stringify(fluxo)).not.toContain(token);
 
     const estado = await a.app.inject({ method: 'GET', url: `/api/gravacao/${token}` });
-    expect(estado.json<GravacaoEstado>()).toEqual({ fluxoId: fluxo.id, nome: 'Segunda via de boleto', ativa: true, passos: 0 });
+    expect(estado.json<GravacaoEstado>()).toEqual({
+      fluxoId: fluxo.id,
+      nome: 'Segunda via de boleto',
+      ativa: true,
+      passos: 0,
+      empresa: 'Horizonte',
+      pessoa: 'Júlia Martins',
+      itens: [],
+    });
 
     const eventos = eventosBoleto();
     // um gravador com defeito mandando dígitos e o value do campo: o servidor apaga
     eventos[2] = { ...eventos[2], formatoValor: '12.345', elemento: { ...eventos[2].elemento!, contexto: '<input name="doc_pagador" value="12.345.678/0001-95">' } };
     const ev = await a.app.inject({ method: 'POST', url: `/api/gravacao/${token}/eventos`, payload: { eventos: eventos.slice(0, 5) } });
-    expect(ev.json()).toEqual({ passos: 3 });
+    expect(ev.json()).toMatchObject({ passos: 3 });
     const ev2 = await a.app.inject({ method: 'POST', url: `/api/gravacao/${token}/eventos`, payload: { eventos: eventos.slice(5) } });
-    expect(ev2.json()).toEqual({ passos: 6 });
+    // O painel "Passos gravados" da extensão recebe os títulos: verbo e rótulo, nunca o valor.
+    const aceitos = ev2.json<{ passos: number; itens: string[] }>();
+    expect(aceitos.passos).toBe(6);
+    expect(aceitos.itens).toHaveLength(6);
+    expect(aceitos.itens[0]).toMatch(/^Abrir a tela de /);
+    expect(JSON.stringify(aceitos.itens)).not.toMatch(/\d{3}/);
     expect(a.consoleEventos.filter((e) => e.tipo === 'fluxo' && e.etapa === 'gravar').map((e) => (e as { passos: number }).passos)).toEqual([0, 3, 6]);
     const bruto = a.ctx.banco.um<{ eventos_gravados: string }>('SELECT eventos_gravados FROM fluxos WHERE id = ?', fluxo.id)!.eventos_gravados;
     expect(bruto).not.toContain('12.345.678');
@@ -146,9 +160,10 @@ describe('gravador de fluxos (/api/gravacao)', () => {
     );
     const url = `https://portal.fornecedor.com.br/app/pedidos?aba=2&copiloto_gravacao=${token}&copiloto_api=x`;
     const ev = await a.app.inject({ method: 'POST', url: `/api/gravacao/${token}/eventos`, payload: { eventos: [{ tipo: 'navegar', ts: 1, url, tituloPagina: 'Pedidos' }] } });
-    expect(ev.json()).toEqual({ passos: 1 });
+    expect(ev.json()).toEqual({ passos: 1, itens: ['Abrir o site portal.fornecedor.com.br'] });
     const f = (await a.pedir('GET', `/api/console/fluxos/${fluxo.id}`)).json<Fluxo>();
-    expect(f.passos[0].url).toBe('/app/pedidos?aba=2');
+    // Fora do sistema (horizonte.teste): o passo guarda o endereço completo e fica marcado para a revisão.
+    expect(f.passos[0]).toMatchObject({ url: 'https://portal.fornecedor.com.br/app/pedidos?aba=2', outroSite: 'portal.fornecedor.com.br' });
   });
 
   it('cancelar a gravação descarta os eventos', async () => {
@@ -159,6 +174,100 @@ describe('gravador de fluxos (/api/gravacao)', () => {
     expect(c.json()).toEqual({ ok: true });
     const f = (await a.pedir('GET', `/api/console/fluxos/${fluxo.id}`)).json<Fluxo>();
     expect(f).toMatchObject({ status: 'rascunho', etapa: 'gravar', passos: [] });
+  });
+});
+
+/** "Abrir chamado" com uma consulta de CNPJ em outro site no meio do caminho. */
+function eventosComOutroSite(): EventoGravado[] {
+  const hz = 'http://horizonte.teste/chamados';
+  const fora = 'https://consulta.cnpj.exemplo/busca?copiloto_api=x';
+  const t = 1_760_000_000_000;
+  return [
+    { tipo: 'navegar', ts: t, url: `${hz}?copiloto_gravacao=tok`, tituloPagina: 'Chamados' },
+    { tipo: 'preencher', ts: t + 1_000, url: hz, elemento: { tag: 'input', name: 'assunto', rotulo: 'Assunto', css: '#assunto' }, formatoValor: 'aaaa' },
+    { tipo: 'navegar', ts: t + 20_000, url: fora, tituloPagina: 'Consulta CNPJ' },
+    { tipo: 'preencher', ts: t + 22_000, url: fora, elemento: { tag: 'input', name: 'cnpj', rotulo: 'CNPJ', css: '#cnpj' }, formatoValor: '99.999.999/9999-99' },
+    { tipo: 'clique', ts: t + 23_000, url: fora, elemento: { tag: 'button', texto: 'Consultar', type: 'submit', css: 'form button' } },
+    { tipo: 'navegar', ts: t + 40_000, url: hz, tituloPagina: 'Chamados' },
+    { tipo: 'preencher', ts: t + 41_000, url: hz, elemento: { tag: 'input', name: 'cliente', rotulo: 'Cliente', css: '#cliente' }, formatoValor: 'aaaaaaa' },
+    { tipo: 'clique', ts: t + 42_000, url: hz, elemento: { tag: 'button', texto: 'Abrir chamado', type: 'submit', css: 'form button' } },
+  ];
+}
+
+describe('passos em outro site', () => {
+  it('marca os passos fora do sistema, bloqueia teste e publicação até remover ou manter como instrução', async () => {
+    const a = await ambiente();
+    const { fluxo, token } = (await a.pedir('POST', '/api/console/fluxos', { nome: 'Abrir chamado', urlInicial: '/chamados' })).json() as { fluxo: Fluxo; token: string };
+    expect((await a.app.inject({ method: 'POST', url: `/api/gravacao/${token}/eventos`, payload: { eventos: eventosComOutroSite() } })).statusCode).toBe(200);
+    await a.app.inject({ method: 'POST', url: `/api/gravacao/${token}/concluir` });
+    const base = `/api/console/fluxos/${fluxo.id}`;
+
+    const gravado = (await a.pedir('GET', base)).json<Fluxo>();
+    expect(gravado.passos.map((p) => [p.titulo, p.outroSite ?? null])).toEqual([
+      ['Abrir a tela de chamados', null],
+      ['Preencher assunto', null],
+      ['Abrir o site consulta.cnpj.exemplo', 'consulta.cnpj.exemplo'],
+      ['Preencher CNPJ', 'consulta.cnpj.exemplo'],
+      ['Clicar em Consultar', 'consulta.cnpj.exemplo'],
+      // A volta ao sistema é um passo: o robô abre a tela de novo, sem depender do outro site.
+      ['Abrir a tela de chamados', null],
+      ['Preencher cliente', null],
+      ['Clicar em Abrir chamado', null],
+    ]);
+    // Endereço completo, sem os parâmetros do gravador; sem campo da tarefa e sem pendência.
+    expect(gravado.passos[2].url).toBe('https://consulta.cnpj.exemplo/busca');
+    expect(gravado.passos[3]).not.toHaveProperty('valor');
+    expect(gravado.passos[3]).not.toHaveProperty('pendencia');
+    expect(gravado.camposSugeridos.map((c) => c.chave)).toEqual(['assunto', 'cliente']);
+
+    const valores = { valores: { assunto: 'Impressora', cliente: 'Padaria' }, usuarioId: '101' };
+    const cedo = await a.pedir('POST', `${base}/testar`, valores);
+    expect(cedo.statusCode).toBe(409);
+    expect(cedo.json()).toMatchObject({ erro: 'outro_site_pendente' });
+    expect(cedo.json().mensagem).toMatch(/passo 3 \(consulta\.cnpj\.exemplo\)/);
+    expect((await a.pedir('POST', `${base}/publicar`)).json()).toMatchObject({ erro: 'outro_site_pendente' });
+
+    // A marca vem do endereço: o console não tira nem inventa (instrução num passo do sistema não vale).
+    const forjado = gravado.passos.map(({ outroSite: _o, ...p }) => (p.n === 2 ? { ...p, instrucao: true } : p));
+    const put = (await a.pedir('PUT', base, { passos: forjado })).json<Fluxo>();
+    expect(put.passos.filter((p) => p.outroSite).map((p) => p.n)).toEqual([3, 4, 5]);
+    expect(put.passos[1]).not.toHaveProperty('instrucao');
+
+    // Leitor não decide; passo do sistema não tem essa escolha.
+    expect((await a.pedir('POST', `${base}/passos/4/outro-site`, { decisao: 'remover' }, a.leitor.cookie)).statusCode).toBe(403);
+    expect((await a.pedir('POST', `${base}/passos/2/outro-site`, { decisao: 'remover' })).statusCode).toBe(409);
+    expect((await a.pedir('POST', `${base}/passos/4/outro-site`, { decisao: 'talvez' })).statusCode).toBe(400);
+
+    // Manter como instrução, desfazer e manter de novo.
+    let f = (await a.pedir('POST', `${base}/passos/4/outro-site`, { decisao: 'instrucao' })).json<Fluxo>();
+    expect(f.passos[3]).toMatchObject({ instrucao: true, outroSite: 'consulta.cnpj.exemplo' });
+    f = (await a.pedir('POST', `${base}/passos/4/outro-site`, { decisao: 'desfazer' })).json<Fluxo>();
+    expect(f.passos[3]).not.toHaveProperty('instrucao');
+    f = (await a.pedir('POST', `${base}/passos/4/outro-site`, { decisao: 'instrucao' })).json<Fluxo>();
+
+    // Remover a abertura do site e o clique: os passos são renumerados e a lista "Antes de publicar" sabe.
+    f = (await a.pedir('POST', `${base}/passos/5/outro-site`, { decisao: 'remover' })).json<Fluxo>();
+    f = (await a.pedir('POST', `${base}/passos/3/outro-site`, { decisao: 'remover' })).json<Fluxo>();
+    expect(f.passos.map((p) => p.n)).toEqual([1, 2, 3, 4, 5, 6]);
+    expect(f.passos[2]).toMatchObject({ titulo: 'Preencher CNPJ', instrucao: true });
+    expect(f.outrosSitesRemovidos).toEqual([
+      { titulo: 'Clicar em Consultar', site: 'consulta.cnpj.exemplo' },
+      { titulo: 'Abrir o site consulta.cnpj.exemplo', site: 'consulta.cnpj.exemplo' },
+    ]);
+    expect(a.ctx.auditoria.listar().map((x) => x.acao)).toEqual(
+      expect.arrayContaining(['removeu o passo em outro site do fluxo', 'manteve como instrução o passo em outro site do fluxo']),
+    );
+
+    // Agora testa e publica; a tarefa criada pelo fluxo leva a instrução para o copiloto.
+    const teste = await a.pedir('POST', `${base}/testar`, valores);
+    expect(teste.statusCode).toBe(200);
+    expect(teste.json().resultado.ok).toBe(true);
+    const { tarefaId } = (await a.pedir('POST', `${base}/criar-tarefa`)).json() as { tarefaId: string };
+    expect(a.ctx.catalogo.rascunho(tarefaId)!.definicao.campos.map((c) => c.chave)).toEqual(['assunto', 'cliente']);
+    expect((await a.pedir('POST', `${base}/publicar`)).statusCode).toBe(200);
+    const emUso = a.ctx.catalogo.emUso({ id: '101' }, true).find((t) => t.id === tarefaId)!;
+    expect(emUso.instrucoes).toEqual(['Preencher CNPJ (em consulta.cnpj.exemplo)']);
+    expect(ferramentaDaTarefa(emUso).description).toContain('Instruções (passos feitos fora do sistema');
   });
 });
 

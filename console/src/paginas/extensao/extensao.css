@@ -1,0 +1,77 @@
+/* E1 · Instalar o gravador e a entrada da extensão (/extensao/conectar). Só var(--token). */
+.ex-icone-grande {
+  width: 48px; height: 48px; border-radius: 14px; display: grid; place-items: center; flex: none;
+  background: var(--brand-50); color: var(--brand-700);
+}
+
+.ex-passos { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.ex-passo { gap: var(--s-4); padding: var(--s-5); border: 1px solid var(--line); border-radius: 16px; background: var(--white); }
+.ex-passo-atual { border-color: var(--brand-200); background: var(--brand-50); }
+.ex-passo-corpo { gap: 10px; min-width: 0; }
+.ex-passo-n {
+  width: 32px; height: 32px; border-radius: 50%; display: grid; place-items: center; flex: none; font-weight: 700;
+  background: var(--white); border: 2px solid var(--line-strong); color: var(--ink-500);
+}
+.ex-passo-atual .ex-passo-n { background: var(--brand-600); border-color: var(--brand-600); color: var(--white); }
+.ex-passo-feito .ex-passo-n { background: var(--success-50); border-color: var(--success-500); color: var(--success-700); }
+.ex-ligacao { width: 2px; height: 16px; background: var(--line); margin-left: 35px; }
+.ex-tinta { color: var(--ink-700); }
+.ex-sem-loja { max-width: 560px; }
+.ex-sem-loja .btn { align-self: flex-start; }
+
+/* Desenho da barra do navegador com o alfinete. */
+.ex-figura { margin: 0; gap: 6px; }
+.ex-navegador { max-width: 460px; border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+.ex-navegador-barra { gap: 10px; padding: 10px 12px; background: var(--white); border-bottom: 1px solid var(--line); }
+.ex-bolinha { width: 9px; height: 9px; border-radius: 50%; }
+.ex-endereco { flex: 1; height: 26px; border-radius: 999px; min-width: 40px; }
+.ex-quadradinho { width: 20px; height: 20px; border-radius: 6px; }
+.ex-icone-s {
+  width: 24px; height: 24px; border-radius: 7px; flex: none; display: grid; place-items: center;
+  background: var(--brand-600); color: var(--white); font-size: 11px; font-weight: 800; box-shadow: var(--ring);
+}
+.ex-icone-s-p { width: 18px; height: 18px; border-radius: 5px; font-size: 9px; box-shadow: none; }
+.ex-peca { width: 26px; height: 26px; justify-content: center; border-radius: 6px; background: var(--surface-2); color: var(--ink-700); flex: none; }
+.ex-navegador-menu { justify-content: flex-end; padding: 10px 12px; }
+.ex-menu {
+  width: 250px; max-width: 100%; background: var(--white); border: 1px solid var(--line); border-radius: 10px; box-shadow: var(--sh-md);
+  padding: 8px; display: flex; flex-direction: column; gap: 6px;
+}
+.ex-menu-item { gap: 8px; padding: 6px; border-radius: 6px; background: var(--brand-50); color: var(--ink-900); }
+
+/* Rodapé com o estado ao vivo. */
+.ex-rodape { justify-content: flex-start; }
+.ex-estado { gap: var(--s-3); width: 100%; }
+.ex-estado-ok { gap: var(--s-4); }
+.ex-estado-icone { width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; flex: none; }
+.ex-estado-sucesso { background: var(--success-50); color: var(--success-700); }
+.ex-estado-aviso { background: var(--warning-50); color: var(--warning-700); }
+
+.ex-lista { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--s-2); }
+.ex-lista li.row-top { gap: 10px; }
+.ex-lista li.row { gap: 10px; }
+.ex-lista-icone { margin-top: 3px; flex: none; }
+.ex-pessoa-nome { min-width: 0; overflow-wrap: anywhere; }
+
+/* /extensao/conectar */
+.ex-conectar-empresas { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--s-2); }
+.ex-empresa {
+  width: 100%; gap: var(--s-3); padding: var(--s-3) var(--s-4); border: 1px solid var(--line); border-radius: var(--r-md);
+  background: var(--white); color: var(--ink-900); font: inherit; text-align: left; cursor: pointer;
+}
+.ex-empresa:hover:not(:disabled) { border-color: var(--brand-200); background: var(--brand-50); }
+.ex-empresa:focus-visible { outline: none; box-shadow: var(--ring); }
+.ex-empresa[aria-checked='true'] { border-color: var(--brand-600); background: var(--brand-50); box-shadow: inset 0 0 0 1px var(--brand-600); }
+.ex-empresa:disabled { cursor: not-allowed; background: var(--surface); color: var(--ink-500); }
+.ex-radio {
+  width: 18px; height: 18px; border-radius: 50%; border: 2px solid var(--line-strong); flex: none; display: grid; place-items: center;
+}
+.ex-empresa[aria-checked='true'] .ex-radio { border-color: var(--brand-600); }
+.ex-empresa[aria-checked='true'] .ex-radio::after { content: ''; width: 8px; height: 8px; border-radius: 50%; background: var(--brand-600); }
+.ex-conectado { width: 56px; height: 56px; border-radius: 50%; display: grid; place-items: center; background: var(--success-50); color: var(--success-700); }
+
+@media (max-width: 760px) {
+  .ex-passo { padding: var(--s-4); gap: var(--s-3); }
+  .ex-ligacao { margin-left: 31px; }
+  .ex-navegador-barra .ex-quadradinho { display: none; }
+}

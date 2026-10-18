@@ -68,7 +68,15 @@ export interface Config {
   navegadorVisivel: boolean;
   /** Caminho de um Chromium já instalado (opcional). */
   chromiumPath: string | undefined;
+  /**
+   * Extensão do navegador (gravador de fluxos): endereços nas lojas, depois de publicada
+   * (EXTENSAO_URL_CHROME e EXTENSAO_URL_EDGE). Vazios, a página "Instalar o gravador" explica como
+   * instalar pelo pacote (EXTENSAO_AJUDA_URL, padrão: a seção do README).
+   */
+  extensao: { urlChrome: string; urlEdge: string; ajudaInstalar: string };
 }
+
+export const AJUDA_INSTALAR_EXTENSAO = 'https://github.com/gabrielsw1/automationagent#instalar-pelo-pacote-sem-a-loja';
 
 export function lerConfig(): Config {
   const porta = numeroEnv('PORT', 3000);
@@ -110,5 +118,10 @@ export function lerConfig(): Config {
     exigirAssinatura: env('WIDGET_EXIGIR_ASSINATURA', '1') !== '0',
     navegadorVisivel: env('NAVEGADOR_VISIVEL', '0') === '1',
     chromiumPath: process.env.CHROMIUM_PATH || undefined,
+    extensao: {
+      urlChrome: env('EXTENSAO_URL_CHROME', '').trim(),
+      urlEdge: env('EXTENSAO_URL_EDGE', '').trim(),
+      ajudaInstalar: env('EXTENSAO_AJUDA_URL', AJUDA_INSTALAR_EXTENSAO).trim(),
+    },
   };
 }

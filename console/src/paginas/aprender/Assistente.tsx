@@ -268,6 +268,8 @@ export default function Assistente({ fluxoId }: { fluxoId: string }) {
         <EtapaRevisar
           fluxo={f}
           campos={campos}
+          nomeSistema={resumo.nomeSistema}
+          aoAtualizar={atualizar}
           somenteLeitura={somenteLeitura}
           online={online}
           selecionado={selecionado}
@@ -321,6 +323,7 @@ export default function Assistente({ fluxoId }: { fluxoId: string }) {
       corpo = (
         <EtapaPublicar
           fluxo={f}
+          nomeSistema={resumo.nomeSistema}
           nomeTarefa={nomeTarefa}
           somenteLeitura={somenteLeitura}
           online={online}

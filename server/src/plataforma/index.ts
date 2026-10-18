@@ -100,6 +100,29 @@ export const SEGUNDOS_REENVIO_LINK = 60;
 
 const hash = (t: string) => crypto.createHash('sha256').update(t).digest('hex');
 
+/** Código que o console entrega à extensão: vale 2 minutos e uma vez só. */
+export const SEGUNDOS_CODIGO_EXTENSAO = 120;
+/** Token da extensão: prefixo legível (o resto é aleatório; só o hash fica no banco). */
+export const PREFIXO_TOKEN_EXTENSAO = 'cpx_';
+
+/** SHA-256 em base64url, como o desafio da extensão (PKCE). */
+export function desafioDe(verificador: string): string {
+  return crypto.createHash('sha256').update(verificador).digest('base64url');
+}
+
+function iguais(a: string, b: string): boolean {
+  const x = Buffer.from(a);
+  const y = Buffer.from(b);
+  return x.length === y.length && crypto.timingSafeEqual(x, y);
+}
+
+/** Token da extensão lido do banco (a conta e a empresa a que ele está preso). */
+export interface TokenExtensaoLido {
+  id: string;
+  conta: Conta;
+  empresaId: string;
+}
+
 export interface SessaoPlataforma {
   token: string;
   conta: Conta;
@@ -366,6 +389,7 @@ export class Plataforma {
     );
     if (status === 'suspensa') {
       this.banco.executar('DELETE FROM sessoes WHERE empresa_id = ?', empresaId);
+      this.banco.executar('UPDATE tokens_extensao SET revogado_em = ? WHERE empresa_id = ? AND revogado_em IS NULL', agoraIso(), empresaId);
       this.banco.executar('UPDATE acessos_suporte SET encerrado_em = ? WHERE empresa_id = ? AND encerrado_em IS NULL', agoraIso(), empresaId);
     }
     this.cacheDominios = null;
@@ -671,6 +695,12 @@ export class Plataforma {
       empresaId,
       e,
     );
+    this.banco.executar(
+      'UPDATE tokens_extensao SET revogado_em = ? WHERE revogado_em IS NULL AND empresa_id = ? AND conta_id IN (SELECT id FROM contas WHERE email = ?)',
+      agoraIso(),
+      empresaId,
+      e,
+    );
     if (aviso) this.banco.inserir('avisos_conta', { email: e, texto: aviso, criado_em: agoraIso() });
   }
 
@@ -744,9 +774,86 @@ export class Plataforma {
     if (token) this.banco.executar('DELETE FROM sessoes WHERE token = ?', token);
   }
 
-  /** "Sair de todos os outros aparelhos": encerra as sessões da conta. */
+  /** "Sair de todos os outros aparelhos": encerra as sessões da conta, e a extensão desconecta também. */
   encerrarSessoesDaConta(contaId: string) {
     this.banco.executar('DELETE FROM sessoes WHERE conta_id = ?', contaId);
+    this.banco.executar('UPDATE tokens_extensao SET revogado_em = ? WHERE conta_id = ? AND revogado_em IS NULL', agoraIso(), contaId);
+  }
+
+  // ---------------------------------------------------------------- extensão do navegador
+
+  /**
+   * Código de uso único para a extensão (o console pede, com a sessão da pessoa). Preso à conta, à
+   * empresa e ao desafio que a extensão mandou: sem o verificador, que nunca sai da extensão, o
+   * código não vale nada. Só o hash fica no banco.
+   */
+  novoCodigoExtensao(contaId: string, empresaId: string, desafio: string): { codigo: string; expiraEm: string } {
+    const codigo = tokenAleatorio(32);
+    const expiraEm = new Date(Date.now() + SEGUNDOS_CODIGO_EXTENSAO * 1000).toISOString();
+    // Códigos vencidos não servem para nada: saem a cada código novo.
+    this.banco.executar('DELETE FROM codigos_extensao WHERE expira_em < ?', new Date(Date.now() - 3600_000).toISOString());
+    this.banco.inserir('codigos_extensao', {
+      codigo_hash: hash(codigo),
+      conta_id: contaId,
+      empresa_id: empresaId,
+      desafio,
+      expira_em: expiraEm,
+      usado_em: null,
+      criado_em: agoraIso(),
+    });
+    return { codigo, expiraEm };
+  }
+
+  /**
+   * Troca o código + verificador pelo token da extensão. null: código desconhecido, vencido, já usado
+   * ou verificador errado (o código é gasto na primeira tentativa, certa ou errada).
+   */
+  trocarCodigoExtensao(codigo: string, verificador: string, navegador?: string): { token: string; contaId: string; empresaId: string } | null {
+    const l = this.banco.um<{ conta_id: string; empresa_id: string; desafio: string; expira_em: string; usado_em: string | null }>(
+      'SELECT conta_id, empresa_id, desafio, expira_em, usado_em FROM codigos_extensao WHERE codigo_hash = ?',
+      hash(codigo),
+    );
+    if (!l || l.usado_em) return null;
+    this.banco.executar('UPDATE codigos_extensao SET usado_em = ? WHERE codigo_hash = ?', agoraIso(), hash(codigo));
+    if (l.expira_em < agoraIso() || !iguais(desafioDe(verificador), l.desafio)) return null;
+    const token = `${PREFIXO_TOKEN_EXTENSAO}${tokenAleatorio(32)}`;
+    this.banco.inserir('tokens_extensao', {
+      id: novoId('ext'),
+      token_hash: hash(token),
+      conta_id: l.conta_id,
+      empresa_id: l.empresa_id,
+      navegador: navegador?.slice(0, 40) || null,
+      criado_em: agoraIso(),
+      usado_em: agoraIso(),
+      revogado_em: null,
+    });
+    return { token, contaId: l.conta_id, empresaId: l.empresa_id };
+  }
+
+  /** Token da extensão válido (não revogado), com a conta e a empresa. Quem confere a equipe é a rota. */
+  lerTokenExtensao(token: string | undefined): TokenExtensaoLido | undefined {
+    if (!token || !token.startsWith(PREFIXO_TOKEN_EXTENSAO)) return undefined;
+    const l = this.banco.um<{ id: string; conta_id: string; empresa_id: string; usado_em: string | null; revogado_em: string | null }>(
+      'SELECT id, conta_id, empresa_id, usado_em, revogado_em FROM tokens_extensao WHERE token_hash = ?',
+      hash(token),
+    );
+    if (!l || l.revogado_em) return undefined;
+    const conta = this.contaPorId(l.conta_id);
+    if (!conta) return undefined;
+    if (!l.usado_em || Date.now() - Date.parse(l.usado_em) > 5 * 60_000) {
+      this.banco.executar('UPDATE tokens_extensao SET usado_em = ? WHERE id = ?', agoraIso(), l.id);
+    }
+    return { id: l.id, conta, empresaId: l.empresa_id };
+  }
+
+  /** "Sair" no popup: o token para de valer na hora. */
+  revogarTokenExtensao(token: string | undefined) {
+    if (!token) return;
+    this.banco.executar('UPDATE tokens_extensao SET revogado_em = ? WHERE token_hash = ? AND revogado_em IS NULL', agoraIso(), hash(token));
+  }
+
+  revogarTokenExtensaoPorId(id: string) {
+    this.banco.executar('UPDATE tokens_extensao SET revogado_em = ? WHERE id = ? AND revogado_em IS NULL', agoraIso(), id);
   }
 
   // ---------------------------------------------------------------- site: planos e pedidos de contato

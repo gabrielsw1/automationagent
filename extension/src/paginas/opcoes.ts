@@ -1,7 +1,8 @@
 // Opções da extensão: o "Servidor do copiloto" (padrão http://localhost:3000). Fora de localhost,
 // o Chrome pede a permissão para aquele endereço; o pedido precisa sair do clique da pessoa.
 // Com ?permitir=<servidor> (aberto pela barra de uma gravação), mostra antes o pedido de liberação.
-import { enviar, type Saude } from '../comum/mensagens.ts';
+// Também mostra a conta em que a extensão entrou (empresa e pessoa), com "Sair".
+import { ehAvisoConta, enviar, type EstadoConta, type Resultado, type Saude } from '../comum/mensagens.ts';
 import { SERVIDOR_PADRAO, origemDe, padraoPermissao, salvarServidor, servidorConfigurado, temPermissao } from '../comum/servidor.ts';
 import { ICONES, botao, el, icone, trocar } from './dom.ts';
 
@@ -57,9 +58,17 @@ export async function montarOpcoes(raiz: HTMLElement, busca = '') {
         });
         return;
       }
+      const anterior = await servidorConfigurado();
       await salvarServidor(origem);
       campo.value = origem;
-      mostrar(statusServidor, { tipo: 'ok', texto: `Servidor salvo: ${origem}.` });
+      // A conta é de um servidor: trocou o servidor, a extensão sai dela (o token deixa de valer).
+      const trocou = anterior !== origem && conta.conectada;
+      if (trocou) await enviar<Resultado>({ tipo: 'sair' }).catch(() => null);
+      mostrar(statusServidor, {
+        tipo: 'ok',
+        texto: trocou ? `Servidor salvo: ${origem}. Entre de novo com a sua conta pelo ícone da extensão.` : `Servidor salvo: ${origem}.`,
+      });
+      await atualizarConta();
     });
   };
 
@@ -109,6 +118,63 @@ export async function montarOpcoes(raiz: HTMLElement, busca = '') {
     salvar();
   });
 
+  // ---------- Conta ----------
+  let conta: EstadoConta = { conectada: false };
+  const corpoConta = el('div', { class: 'stack-sm', 'aria-live': 'polite' });
+  const atualizarConta = async () => {
+    const c = await enviar<EstadoConta | null>({ tipo: 'conta' }).catch(() => null);
+    conta = c && typeof c === 'object' ? c : { conectada: false };
+    if (conta.conectada) {
+      const s = conta.sessao;
+      trocar(
+        corpoConta,
+        el(
+          'div',
+          { class: 'row op-conta' },
+          el('span', { class: 'avatar avatar-sm', 'aria-hidden': 'true' }, s.empresa.iniciais),
+          el(
+            'p',
+            { class: 'small grow' },
+            el('span', { class: 'strong' }, s.empresa.nome),
+            el('span', { class: 'muted' }, ` · ${s.pessoa.nome} (${s.pessoa.email})`),
+          ),
+          botao('Sair', 'btn-secondary btn-sm', () => {
+            void enviar<Resultado>({ tipo: 'sair' })
+              .catch(() => null)
+              .then(() => atualizarConta());
+          }),
+        ),
+        el('p', { class: 'tiny muted' }, 'Para trocar de empresa, use "Trocar" no ícone da extensão. Ao sair, o acesso desta extensão é cancelado no copiloto.'),
+      );
+    } else {
+      trocar(
+        corpoConta,
+        el('p', { class: 'small muted' }, conta.aviso ?? 'A extensão ainda não entrou em nenhuma conta.'),
+        el(
+          'div',
+          { class: 'op-acoes op-acoes-esq' },
+          botao('Entrar com a conta do Copiloto', 'btn-secondary btn-sm', () => {
+            void enviar<Resultado>({ tipo: 'entrar' })
+              .catch((): Resultado => ({ ok: false, mensagem: 'Não consegui falar com a extensão. Recarregue esta página.' }))
+              .then((r) => {
+                if (!r.ok) trocar(corpoConta, caixaStatus({ tipo: 'erro', texto: r.mensagem }));
+              });
+          }),
+        ),
+      );
+    }
+  };
+  chrome.runtime.onMessage.addListener((m) => {
+    if (ehAvisoConta(m)) void atualizarConta();
+  });
+  const cartaoConta = el(
+    'section',
+    { class: 'card card-pad stack', 'aria-labelledby': 'op-conta-titulo' },
+    el('div', {}, el('h2', { class: 'h4', id: 'op-conta-titulo' }, 'Conta'), el('p', { class: 'small muted' }, 'Para qual empresa vão as gravações feitas pelo ícone da extensão.')),
+    corpoConta,
+  );
+  await atualizarConta();
+
   let cartaoPermissao: HTMLElement | null = null;
   if (pedidoPermissao) {
     const jaLiberado = await temPermissao(pedidoPermissao);
@@ -146,10 +212,11 @@ export async function montarOpcoes(raiz: HTMLElement, busca = '') {
       el(
         'header',
         { class: 'op-topo' },
-        el('span', { class: 'pp-marca', 'aria-hidden': 'true' }, el('span', { class: 'pp-marca-ponto' })),
+        el('span', { class: 'pp-marca', 'aria-hidden': 'true' }, 'S'),
         el('div', {}, el('h1', { class: 'h3' }, 'Copiloto · Gravador de fluxos'), el('p', { class: 'small muted' }, 'Opções da extensão')),
       ),
       cartaoPermissao,
+      cartaoConta,
       form,
       el(
         'p',

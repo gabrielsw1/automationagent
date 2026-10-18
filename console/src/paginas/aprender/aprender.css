@@ -91,3 +91,11 @@
 @media (prefers-reduced-motion: reduce) {
   .ap-ao-vivo-ponto, .ap-novo-passo { animation: none; }
 }
+
+/* Passo feito em outro site: as duas escolhas, cada uma com o que faz. */
+.ap-outro-site { align-items: flex-start; }
+.ap-escolhas { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: var(--s-2); }
+.ap-escolha {
+  display: flex; flex-direction: column; align-items: flex-start; gap: var(--s-2);
+  padding: var(--s-3); border-radius: var(--r-md); background: var(--white); border: 1px solid var(--line); color: var(--ink-900);
+}

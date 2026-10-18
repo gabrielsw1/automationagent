@@ -6,6 +6,11 @@ import type { EventoGravado } from '@copiloto/shared';
 
 export const EVENTO_COMANDO = 'copiloto-extensao:comando';
 export const EVENTO_CAPTURA = 'copiloto-extensao:evento';
+/**
+ * Uma cópia nova dos content scripts chegou (a extensão foi instalada ou atualizada com a aba aberta):
+ * a cópia antiga para de ouvir, para nada ser capturado ou mostrado duas vezes.
+ */
+export const EVENTO_SUBSTITUIR = 'copiloto-extensao:substituir';
 
 export type Comando = 'comecar' | 'parar';
 
